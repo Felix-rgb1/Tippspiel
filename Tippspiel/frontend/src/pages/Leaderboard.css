@@ -1,0 +1,65 @@
+.leaderboard-table {
+  background: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 100px 100px;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  border-bottom: 2px solid var(--gray-300);
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 100px 100px;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--gray-200);
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.table-row:hover {
+  background: var(--gray-100);
+}
+
+.table-row:nth-child(2) {
+  background: #fef3c7;
+  font-weight: 600;
+}
+
+.col-rank {
+  text-align: center;
+  font-weight: 600;
+}
+
+.col-name {
+  font-weight: 500;
+}
+
+.col-tips,
+.col-points {
+  text-align: center;
+}
+
+.table-empty {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+}
+
+@media (max-width: 600px) {
+  .table-header,
+  .table-row {
+    grid-template-columns: 40px 1fr 60px 60px;
+    font-size: 0.9rem;
+    padding: 0.75rem;
+  }
+}
