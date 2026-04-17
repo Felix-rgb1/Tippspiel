@@ -51,8 +51,10 @@ function Dashboard() {
 
   const handleSubmitTip = async (matchId) => {
     try {
-      const tip = tips[matchId];
-      await tipAPI.submit(matchId, tip.home_goals, tip.away_goals);
+      const tip = tips[matchId] || {};
+      const homeGoals = tip.home_goals ?? 0;
+      const awayGoals = tip.away_goals ?? 0;
+      await tipAPI.submit(matchId, homeGoals, awayGoals);
       setSuccess('Tipp abgegeben!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
