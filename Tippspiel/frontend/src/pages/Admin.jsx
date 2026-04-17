@@ -14,6 +14,7 @@ function Admin() {
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
   const [matchDate, setMatchDate] = useState('');
+  const [round, setRound] = useState('');
   const [matchId, setMatchId] = useState('');
   const [homeGoals, setHomeGoals] = useState('');
   const [awayGoals, setAwayGoals] = useState('');
@@ -56,10 +57,11 @@ function Admin() {
     setSuccess('');
 
     try {
-      await adminAPI.createMatch(homeTeam, awayTeam, matchDate);
+      await adminAPI.createMatch(homeTeam, awayTeam, matchDate, round);
       setHomeTeam('');
       setAwayTeam('');
       setMatchDate('');
+      setRound('');
       setSuccess('Spiel erstellt!');
       fetchMatches();
     } catch (err) {
@@ -164,6 +166,20 @@ function Admin() {
                   required
                 />
               </div>
+              <div className="form-group">
+                <label>Runde / Spieltag</label>
+                <select value={round} onChange={(e) => setRound(e.target.value)}>
+                  <option value="">-- optional --</option>
+                  <option>1. Spieltag</option>
+                  <option>2. Spieltag</option>
+                  <option>3. Spieltag</option>
+                  <option>Achtelfinale</option>
+                  <option>Viertelfinale</option>
+                  <option>Halbfinale</option>
+                  <option>Spiel um Platz 3</option>
+                  <option>Finale</option>
+                </select>
+              </div>
               <button type="submit" className="btn-primary">Spiel erstellen</button>
             </form>
           </div>
@@ -224,7 +240,7 @@ function Admin() {
                   <div key={match.id} className="match-item">
                     <div>
                       <strong>{match.home_team} vs {match.away_team}</strong>
-                      <div className="match-info">{formatDate(match.match_date)}</div>
+                      <div className="match-info">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
                     </div>
                     <div className="match-result">
                       {match.finished ? (

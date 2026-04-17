@@ -96,7 +96,7 @@ function Dashboard() {
 
           return (
             <div key={match.id} className="match-card">
-              <div className="match-date">{formatDate(match.match_date)}</div>
+              <div className="match-date">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
               
               <div className="match-teams">
                 <div className="team">{match.home_team}</div>

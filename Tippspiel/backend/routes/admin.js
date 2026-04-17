@@ -7,15 +7,15 @@ const router = express.Router();
 // Create match
 router.post('/matches', adminMiddleware, async (req, res) => {
   try {
-    const { home_team, away_team, match_date } = req.body;
+    const { home_team, away_team, match_date, round } = req.body;
 
     if (!home_team || !away_team || !match_date) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const result = await pool.query(
-      'INSERT INTO matches (home_team, away_team, match_date) VALUES ($1, $2, $3) RETURNING *',
-      [home_team, away_team, match_date]
+      'INSERT INTO matches (home_team, away_team, match_date, round) VALUES ($1, $2, $3, $4) RETURNING *',
+      [home_team, away_team, match_date, round || null]
     );
 
     res.status(201).json(result.rows[0]);
