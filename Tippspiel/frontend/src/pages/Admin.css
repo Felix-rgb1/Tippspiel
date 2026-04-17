@@ -47,6 +47,11 @@
   font-weight: 500;
 }
 
+.admin-hint {
+  margin-bottom: 1rem;
+  color: #666;
+}
+
 .form-group input,
 .form-group select {
   width: 100%;

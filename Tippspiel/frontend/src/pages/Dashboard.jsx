@@ -9,6 +9,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [activeRound, setActiveRound] = useState('Alle');
   const { user } = useAuth();
 
   useEffect(() => {
@@ -79,6 +80,14 @@ function Dashboard() {
 
   if (loading) return <div className="container"><p>Lädt...</p></div>;
 
+  const rounds = ['Alle', ...Array.from(
+    new Set(matches.map(m => m.round).filter(Boolean))
+  )];
+
+  const visibleMatches = activeRound === 'Alle'
+    ? matches
+    : matches.filter(m => m.round === activeRound);
+
   return (
     <div className="container">
       <div className="page-title">
@@ -89,8 +98,22 @@ function Dashboard() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
+      {rounds.length > 1 && (
+        <div className="round-filter">
+          {rounds.map(r => (
+            <button
+              key={r}
+              className={`round-btn${activeRound === r ? ' active' : ''}`}
+              onClick={() => setActiveRound(r)}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="matches-grid">
-        {matches.map(match => {
+        {visibleMatches.map(match => {
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const deadlinePasssed = isDeadlinePassed(match.match_date);
 

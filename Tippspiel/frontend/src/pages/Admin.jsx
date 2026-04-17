@@ -7,6 +7,7 @@ function Admin() {
   const [matches, setMatches] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -103,6 +104,21 @@ function Admin() {
     }
   };
 
+  const handleSyncMatches = async () => {
+    try {
+      setSyncing(true);
+      setError('');
+      setSuccess('');
+      const response = await adminAPI.syncMatches();
+      setSuccess(response.data.message || 'Synchronisierung abgeschlossen');
+      fetchMatches();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Synchronisierung fehlgeschlagen');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const formatDate = (date) => {
     const d = new Date(date);
     return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -134,6 +150,16 @@ function Admin() {
 
       {activeTab === 'matches' && (
         <div className="admin-section">
+          <div className="card">
+            <h2>Automatischer Import</h2>
+            <p className="admin-hint">
+              Importiert Spiele und aktualisiert Ergebnisse automatisch ueber football-data.org.
+            </p>
+            <button type="button" className="btn-primary" onClick={handleSyncMatches} disabled={syncing}>
+              {syncing ? 'Synchronisiert...' : 'Spiele und Ergebnisse synchronisieren'}
+            </button>
+          </div>
+
           <div className="card">
             <h2>Neues Spiel erstellen</h2>
             <form onSubmit={handleCreateMatch}>

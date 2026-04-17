@@ -17,9 +17,12 @@ CREATE TABLE matches (
   home_team VARCHAR(100) NOT NULL,
   away_team VARCHAR(100) NOT NULL,
   match_date TIMESTAMP NOT NULL,
+  round VARCHAR(100),
   home_goals INTEGER,
   away_goals INTEGER,
   finished BOOLEAN DEFAULT false,
+  external_source VARCHAR(50),
+  external_id BIGINT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -38,6 +41,7 @@ CREATE TABLE tips (
 
 -- Indices for better performance
 CREATE INDEX idx_matches_date ON matches(match_date);
+CREATE UNIQUE INDEX idx_matches_external_source_id ON matches(external_source, external_id);
 CREATE INDEX idx_tips_user_id ON tips(user_id);
 CREATE INDEX idx_tips_match_id ON tips(match_id);
 CREATE INDEX idx_users_email ON users(email);

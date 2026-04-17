@@ -1,3 +1,31 @@
+.round-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.round-btn {
+  padding: 0.4rem 1rem;
+  border: 2px solid var(--primary);
+  border-radius: 2rem;
+  background: white;
+  color: var(--primary);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.round-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.round-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
 .matches-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));

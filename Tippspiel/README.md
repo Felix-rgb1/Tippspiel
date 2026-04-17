@@ -24,6 +24,9 @@ cd backend
 npm install
 cp .env.example .env
 # .env mit Supabase Credentials oder DATABASE_URL füllen
+# optional fuer automatischen Import:
+# FOOTBALL_DATA_API_KEY=...
+# FOOTBALL_DATA_COMPETITION_CODE=WC
 npm start
 ```
 

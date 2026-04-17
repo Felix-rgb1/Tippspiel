@@ -1,8 +1,22 @@
 const express = require('express');
 const pool = require('../db');
 const { adminMiddleware } = require('../middleware/auth');
+const { syncMatchesFromFootballData } = require('../services/footballData');
 
 const router = express.Router();
+
+router.post('/matches/sync', adminMiddleware, async (req, res) => {
+  try {
+    const syncResult = await syncMatchesFromFootballData(pool);
+    res.json({
+      message: `Synchronisierung abgeschlossen: ${syncResult.createdCount} neu, ${syncResult.updatedCount} aktualisiert.`,
+      ...syncResult
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Synchronisierung fehlgeschlagen' });
+  }
+});
 
 // Create match
 router.post('/matches', adminMiddleware, async (req, res) => {
