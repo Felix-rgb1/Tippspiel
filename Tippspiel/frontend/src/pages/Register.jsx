@@ -4,6 +4,22 @@ import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../api';
 import './Auth.css';
 
+function getRegistrationErrorMessage(err) {
+  if (err.response?.data?.error) {
+    return err.response.data.error;
+  }
+
+  if (err.code === 'ERR_NETWORK') {
+    return 'Backend nicht erreichbar. Prüfe API-URL und Server-Status.';
+  }
+
+  if (err.response?.status >= 500) {
+    return 'Serverfehler bei der Registrierung. Prüfe die Backend-Logs.';
+  }
+
+  return 'Registrierung fehlgeschlagen';
+}
+
 function Register() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -29,7 +45,7 @@ function Register() {
       login(response.data.user, response.data.token);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Registrierung fehlgeschlagen');
+      setError(getRegistrationErrorMessage(err));
     } finally {
       setLoading(false);
     }

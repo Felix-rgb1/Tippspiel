@@ -1,5 +1,5 @@
 const express = require('express');
-const pool = require('../server');
+const pool = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 

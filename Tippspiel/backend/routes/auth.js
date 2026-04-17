@@ -1,9 +1,27 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const pool = require('../server');
+const pool = require('../db');
 
 const router = express.Router();
+
+function getRegistrationError(err) {
+  if (err.code === '23505') {
+    if (err.constraint === 'users_username_key') {
+      return { status: 400, error: 'Benutzername existiert bereits' };
+    }
+
+    if (err.constraint === 'users_email_key') {
+      return { status: 400, error: 'Für diesen Benutzer konnte kein eindeutiges Konto erstellt werden' };
+    }
+  }
+
+  if (err.code === '22P02') {
+    return { status: 400, error: 'Ungültige Eingabedaten' };
+  }
+
+  return { status: 500, error: 'Registrierung fehlgeschlagen' };
+}
 
 // Register
 router.post('/register', async (req, res) => {
@@ -11,10 +29,19 @@ router.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Benutzername und Passwort sind erforderlich' });
     }
 
     const usernameNormalized = username.trim();
+
+    if (!usernameNormalized) {
+      return res.status(400).json({ error: 'Benutzername darf nicht leer sein' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Passwort muss mindestens 6 Zeichen lang sein' });
+    }
+
     const generatedEmail = `${usernameNormalized.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user'}-${Date.now()}-${Math.floor(Math.random() * 100000)}@local.user`;
 
     // Check if user exists
@@ -24,7 +51,7 @@ router.post('/register', async (req, res) => {
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ error: 'User already exists' });
+      return res.status(400).json({ error: 'Benutzername existiert bereits' });
     }
 
     // Hash password
@@ -46,7 +73,9 @@ router.post('/register', async (req, res) => {
     res.json({ token, user });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Registration failed' });
+
+    const registrationError = getRegistrationError(err);
+    res.status(registrationError.status).json({ error: registrationError.error });
   }
 });
 

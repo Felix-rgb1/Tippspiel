@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
+require('./db');
 
 const app = express();
 
@@ -11,20 +11,6 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-
-// Database Connection
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  ssl: { rejectUnauthorized: false }
-});
-
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-});
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -50,5 +36,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-
-module.exports = pool;
