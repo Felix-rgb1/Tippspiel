@@ -5,7 +5,7 @@ import { authAPI } from '../api';
 import './Auth.css';
 
 function Login() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +18,7 @@ function Login() {
     setLoading(true);
 
     try {
-      const response = await authAPI.login(email, password);
+      const response = await authAPI.login(identifier, password);
       login(response.data.user, response.data.token);
       navigate('/');
     } catch (err) {
@@ -37,11 +37,11 @@ function Login() {
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>E-Mail</label>
+            <label>Benutzername oder E-Mail</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
             />
           </div>

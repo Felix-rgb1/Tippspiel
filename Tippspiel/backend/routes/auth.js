@@ -8,16 +8,19 @@ const router = express.Router();
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, password } = req.body;
 
-    if (!username || !email || !password) {
+    if (!username || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    const usernameNormalized = username.trim();
+    const generatedEmail = `${usernameNormalized.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user'}-${Date.now()}-${Math.floor(Math.random() * 100000)}@local.user`;
+
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR username = $2',
-      [email, username]
+      'SELECT id FROM users WHERE username = $1',
+      [usernameNormalized]
     );
 
     if (existingUser.rows.length > 0) {
@@ -30,7 +33,7 @@ router.post('/register', async (req, res) => {
     // Create user
     const result = await pool.query(
       'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, username, email, role',
-      [username, email, hashedPassword, 'user']
+      [usernameNormalized, generatedEmail, hashedPassword, 'user']
     );
 
     const user = result.rows[0];
@@ -50,15 +53,15 @@ router.post('/register', async (req, res) => {
 // Login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Missing email or password' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Missing username/email or password' });
     }
 
     const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
-      [email]
+      'SELECT * FROM users WHERE username = $1 OR email = $1 LIMIT 1',
+      [identifier.trim()]
     );
 
     if (result.rows.length === 0) {

@@ -17,10 +17,10 @@ api.interceptors.request.use((config) => {
 
 // Auth
 export const authAPI = {
-  register: (username, email, password) =>
-    api.post('/auth/register', { username, email, password }),
-  login: (email, password) =>
-    api.post('/auth/login', { email, password }),
+  register: (username, password) =>
+    api.post('/auth/register', { username, password }),
+  login: (identifier, password) =>
+    api.post('/auth/login', { identifier, password }),
 };
 
 // Matches

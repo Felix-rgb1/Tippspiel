@@ -6,7 +6,6 @@ import './Auth.css';
 
 function Register() {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +25,7 @@ function Register() {
     setLoading(true);
 
     try {
-      const response = await authAPI.register(username, email, password);
+      const response = await authAPI.register(username, password);
       login(response.data.user, response.data.token);
       navigate('/');
     } catch (err) {
@@ -50,16 +49,6 @@ function Register() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label>E-Mail</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
