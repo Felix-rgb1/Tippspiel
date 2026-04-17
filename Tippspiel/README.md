@@ -23,7 +23,7 @@ Ein Full-Stack Tippspiel für die Fußball-Weltmeisterschaft mit Benutzerregistr
 cd backend
 npm install
 cp .env.example .env
-# .env mit Supabase Credentials füllen
+# .env mit Supabase Credentials oder DATABASE_URL füllen
 npm start
 ```
 

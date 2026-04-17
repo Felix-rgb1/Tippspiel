@@ -5,6 +5,10 @@ import { authAPI } from '../api';
 import './Auth.css';
 
 function getRegistrationErrorMessage(err) {
+  if (err.code === 'API_NOT_CONFIGURED') {
+    return 'Frontend-Konfiguration fehlt. Setze VITE_API_URL in Netlify und deploye neu.';
+  }
+
   if (err.response?.data?.error) {
     return err.response.data.error;
   }

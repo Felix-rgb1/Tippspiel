@@ -23,15 +23,13 @@
 4. **Start Command**: `cd backend && npm start`
 5. **Environment Variables**:
    ```
-   DB_HOST=<deine-supabase-host>
-   DB_PORT=5432
-   DB_NAME=postgres
-   DB_USER=postgres
-   DB_PASSWORD=<dein-passwort>
+   DATABASE_URL=<dein-supabase-connection-string>
    JWT_SECRET=<generiere-einen-zufälligen-string>
    NODE_ENV=production
    FRONTEND_URL=https://<deine-netlify-url>
    ```
+
+   Alternativ zu `DATABASE_URL` funktionieren auch die Einzelvariablen `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` und `DB_PASSWORD`.
 
 ## 3. Frontend Deployment auf Netlify
 

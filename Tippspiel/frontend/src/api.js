@@ -1,9 +1,40 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const runtimeHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+const isLocalDevelopmentHost = runtimeHostname === 'localhost' || runtimeHostname === '127.0.0.1';
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+const API_URL = configuredApiUrl || (isLocalDevelopmentHost ? 'http://localhost:5000/api' : '');
+
+function ensureApiConfigured() {
+  if (!API_URL) {
+    const error = new Error('API_NOT_CONFIGURED');
+    error.code = 'API_NOT_CONFIGURED';
+    throw error;
+  }
+}
+
+function apiGet(url, config) {
+  ensureApiConfigured();
+  return api.get(url, config);
+}
+
+function apiPost(url, data, config) {
+  ensureApiConfigured();
+  return api.post(url, data, config);
+}
+
+function apiPut(url, data, config) {
+  ensureApiConfigured();
+  return api.put(url, data, config);
+}
+
+function apiDelete(url, config) {
+  ensureApiConfigured();
+  return api.delete(url, config);
+}
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_URL || undefined,
 });
 
 // Add token to requests
@@ -18,47 +49,47 @@ api.interceptors.request.use((config) => {
 // Auth
 export const authAPI = {
   register: (username, password) =>
-    api.post('/auth/register', { username, password }),
+    apiPost('/auth/register', { username, password }),
   login: (identifier, password) =>
-    api.post('/auth/login', { identifier, password }),
+    apiPost('/auth/login', { identifier, password }),
 };
 
 // Matches
 export const matchAPI = {
-  getAll: () => api.get('/matches'),
-  getById: (id) => api.get(`/matches/${id}`),
+  getAll: () => apiGet('/matches'),
+  getById: (id) => apiGet(`/matches/${id}`),
 };
 
 // Tips
 export const tipAPI = {
   submit: (matchId, homeGoals, awayGoals) =>
-    api.post('/tips', { match_id: matchId, home_goals: homeGoals, away_goals: awayGoals }),
-  getUserTips: (userId) => api.get(`/tips/user/${userId}`),
+    apiPost('/tips', { match_id: matchId, home_goals: homeGoals, away_goals: awayGoals }),
+  getUserTips: (userId) => apiGet(`/tips/user/${userId}`),
 };
 
 // Leaderboard
 export const leaderboardAPI = {
-  getAll: () => api.get('/leaderboard'),
-  getUserStats: (userId) => api.get(`/leaderboard/user/${userId}`),
+  getAll: () => apiGet('/leaderboard'),
+  getUserStats: (userId) => apiGet(`/leaderboard/user/${userId}`),
 };
 
 // User
 export const userAPI = {
-  getProfile: () => api.get('/user/profile'),
+  getProfile: () => apiGet('/user/profile'),
   updateProfile: (username, email) =>
-    api.put('/user/profile', { username, email }),
+    apiPut('/user/profile', { username, email }),
   changePassword: (oldPassword, newPassword) =>
-    api.post('/user/change-password', { oldPassword, newPassword }),
+    apiPost('/user/change-password', { oldPassword, newPassword }),
 };
 
 // Admin
 export const adminAPI = {
   createMatch: (homeTeam, awayTeam, matchDate) =>
-    api.post('/admin/matches', { home_team: homeTeam, away_team: awayTeam, match_date: matchDate }),
+    apiPost('/admin/matches', { home_team: homeTeam, away_team: awayTeam, match_date: matchDate }),
   updateMatchResult: (matchId, homeGoals, awayGoals) =>
-    api.put(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),
-  getUsers: () => api.get('/admin/users'),
-  deleteUser: (userId) => api.delete(`/admin/users/${userId}`),
+    apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),
+  getUsers: () => apiGet('/admin/users'),
+  deleteUser: (userId) => apiDelete(`/admin/users/${userId}`),
 };
 
 export default api;
