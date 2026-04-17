@@ -2,28 +2,45 @@
   display: flex;
   gap: 1rem;
   margin-bottom: 2rem;
-  border-bottom: 2px solid var(--gray-300);
+  border-bottom: 2px solid #cbd5e1;
 }
 
 .tab-btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  background: none;
+  padding: 0.7rem 1.2rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem 0.55rem 0 0;
+  background: #f8fafc;
   cursor: pointer;
   font-size: 1rem;
   font-weight: 500;
-  color: #666;
+  color: #475569;
   border-bottom: 3px solid transparent;
   transition: all 0.2s;
 }
 
 .tab-btn:hover {
   color: var(--primary);
+  background: #ffffff;
 }
 
 .tab-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
+  color: #0f172a;
+  border-color: #cbd5e1;
+  border-bottom-color: #ffffff;
+  background: #ffffff;
+}
+
+.admin-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+}
+
+.admin-hero h2 {
+  margin-bottom: 0.4rem;
+}
+
+.admin-hero p {
+  color: #cbd5e1;
 }
 
 .admin-section {
@@ -49,7 +66,7 @@
 
 .admin-hint {
   margin-bottom: 1rem;
-  color: #666;
+  color: #64748b;
 }
 
 .form-group input,
@@ -65,6 +82,18 @@
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.1);
+}
+
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: #334155;
+}
+
+.checkbox-line input {
+  width: auto;
 }
 
 .card button {
@@ -84,20 +113,21 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  background: var(--gray-100);
-  border-radius: 0.375rem;
+  background: linear-gradient(170deg, #f8fafc 0%, #eef2ff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 0.55rem;
 }
 
 .match-info,
 .user-info {
   font-size: 0.875rem;
-  color: #666;
+  color: #64748b;
   margin-top: 0.25rem;
 }
 
 .user-role {
   font-size: 0.875rem;
-  color: #666;
+  color: #64748b;
   margin-top: 0.25rem;
 }
 

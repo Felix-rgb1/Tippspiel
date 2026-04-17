@@ -39,6 +39,58 @@ router.post('/matches', adminMiddleware, async (req, res) => {
   }
 });
 
+// Update match details
+router.put('/matches/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { home_team, away_team, match_date, round, reset_result } = req.body;
+
+    if (!home_team || !away_team || !match_date) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    let result;
+
+    if (reset_result) {
+      result = await pool.query(
+        `UPDATE matches
+         SET home_team = $1,
+             away_team = $2,
+             match_date = $3,
+             round = $4,
+             home_goals = NULL,
+             away_goals = NULL,
+             finished = false,
+             updated_at = NOW()
+         WHERE id = $5
+         RETURNING *`,
+        [home_team, away_team, match_date, round || null, id]
+      );
+    } else {
+      result = await pool.query(
+        `UPDATE matches
+         SET home_team = $1,
+             away_team = $2,
+             match_date = $3,
+             round = $4,
+             updated_at = NOW()
+         WHERE id = $5
+         RETURNING *`,
+        [home_team, away_team, match_date, round || null, id]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update match' });
+  }
+});
+
 // Update match result
 router.put('/matches/:id/result', adminMiddleware, async (req, res) => {
   try {

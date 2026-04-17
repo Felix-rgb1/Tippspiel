@@ -88,6 +88,10 @@ function Dashboard() {
     ? matches
     : matches.filter(m => m.round === activeRound);
 
+  const finishedCount = matches.filter((m) => m.finished).length;
+  const openCount = matches.length - finishedCount;
+  const submittedTipsCount = Object.keys(tips).length;
+
   return (
     <div className="container">
       <div className="page-title">
@@ -97,6 +101,25 @@ function Dashboard() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
+
+      <div className="dashboard-stats">
+        <div className="stat-card">
+          <span className="label">Spiele gesamt</span>
+          <span className="value">{matches.length}</span>
+        </div>
+        <div className="stat-card">
+          <span className="label">Noch offen</span>
+          <span className="value">{openCount}</span>
+        </div>
+        <div className="stat-card">
+          <span className="label">Abgeschlossen</span>
+          <span className="value">{finishedCount}</span>
+        </div>
+        <div className="stat-card">
+          <span className="label">Meine Tipps</span>
+          <span className="value">{submittedTipsCount}</span>
+        </div>
+      </div>
 
       {rounds.length > 1 && (
         <div className="round-filter">

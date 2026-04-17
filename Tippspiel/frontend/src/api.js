@@ -86,6 +86,14 @@ export const userAPI = {
 export const adminAPI = {
   createMatch: (homeTeam, awayTeam, matchDate, round) =>
     apiPost('/admin/matches', { home_team: homeTeam, away_team: awayTeam, match_date: matchDate, round }),
+  updateMatch: (matchId, homeTeam, awayTeam, matchDate, round, resetResult) =>
+    apiPut(`/admin/matches/${matchId}`, {
+      home_team: homeTeam,
+      away_team: awayTeam,
+      match_date: matchDate,
+      round,
+      reset_result: resetResult
+    }),
   syncMatches: () => apiPost('/admin/matches/sync', {}),
   updateMatchResult: (matchId, homeGoals, awayGoals) =>
     apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),

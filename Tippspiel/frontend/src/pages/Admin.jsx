@@ -3,6 +3,17 @@ import { adminAPI, matchAPI } from '../api';
 import './Admin.css';
 
 function Admin() {
+  const roundOptions = [
+    '1. Spieltag',
+    '2. Spieltag',
+    '3. Spieltag',
+    'Achtelfinale',
+    'Viertelfinale',
+    'Halbfinale',
+    'Spiel um Platz 3',
+    'Finale'
+  ];
+
   const [activeTab, setActiveTab] = useState('matches');
   const [matches, setMatches] = useState([]);
   const [users, setUsers] = useState([]);
@@ -19,6 +30,12 @@ function Admin() {
   const [matchId, setMatchId] = useState('');
   const [homeGoals, setHomeGoals] = useState('');
   const [awayGoals, setAwayGoals] = useState('');
+  const [editMatchId, setEditMatchId] = useState('');
+  const [editHomeTeam, setEditHomeTeam] = useState('');
+  const [editAwayTeam, setEditAwayTeam] = useState('');
+  const [editMatchDate, setEditMatchDate] = useState('');
+  const [editRound, setEditRound] = useState('');
+  const [resetResult, setResetResult] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'matches') {
@@ -67,6 +84,62 @@ function Admin() {
       fetchMatches();
     } catch (err) {
       setError(err.response?.data?.error || 'Fehler beim Erstellen');
+    }
+  };
+
+  const toDateTimeLocal = (date) => {
+    const parsedDate = new Date(date);
+    const timezoneOffset = parsedDate.getTimezoneOffset() * 60000;
+    return new Date(parsedDate.getTime() - timezoneOffset).toISOString().slice(0, 16);
+  };
+
+  const handleEditMatchSelect = (selectedMatchId) => {
+    setEditMatchId(selectedMatchId);
+    setResetResult(false);
+
+    if (!selectedMatchId) {
+      setEditHomeTeam('');
+      setEditAwayTeam('');
+      setEditMatchDate('');
+      setEditRound('');
+      return;
+    }
+
+    const selectedMatch = matches.find((m) => m.id === parseInt(selectedMatchId, 10));
+
+    if (!selectedMatch) {
+      return;
+    }
+
+    setEditHomeTeam(selectedMatch.home_team);
+    setEditAwayTeam(selectedMatch.away_team);
+    setEditMatchDate(toDateTimeLocal(selectedMatch.match_date));
+    setEditRound(selectedMatch.round || '');
+  };
+
+  const handleUpdateMatch = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (!editMatchId || !editHomeTeam || !editAwayTeam || !editMatchDate) {
+      setError('Bitte alle Felder fuer die Spielbearbeitung ausfuellen');
+      return;
+    }
+
+    try {
+      await adminAPI.updateMatch(
+        editMatchId,
+        editHomeTeam,
+        editAwayTeam,
+        editMatchDate,
+        editRound,
+        resetResult
+      );
+      setSuccess('Spiel aktualisiert!');
+      fetchMatches();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Fehler beim Bearbeiten des Spiels');
     }
   };
 
@@ -150,6 +223,11 @@ function Admin() {
 
       {activeTab === 'matches' && (
         <div className="admin-section">
+          <div className="admin-hero card">
+            <h2>Match Center</h2>
+            <p>Automatisiere den Import oder bearbeite Spiele manuell vor dem Anpfiff.</p>
+          </div>
+
           <div className="card">
             <h2>Automatischer Import</h2>
             <p className="admin-hint">
@@ -196,17 +274,81 @@ function Admin() {
                 <label>Runde / Spieltag</label>
                 <select value={round} onChange={(e) => setRound(e.target.value)}>
                   <option value="">-- optional --</option>
-                  <option>1. Spieltag</option>
-                  <option>2. Spieltag</option>
-                  <option>3. Spieltag</option>
-                  <option>Achtelfinale</option>
-                  <option>Viertelfinale</option>
-                  <option>Halbfinale</option>
-                  <option>Spiel um Platz 3</option>
-                  <option>Finale</option>
+                  {roundOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
                 </select>
               </div>
               <button type="submit" className="btn-primary">Spiel erstellen</button>
+            </form>
+          </div>
+
+          <div className="card">
+            <h2>Spiel bearbeiten</h2>
+            <form onSubmit={handleUpdateMatch}>
+              <div className="form-group">
+                <label>Spiel waehlen</label>
+                <select value={editMatchId} onChange={(e) => handleEditMatchSelect(e.target.value)} required>
+                  <option value="">-- Spiel waehlen --</option>
+                  {matches.map((match) => (
+                    <option key={match.id} value={match.id}>
+                      {match.home_team} vs {match.away_team} ({formatDate(match.match_date)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Heimmannschaft</label>
+                  <input
+                    type="text"
+                    value={editHomeTeam}
+                    onChange={(e) => setEditHomeTeam(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Gastmannschaft</label>
+                  <input
+                    type="text"
+                    value={editAwayTeam}
+                    onChange={(e) => setEditAwayTeam(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Spieltermin</label>
+                <input
+                  type="datetime-local"
+                  value={editMatchDate}
+                  onChange={(e) => setEditMatchDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Runde / Spieltag</label>
+                <select value={editRound} onChange={(e) => setEditRound(e.target.value)}>
+                  <option value="">-- optional --</option>
+                  {roundOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={resetResult}
+                  onChange={(e) => setResetResult(e.target.checked)}
+                />
+                Ergebnis zuruecksetzen (falls bereits eingetragen)
+              </label>
+
+              <button type="submit" className="btn-primary">Spiel speichern</button>
             </form>
           </div>
 
