@@ -6,9 +6,10 @@
   place-items: center;
   overflow: hidden;
   background:
-    radial-gradient(circle at 20% 18%, rgba(56, 189, 248, 0.16) 0%, rgba(56, 189, 248, 0) 48%),
-    radial-gradient(circle at 82% 76%, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0) 50%),
-    linear-gradient(130deg, #020617 0%, #0b173b 45%, #071126 100%);
+    radial-gradient(circle at 20% 18%, rgba(56, 189, 248, 0.12) 0%, rgba(56, 189, 248, 0) 48%),
+    radial-gradient(circle at 82% 76%, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0) 50%),
+    linear-gradient(130deg, rgba(2, 6, 23, 0.55) 0%, rgba(11, 23, 59, 0.45) 45%, rgba(7, 17, 38, 0.55) 100%);
+  backdrop-filter: blur(2px);
 }
 
 .bl-overlay::after {
@@ -150,11 +151,6 @@
   margin: 0.25rem 0 0;
   font-size: 0.9rem;
   color: #94a3b8;
-}
-
-.bl-hidden {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .bl-is-exiting {

@@ -89,9 +89,7 @@ function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }
         </div>
       )}
 
-      <div className={showOverlay ? 'bl-hidden' : undefined}>
-        {children}
-      </div>
+      {children}
     </>
   );
 }
