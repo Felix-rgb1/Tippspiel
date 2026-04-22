@@ -4,6 +4,138 @@ const API_BASE_URL = process.env.FOOTBALL_DATA_API_URL || 'https://api.football-
 const COMPETITION_CODE = process.env.FOOTBALL_DATA_COMPETITION_CODE || 'WC';
 const SEASON = process.env.FOOTBALL_DATA_SEASON;
 
+const COUNTRY_NAME_DE_BY_TLA = {
+  ARG: 'Argentinien',
+  AUS: 'Australien',
+  AUT: 'Oesterreich',
+  BEL: 'Belgien',
+  BOL: 'Bolivien',
+  BRA: 'Brasilien',
+  CAN: 'Kanada',
+  CHI: 'Chile',
+  CHN: 'China',
+  CIV: 'Elfenbeinkueste',
+  CMR: 'Kamerun',
+  COL: 'Kolumbien',
+  CRC: 'Costa Rica',
+  CRO: 'Kroatien',
+  CZE: 'Tschechien',
+  DEN: 'Daenemark',
+  ECU: 'Ecuador',
+  EGY: 'Aegypten',
+  ENG: 'England',
+  ESP: 'Spanien',
+  FRA: 'Frankreich',
+  GER: 'Deutschland',
+  GHA: 'Ghana',
+  GRE: 'Griechenland',
+  HUN: 'Ungarn',
+  IRN: 'Iran',
+  IRQ: 'Irak',
+  ISL: 'Island',
+  ISR: 'Israel',
+  ITA: 'Italien',
+  JAM: 'Jamaika',
+  JPN: 'Japan',
+  KOR: 'Suedkorea',
+  KSA: 'Saudi-Arabien',
+  MAR: 'Marokko',
+  MEX: 'Mexiko',
+  NED: 'Niederlande',
+  NGA: 'Nigeria',
+  NOR: 'Norwegen',
+  NZL: 'Neuseeland',
+  PAN: 'Panama',
+  PAR: 'Paraguay',
+  PER: 'Peru',
+  POL: 'Polen',
+  POR: 'Portugal',
+  QAT: 'Katar',
+  ROU: 'Rumaenien',
+  RSA: 'Suedafrika',
+  SCO: 'Schottland',
+  SEN: 'Senegal',
+  SRB: 'Serbien',
+  SUI: 'Schweiz',
+  SVK: 'Slowakei',
+  SWE: 'Schweden',
+  TUR: 'Tuerkei',
+  TUN: 'Tunesien',
+  UKR: 'Ukraine',
+  URU: 'Uruguay',
+  USA: 'USA',
+  VEN: 'Venezuela',
+  WAL: 'Wales'
+};
+
+const COUNTRY_NAME_DE_BY_EN_NAME = {
+  Argentina: 'Argentinien',
+  Australia: 'Australien',
+  Austria: 'Oesterreich',
+  Belgium: 'Belgien',
+  Bolivia: 'Bolivien',
+  Brazil: 'Brasilien',
+  Cameroon: 'Kamerun',
+  Canada: 'Kanada',
+  Chile: 'Chile',
+  China: 'China',
+  Colombia: 'Kolumbien',
+  'Costa Rica': 'Costa Rica',
+  Croatia: 'Kroatien',
+  Czechia: 'Tschechien',
+  'Czech Republic': 'Tschechien',
+  Denmark: 'Daenemark',
+  Ecuador: 'Ecuador',
+  Egypt: 'Aegypten',
+  England: 'England',
+  France: 'Frankreich',
+  Germany: 'Deutschland',
+  Ghana: 'Ghana',
+  Greece: 'Griechenland',
+  Hungary: 'Ungarn',
+  Iran: 'Iran',
+  'IR Iran': 'Iran',
+  Iraq: 'Irak',
+  Iceland: 'Island',
+  Israel: 'Israel',
+  Italy: 'Italien',
+  'Ivory Coast': 'Elfenbeinkueste',
+  Jamaica: 'Jamaika',
+  Japan: 'Japan',
+  Mexico: 'Mexiko',
+  Morocco: 'Marokko',
+  Netherlands: 'Niederlande',
+  'New Zealand': 'Neuseeland',
+  Nigeria: 'Nigeria',
+  Norway: 'Norwegen',
+  Panama: 'Panama',
+  Paraguay: 'Paraguay',
+  Peru: 'Peru',
+  Poland: 'Polen',
+  Portugal: 'Portugal',
+  Qatar: 'Katar',
+  Romania: 'Rumaenien',
+  'Saudi Arabia': 'Saudi-Arabien',
+  Scotland: 'Schottland',
+  Senegal: 'Senegal',
+  Serbia: 'Serbien',
+  Slovakia: 'Slowakei',
+  Slovenia: 'Slowenien',
+  'South Africa': 'Suedafrika',
+  'South Korea': 'Suedkorea',
+  Spain: 'Spanien',
+  Sweden: 'Schweden',
+  Switzerland: 'Schweiz',
+  Tunisia: 'Tunesien',
+  Turkey: 'Tuerkei',
+  Ukraine: 'Ukraine',
+  Uruguay: 'Uruguay',
+  USA: 'USA',
+  'United States': 'USA',
+  Venezuela: 'Venezuela',
+  Wales: 'Wales'
+};
+
 function createConfigError(message) {
   const error = new Error(message);
   error.statusCode = 400;
@@ -24,6 +156,24 @@ function getRoundLabel(match) {
   }
 
   return stageMap[match.stage] || match.stage || null;
+}
+
+function translateTeamNameToGerman(team) {
+  if (!team || !team.name) {
+    return null;
+  }
+
+  const tla = typeof team.tla === 'string' ? team.tla.trim().toUpperCase() : '';
+  if (tla && COUNTRY_NAME_DE_BY_TLA[tla]) {
+    return COUNTRY_NAME_DE_BY_TLA[tla];
+  }
+
+  const englishName = team.name.trim();
+  if (COUNTRY_NAME_DE_BY_EN_NAME[englishName]) {
+    return COUNTRY_NAME_DE_BY_EN_NAME[englishName];
+  }
+
+  return englishName;
 }
 
 async function fetchCompetitionMatches() {
@@ -63,8 +213,8 @@ async function syncMatchesFromFootballData(pool) {
 
   for (const match of matches) {
     const normalizedMatch = {
-      homeTeam: match.homeTeam?.name,
-      awayTeam: match.awayTeam?.name,
+      homeTeam: translateTeamNameToGerman(match.homeTeam),
+      awayTeam: translateTeamNameToGerman(match.awayTeam),
       matchDate: match.utcDate,
       round: getRoundLabel(match),
       externalSource: 'football-data',

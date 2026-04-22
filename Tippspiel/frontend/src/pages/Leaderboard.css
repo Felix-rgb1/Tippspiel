@@ -5,6 +5,17 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.leaderboard-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.leaderboard-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .table-header {
   display: grid;
   grid-template-columns: 60px 1fr 100px 100px;
@@ -56,6 +67,14 @@
 }
 
 @media (max-width: 600px) {
+  .leaderboard-actions {
+    justify-content: stretch;
+  }
+
+  .leaderboard-actions button {
+    width: 100%;
+  }
+
   .table-header,
   .table-row {
     grid-template-columns: 40px 1fr 60px 60px;

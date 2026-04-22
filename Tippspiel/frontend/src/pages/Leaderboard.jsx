@@ -5,6 +5,7 @@ import './Leaderboard.css';
 function Leaderboard() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -24,6 +25,37 @@ function Leaderboard() {
     }
   };
 
+  const exportLeaderboardToExcel = async () => {
+    if (leaderboard.length === 0) {
+      return;
+    }
+
+    try {
+      setExporting(true);
+      const XLSX = await import('xlsx');
+
+      const exportData = leaderboard.map((entry, index) => ({
+        Platz: index + 1,
+        Spieler: entry.username,
+        Tipps: entry.tips_submitted || 0,
+        Punkte: entry.total_points || 0,
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Rangliste');
+
+      const now = new Date();
+      const datePart = now.toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `rangliste_${datePart}.xlsx`);
+    } catch (err) {
+      setError('Fehler beim Export der Excel-Datei');
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) return <div className="container"><p>Lädt...</p></div>;
 
   return (
@@ -31,6 +63,17 @@ function Leaderboard() {
       <div className="page-title">
         <h1>🏆 Rangliste</h1>
         <p>Aktuelle Punktestand</p>
+      </div>
+
+      <div className="leaderboard-actions">
+        <button
+          type="button"
+          className="btn-success"
+          onClick={exportLeaderboardToExcel}
+          disabled={leaderboard.length === 0 || exporting}
+        >
+          {exporting ? 'Export läuft...' : 'Excel herunterladen'}
+        </button>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
