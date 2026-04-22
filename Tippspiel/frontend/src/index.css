@@ -180,3 +180,71 @@ input:focus, textarea:focus {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+@media (max-width: 768px) and (prefers-color-scheme: dark) {
+  :root {
+    --primary: #0f172a;
+    --primary-light: #1e293b;
+    --gray-100: #0b1220;
+    --gray-200: #1b2435;
+    --gray-300: #334155;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 15% 10%, rgba(37, 99, 235, 0.18) 0%, rgba(37, 99, 235, 0) 45%),
+      radial-gradient(circle at 85% 95%, rgba(6, 182, 212, 0.14) 0%, rgba(6, 182, 212, 0) 45%),
+      #020617;
+    color: #e2e8f0;
+  }
+
+  .app-main {
+    background: linear-gradient(180deg, rgba(2, 6, 23, 0.65) 0%, rgba(2, 6, 23, 0.25) 100%);
+  }
+
+  .card {
+    background: linear-gradient(165deg, #0f172a 0%, #111c31 100%);
+    border: 1px solid #1e293b;
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.45);
+    color: #e2e8f0;
+  }
+
+  .page-title p {
+    color: #94a3b8;
+  }
+
+  input,
+  textarea,
+  select {
+    background: #0b1220;
+    color: #e2e8f0;
+    border-color: #334155;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  }
+
+  .alert-error {
+    background: rgba(127, 29, 29, 0.28);
+    color: #fecaca;
+    border-color: rgba(248, 113, 113, 0.45);
+  }
+
+  .alert-success {
+    background: rgba(6, 78, 59, 0.35);
+    color: #bbf7d0;
+    border-color: rgba(74, 222, 128, 0.45);
+  }
+}

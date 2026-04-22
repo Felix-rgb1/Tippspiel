@@ -137,12 +137,10 @@ function Dashboard() {
       await tipAPI.submit(matchId, homeGoals, awayGoals);
       setSuccess('Tipp abgegeben!');
 
-      if (source === 'next') {
-        setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: true }));
-        setTimeout(() => {
-          setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: false }));
-        }, 1800);
-      }
+      setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: true }));
+      setTimeout(() => {
+        setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: false }));
+      }, source === 'next' ? 1600 : 1400);
 
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -322,7 +320,7 @@ function Dashboard() {
                         <>
                           <button
                             type="button"
-                            className="btn-primary next-tip-submit"
+                            className={`btn-primary next-tip-submit${savedInline ? ' tip-submit-saved' : ''}`}
                             onClick={() => handleSubmitTip(match.id, 'next')}
                           >
                             {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
@@ -431,6 +429,7 @@ function Dashboard() {
           });
           const isTipsExpanded = Boolean(expandedTipsMatches[match.id]);
           const countdown = getCountdown(match.match_date);
+          const savedInline = Boolean(nextTipSavedByMatch[match.id]);
 
           return (
             <div key={match.id} className="match-card" style={getMatchThemeStyle(match.home_team, match.away_team)}>
@@ -483,12 +482,15 @@ function Dashboard() {
                   {deadlinePasssed ? (
                     <div className="deadline-passed">Deadline verpasst</div>
                   ) : (
-                    <button
-                      className="btn-primary"
-                      onClick={() => handleSubmitTip(match.id)}
-                    >
-                      {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
-                    </button>
+                    <div className="tip-submit-wrap">
+                      <button
+                        className={`btn-primary${savedInline ? ' tip-submit-saved' : ''}`}
+                        onClick={() => handleSubmitTip(match.id)}
+                      >
+                        {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
+                      </button>
+                      {savedInline && <span className="tip-saved-chip">✓ Gespeichert</span>}
+                    </div>
                   )}
                 </>
               )}

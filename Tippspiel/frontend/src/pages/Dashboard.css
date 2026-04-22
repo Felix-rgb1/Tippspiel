@@ -167,6 +167,10 @@
   font-size: 0.82rem;
 }
 
+.next-tip-submit.tip-submit-saved {
+  animation: tip-submit-pop 0.34s ease;
+}
+
 .next-tip-locked {
   font-size: 0.78rem;
   color: #92400e;
@@ -183,6 +187,7 @@
   border: 1px solid #86efac;
   border-radius: 0.4rem;
   padding: 0.2rem 0.5rem;
+  animation: tip-saved-chip-in 0.35s ease;
 }
 
 .stat-card {
@@ -350,6 +355,30 @@
   border-radius: 0.55rem;
 }
 
+.tip-submit-wrap {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.tip-submit-saved {
+  animation: tip-submit-pop 0.34s ease;
+}
+
+.tip-saved-chip {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  animation: tip-saved-chip-in 0.35s ease;
+}
+
 .deadline-passed {
   background: var(--warning);
   color: white;
@@ -487,6 +516,29 @@
   50% { opacity: 0.6; }
 }
 
+@keyframes tip-submit-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes tip-saved-chip-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-stats .stat-card,
   .next-matches-panel,
@@ -494,6 +546,11 @@
     animation: none;
   }
   .countdown-badge {
+    animation: none;
+  }
+  .tip-submit-saved,
+  .tip-saved-chip,
+  .next-tip-saved {
     animation: none;
   }
 }
@@ -539,6 +596,11 @@
 
   .next-tip-submit {
     width: 100%;
+  }
+
+  .tip-saved-chip {
+    width: 100%;
+    justify-content: center;
   }
 
   .stat-card {
@@ -605,5 +667,173 @@
 
   .visible-tip-score {
     font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 768px) and (prefers-color-scheme: dark) {
+  .bonus-card {
+    background: linear-gradient(160deg, #31200b 0%, #1f1408 100%);
+    border-color: #b45309;
+  }
+
+  .bonus-card h2 {
+    color: #fde68a;
+  }
+
+  .bonus-card p,
+  .bonus-grid label {
+    color: #fdba74;
+  }
+
+  .bonus-grid select {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #92400e;
+  }
+
+  .stat-card {
+    background: linear-gradient(160deg, #0f172a 0%, #16233b 100%);
+    border-color: #334155;
+  }
+
+  .stat-card .label {
+    color: #93c5fd;
+  }
+
+  .stat-card .value {
+    color: #e2e8f0;
+  }
+
+  .next-matches-panel {
+    background: linear-gradient(160deg, #0f172a 0%, #172554 100%);
+    border-color: #2563eb;
+  }
+
+  .next-matches-headline h2 {
+    color: #e2e8f0;
+  }
+
+  .next-matches-headline span {
+    color: #bfdbfe;
+    background: rgba(30, 58, 138, 0.55);
+  }
+
+  .next-match-card {
+    background: rgba(15, 23, 42, 0.76);
+    border-color: rgba(96, 165, 250, 0.4);
+  }
+
+  .next-match-teams {
+    color: #e2e8f0;
+  }
+
+  .next-match-meta {
+    color: #93c5fd;
+  }
+
+  .next-tip-locked {
+    color: #fbbf24;
+    background: rgba(120, 53, 15, 0.45);
+    border-color: rgba(251, 191, 36, 0.5);
+  }
+
+  .next-tip-saved {
+    color: #86efac;
+    background: rgba(6, 78, 59, 0.4);
+    border-color: rgba(74, 222, 128, 0.45);
+  }
+
+  .tip-saved-chip {
+    color: #86efac;
+    background: rgba(6, 78, 59, 0.4);
+    border-color: rgba(74, 222, 128, 0.45);
+  }
+
+  .round-btn {
+    background: #111827;
+    color: #cbd5e1;
+    border-color: #334155;
+  }
+
+  .round-btn:hover,
+  .round-btn.active {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    border-color: #1e40af;
+    color: #eff6ff;
+  }
+
+  .match-card {
+    background: linear-gradient(165deg, #0f172a 0%, #111c31 100%) !important;
+    border-color: #334155 !important;
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+  }
+
+  .match-date,
+  .score {
+    color: #93c5fd;
+  }
+
+  .team,
+  .final-score {
+    color: #e2e8f0;
+  }
+
+  .tip-inputs input,
+  .next-tip-inputs input {
+    background: #0b1220;
+    color: #e2e8f0;
+    border-color: #334155;
+  }
+
+  .deadline-passed {
+    background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  }
+
+  .submitted-tip {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+  }
+
+  .visible-tips-panel,
+  .visible-tip-row,
+  .own-tip-row {
+    background: rgba(15, 23, 42, 0.7);
+    border-color: rgba(100, 116, 139, 0.4);
+  }
+
+  .visible-tips-title,
+  .visible-tip-user,
+  .visible-tip-score {
+    color: #e2e8f0;
+  }
+
+  .visible-tips-meta {
+    color: #93c5fd;
+  }
+
+  .missing-tips-banner {
+    background: linear-gradient(135deg, #7c2d12 0%, #9a3412 100%);
+    border-color: #ea580c;
+    color: #fed7aa;
+  }
+
+  .countdown-badge {
+    background: rgba(127, 29, 29, 0.45);
+    border-color: rgba(248, 113, 113, 0.55);
+    color: #fecaca;
+  }
+
+  .status-open {
+    background: rgba(6, 95, 70, 0.45);
+    color: #86efac;
+  }
+
+  .status-locked {
+    background: rgba(120, 53, 15, 0.45);
+    color: #fcd34d;
+  }
+
+  .status-finished {
+    background: rgba(51, 65, 85, 0.55);
+    color: #cbd5e1;
   }
 }
