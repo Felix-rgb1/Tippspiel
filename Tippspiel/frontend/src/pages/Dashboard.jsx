@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getMatchThemeStyle } from '../utils/teamTheme';
+import PageLoader from '../components/PageLoader';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -9,6 +10,7 @@ function Dashboard() {
   const [tips, setTips] = useState({});
   const [visibleTipsByMatch, setVisibleTipsByMatch] = useState({});
   const [expandedTipsMatches, setExpandedTipsMatches] = useState({});
+  const [nextTipSavedByMatch, setNextTipSavedByMatch] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -121,13 +123,21 @@ function Dashboard() {
     }));
   };
 
-  const handleSubmitTip = async (matchId) => {
+  const handleSubmitTip = async (matchId, source = 'default') => {
     try {
       const tip = tips[matchId] || {};
       const homeGoals = tip.home_goals ?? 0;
       const awayGoals = tip.away_goals ?? 0;
       await tipAPI.submit(matchId, homeGoals, awayGoals);
       setSuccess('Tipp abgegeben!');
+
+      if (source === 'next') {
+        setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: true }));
+        setTimeout(() => {
+          setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: false }));
+        }, 1800);
+      }
+
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Fehler beim Abgeben des Tipps');
@@ -172,7 +182,7 @@ function Dashboard() {
     new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b, 'de'));
 
-  if (loading) return <div className="container"><p>Lädt...</p></div>;
+  if (loading) return <PageLoader title="Dashboard wird geladen" subtitle="Spiele und Tipps werden vorbereitet..." />;
 
   const rounds = ['Alle', ...Array.from(
     new Set(matches.map(m => m.round).filter(Boolean))
@@ -243,6 +253,9 @@ function Dashboard() {
           <div className="next-matches-list">
             {upcomingMatches.map((match) => {
               const status = getMatchStatus(match);
+              const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
+              const deadlinePasssed = isDeadlinePassed(match.match_date);
+              const savedInline = Boolean(nextTipSavedByMatch[match.id]);
 
               return (
                 <div key={`next-${match.id}`} className="next-match-card">
@@ -252,6 +265,43 @@ function Dashboard() {
                     {match.round && <span>{match.round}</span>}
                   </div>
                   <span className={`match-status-badge ${status.className}`}>{status.label}</span>
+                  {!match.finished && (
+                    <div className="next-match-tip-row">
+                      <div className="next-tip-inputs">
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={tip.home_goals}
+                          onChange={(e) => handleTipChange(match.id, 'home_goals', e.target.value)}
+                          disabled={deadlinePasssed}
+                        />
+                        <span>:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={tip.away_goals}
+                          onChange={(e) => handleTipChange(match.id, 'away_goals', e.target.value)}
+                          disabled={deadlinePasssed}
+                        />
+                      </div>
+                      {deadlinePasssed ? (
+                        <div className="next-tip-locked">Deadline verpasst</div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-primary next-tip-submit"
+                            onClick={() => handleSubmitTip(match.id, 'next')}
+                          >
+                            Tipp abgeben
+                          </button>
+                          {savedInline && <span className="next-tip-saved">Tipp gespeichert</span>}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

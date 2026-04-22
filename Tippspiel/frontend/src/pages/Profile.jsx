@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { userAPI, leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
+import PageLoader from '../components/PageLoader';
 import './Profile.css';
 
 function Profile() {
@@ -68,7 +69,7 @@ function Profile() {
     }
   };
 
-  if (loading) return <div className="container"><p>Lädt...</p></div>;
+  if (loading) return <PageLoader title="Profil wird geladen" subtitle="Deine Daten und Statistiken kommen gleich..." />;
 
   return (
     <div className="container">

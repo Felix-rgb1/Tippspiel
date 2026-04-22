@@ -8,13 +8,14 @@ import Leaderboard from './pages/Leaderboard';
 import Rules from './pages/Rules';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
+import PageLoader from './components/PageLoader';
 import './index.css';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div className="container" style={{ marginTop: '2rem' }}>Lädt...</div>;
+    return <PageLoader title="Sitzung wird geladen" subtitle="Anmeldung wird geprüft..." />;
   }
 
   if (!user) {
@@ -28,7 +29,7 @@ function AdminRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div className="container" style={{ marginTop: '2rem' }}>Lädt...</div>;
+    return <PageLoader title="Sitzung wird geladen" subtitle="Rechte werden geprüft..." />;
   }
 
   if (!user || user.role !== 'admin') {

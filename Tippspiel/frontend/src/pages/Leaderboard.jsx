@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
+import PageLoader from '../components/PageLoader';
 import './Leaderboard.css';
 
 function Leaderboard() {
@@ -80,7 +81,7 @@ function Leaderboard() {
     }
   };
 
-  if (loading) return <div className="container"><p>Lädt...</p></div>;
+  if (loading) return <PageLoader title="Rangliste wird geladen" subtitle="Punkte und Spieltage werden berechnet..." />;
 
   const topThree = leaderboard.slice(0, 3);
   const ownRankIndex = leaderboard.findIndex((entry) => String(entry.id) === String(user?.id));
