@@ -295,7 +295,7 @@ function Dashboard() {
                             className="btn-primary next-tip-submit"
                             onClick={() => handleSubmitTip(match.id, 'next')}
                           >
-                            Tipp abgeben
+                            {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
                           </button>
                           {savedInline && <span className="next-tip-saved">Tipp gespeichert</span>}
                         </>
@@ -453,7 +453,7 @@ function Dashboard() {
                       className="btn-primary"
                       onClick={() => handleSubmitTip(match.id)}
                     >
-                      Tipp abgeben
+                      {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
                     </button>
                   )}
                 </>
