@@ -156,6 +156,18 @@ function Dashboard() {
     }));
   };
 
+  const getMatchStatus = (match) => {
+    if (match.finished) {
+      return { label: 'Abgeschlossen', className: 'status-finished' };
+    }
+
+    if (isDeadlinePassed(match.match_date)) {
+      return { label: 'Gesperrt', className: 'status-locked' };
+    }
+
+    return { label: 'Offen', className: 'status-open' };
+  };
+
   const allTeams = Array.from(
     new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b, 'de'));
@@ -187,6 +199,11 @@ function Dashboard() {
   const finishedCount = matches.filter((m) => m.finished).length;
   const openCount = matches.length - finishedCount;
   const submittedTipsCount = Object.keys(tips).length;
+  const upcomingMatches = matches
+    .filter((match) => !match.finished)
+    .slice()
+    .sort((firstMatch, secondMatch) => new Date(firstMatch.match_date) - new Date(secondMatch.match_date))
+    .slice(0, 3);
 
   return (
     <div className="container">
@@ -216,6 +233,31 @@ function Dashboard() {
           <span className="value">{submittedTipsCount}</span>
         </div>
       </div>
+
+      {upcomingMatches.length > 0 && (
+        <div className="next-matches-panel">
+          <div className="next-matches-headline">
+            <h2>Heute / Als Nächstes</h2>
+            <span>{upcomingMatches.length} Spiele</span>
+          </div>
+          <div className="next-matches-list">
+            {upcomingMatches.map((match) => {
+              const status = getMatchStatus(match);
+
+              return (
+                <div key={`next-${match.id}`} className="next-match-card">
+                  <div className="next-match-teams">{match.home_team} vs {match.away_team}</div>
+                  <div className="next-match-meta">
+                    <span>{formatDate(match.match_date)}</span>
+                    {match.round && <span>{match.round}</span>}
+                  </div>
+                  <span className={`match-status-badge ${status.className}`}>{status.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="bonus-card">
         <h2>⭐ Bonusfragen</h2>
@@ -295,6 +337,7 @@ function Dashboard() {
         {visibleMatches.map(match => {
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const deadlinePasssed = isDeadlinePassed(match.match_date);
+          const status = getMatchStatus(match);
           const visibleTips = (visibleTipsByMatch[match.id] || []).slice().sort((firstTip, secondTip) => {
             if (firstTip.user_id === user.id && secondTip.user_id !== user.id) {
               return -1;
@@ -310,7 +353,10 @@ function Dashboard() {
 
           return (
             <div key={match.id} className="match-card" style={getMatchThemeStyle(match.home_team, match.away_team)}>
-              <div className="match-date">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
+              <div className="match-topline">
+                <div className="match-date">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
+                <span className={`match-status-badge ${status.className}`}>{status.label}</span>
+              </div>
               
               <div className="match-teams">
                 <div className="team">{match.home_team}</div>

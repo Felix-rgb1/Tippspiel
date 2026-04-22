@@ -12,7 +12,7 @@ function Header() {
 
   return (
     <header className="header">
-      <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '60px' }}>
+      <div className="container header-inner">
         <Link to="/" className="logo">
           ⚽ WM Tippspiel
         </Link>

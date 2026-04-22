@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { leaderboardAPI } from '../api';
+import { useAuth } from '../context/AuthContext';
 import './Leaderboard.css';
 
 function Leaderboard() {
@@ -10,6 +11,7 @@ function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchLeaderboard();
@@ -80,6 +82,10 @@ function Leaderboard() {
 
   if (loading) return <div className="container"><p>Lädt...</p></div>;
 
+  const topThree = leaderboard.slice(0, 3);
+  const ownRankIndex = leaderboard.findIndex((entry) => String(entry.id) === String(user?.id));
+  const ownRankEntry = ownRankIndex >= 0 ? leaderboard[ownRankIndex] : null;
+
   return (
     <div className="container">
       <div className="page-title">
@@ -103,6 +109,24 @@ function Leaderboard() {
         </button>
       </div>
 
+      {topThree.length > 0 && (
+        <div className="leaderboard-podium">
+          {topThree.map((entry, index) => (
+            <div key={`podium-${entry.id}`} className={`podium-card podium-${index + 1}`}>
+              <div className="podium-rank">{index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : '🥉'} Platz {index + 1}</div>
+              <div className="podium-name">{entry.username}</div>
+              <div className="podium-points">{entry.total_points || 0} Punkte</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ownRankEntry && (
+        <div className="my-rank-box">
+          Dein Rang: <strong>{ownRankIndex + 1}</strong> · {ownRankEntry.total_points || 0} Punkte · {ownRankEntry.bonus_points || 0} Bonus
+        </div>
+      )}
+
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="leaderboard-table">
@@ -114,22 +138,29 @@ function Leaderboard() {
           <div className="col-points">Punkte</div>
         </div>
 
-        {leaderboard.map((entry, index) => (
-          <div key={entry.id} className="table-row">
+        {leaderboard.map((entry, index) => {
+          const isOwnRow = String(entry.id) === String(user?.id);
+
+          return (
+          <div key={entry.id} className={`table-row${isOwnRow ? ' own-row' : ''}`}>
             <div className="col-rank">
               {index === 0 && '🥇'}
               {index === 1 && '🥈'}
               {index === 2 && '🥉'}
               {index > 2 && `${index + 1}.`}
             </div>
-            <div className="col-name">{entry.username}</div>
+            <div className="col-name">
+              {entry.username}
+              {isOwnRow && <span className="own-pill">Du</span>}
+            </div>
             <div className="col-tips">{entry.tips_submitted || 0}</div>
             <div className="col-points">{entry.bonus_points || 0}</div>
             <div className="col-points">
               <strong>{entry.total_points || 0}</strong>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {leaderboard.length === 0 && (
           <div className="table-empty">Noch keine Spieler</div>

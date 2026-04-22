@@ -43,7 +43,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Header />
-        <main style={{ minHeight: 'calc(100vh - 60px)', paddingTop: '2rem' }}>
+        <main className="app-main">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
