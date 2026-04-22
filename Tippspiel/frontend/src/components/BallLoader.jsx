@@ -1,10 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import './BallLoader.css';
 
+const SESSION_KEY = 'wm-loader-full-seen';
 const EXIT_DURATION_MS = 640;
+const MINI_EXIT_DURATION_MS = 160;
+
+const getInitialMode = () => {
+  if (typeof window === 'undefined') {
+    return 'full';
+  }
+
+  try {
+    return window.sessionStorage.getItem(SESSION_KEY) === '1' ? 'mini' : 'full';
+  } catch {
+    return 'full';
+  }
+};
 
 function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }) {
   const [isExiting, setIsExiting] = useState(false);
+  const [mode, setMode] = useState(getInitialMode);
   const previousLoadingRef = useRef(loading);
 
   useEffect(() => {
@@ -13,7 +28,20 @@ function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }
 
     if (previousLoading && !loading) {
       setIsExiting(true);
-      timeoutId = setTimeout(() => setIsExiting(false), EXIT_DURATION_MS);
+      const activeDuration = mode === 'full' ? EXIT_DURATION_MS : MINI_EXIT_DURATION_MS;
+
+      timeoutId = setTimeout(() => {
+        setIsExiting(false);
+
+        if (mode === 'full') {
+          try {
+            window.sessionStorage.setItem(SESSION_KEY, '1');
+          } catch {
+            // ignore storage limitations and keep behavior functional
+          }
+          setMode('mini');
+        }
+      }, activeDuration);
     }
 
     if (!previousLoading && loading) {
@@ -30,7 +58,7 @@ function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }
   }, [loading]);
 
   const showOverlay = loading || isExiting;
-  const overlayClassName = `bl-overlay ${loading ? 'bl-is-loading' : 'bl-is-exiting'}`;
+  const overlayClassName = `bl-overlay bl-mode-${mode} ${loading ? 'bl-is-loading' : 'bl-is-exiting'}`;
 
   return (
     <>
@@ -79,7 +107,7 @@ function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }
               </div>
             </div>
 
-            {loading && (
+            {loading && mode === 'full' && (
               <div className="bl-text" role="status" aria-live="polite">
                 <h2 className="bl-title">{title}</h2>
                 {subtitle && <p className="bl-subtitle">{subtitle}</p>}

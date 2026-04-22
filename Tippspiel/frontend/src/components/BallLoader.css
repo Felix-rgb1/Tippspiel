@@ -21,6 +21,39 @@
   pointer-events: none;
 }
 
+.bl-mode-mini {
+  background: linear-gradient(130deg, rgba(2, 6, 23, 0.24) 0%, rgba(11, 23, 59, 0.2) 45%, rgba(7, 17, 38, 0.24) 100%);
+  backdrop-filter: blur(1px);
+}
+
+.bl-mode-mini::after,
+.bl-mode-mini .bl-aurora,
+.bl-mode-mini .bl-text,
+.bl-mode-mini .bl-trail,
+.bl-mode-mini .bl-ball-shadow {
+  display: none;
+}
+
+.bl-mode-mini .bl-ball-wrap {
+  width: 64px;
+  height: 64px;
+}
+
+.bl-mode-mini .bl-ball-glow {
+  inset: 8px;
+  opacity: 0.6;
+}
+
+.bl-mode-mini .bl-ball {
+  width: 46px;
+  height: 46px;
+  filter: drop-shadow(0 8px 20px rgba(2, 6, 23, 0.5));
+}
+
+.bl-mode-mini .bl-ball svg {
+  animation-duration: 0.54s;
+}
+
 .bl-aurora {
   position: absolute;
   width: 58vmax;
@@ -99,6 +132,10 @@
 
 .bl-is-loading .bl-ball {
   animation: bl-ball-bounce 0.76s cubic-bezier(0.36, 0, 0.66, 1) infinite;
+}
+
+.bl-mode-mini.bl-is-loading .bl-ball {
+  animation: bl-mini-pulse 0.56s ease-in-out infinite;
 }
 
 .bl-trail {
@@ -181,6 +218,18 @@
   animation: bl-ball-spin-fast 0.64s linear forwards;
 }
 
+.bl-mode-mini.bl-is-exiting {
+  animation: bl-overlay-out-mini 0.16s ease forwards;
+}
+
+.bl-mode-mini.bl-is-exiting .bl-ball {
+  animation: bl-ball-out-mini 0.16s ease forwards;
+}
+
+.bl-mode-mini.bl-is-exiting .bl-ball svg {
+  animation: bl-ball-spin-fast-mini 0.16s linear forwards;
+}
+
 @keyframes bl-ball-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -191,10 +240,21 @@
   to { transform: rotate(1080deg); }
 }
 
+@keyframes bl-ball-spin-fast-mini {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(240deg); }
+}
+
 @keyframes bl-ball-bounce {
   0%,
   100% { transform: translateY(0); }
   50% { transform: translateY(-16px); }
+}
+
+@keyframes bl-mini-pulse {
+  0%,
+  100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 @keyframes bl-shadow-pulse {
@@ -244,6 +304,16 @@
   100% { opacity: 0; }
 }
 
+@keyframes bl-overlay-out-mini {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes bl-ball-out-mini {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.22); opacity: 0; }
+}
+
 @keyframes bl-shadow-out {
   0% { opacity: 0.5; }
   100% { opacity: 0; transform: translateX(-50%) scaleX(0.2); }
@@ -269,6 +339,10 @@
   .bl-is-exiting .bl-ball svg,
   .bl-is-exiting .bl-ball-shadow,
   .bl-is-exiting .bl-trail {
+    animation: none !important;
+  }
+
+  .bl-mode-mini .bl-ball {
     animation: none !important;
   }
 
