@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getMatchThemeStyle } from '../utils/teamTheme';
-import PageLoader from '../components/PageLoader';
+import BallLoader from '../components/BallLoader';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -198,7 +198,7 @@ function Dashboard() {
     new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b, 'de'));
 
-  if (loading) return <PageLoader title="Dashboard wird geladen" subtitle="Spiele und Tipps werden vorbereitet..." />;
+
 
   const rounds = ['Alle', ...Array.from(
     new Set(matches.map(m => m.round).filter(Boolean))
@@ -236,6 +236,7 @@ function Dashboard() {
   ).length;
 
   return (
+    <BallLoader loading={loading} title="Dashboard wird geladen" subtitle="Spiele und Tipps werden vorbereitet...">
     <div className="container">
       <div className="page-title">
         <h1>Dashboard</h1>
@@ -533,6 +534,7 @@ function Dashboard() {
         })}
       </div>
     </div>
+    </BallLoader>
   );
 }
 

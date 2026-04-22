@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { userAPI, leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
-import PageLoader from '../components/PageLoader';
+import BallLoader from '../components/BallLoader';
 import './Profile.css';
 
 function Profile() {
@@ -69,9 +69,10 @@ function Profile() {
     }
   };
 
-  if (loading) return <PageLoader title="Profil wird geladen" subtitle="Deine Daten und Statistiken kommen gleich..." />;
+
 
   return (
+    <BallLoader loading={loading} title="Profil wird geladen" subtitle="Deine Daten und Statistiken kommen gleich...">
     <div className="container">
       <div className="page-title">
         <h1>Mein Profil</h1>
@@ -210,6 +211,7 @@ function Profile() {
         )}
       </div>
     </div>
+    </BallLoader>
   );
 }
 

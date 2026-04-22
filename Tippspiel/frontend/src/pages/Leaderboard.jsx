@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
-import PageLoader from '../components/PageLoader';
+import BallLoader from '../components/BallLoader';
 import './Leaderboard.css';
 
 function Leaderboard() {
@@ -81,7 +81,7 @@ function Leaderboard() {
     }
   };
 
-  if (loading) return <PageLoader title="Rangliste wird geladen" subtitle="Punkte und Spieltage werden berechnet..." />;
+
 
   const topThree = leaderboard.slice(0, 3);
   const ownRankIndex = leaderboard.findIndex((entry) => String(entry.id) === String(user?.id));
@@ -93,6 +93,7 @@ function Leaderboard() {
   });
 
   return (
+    <BallLoader loading={loading} title="Rangliste wird geladen" subtitle="Punkte und Spieltage werden berechnet...">
     <div className="container">
       <div className="page-title">
         <h1>🏆 Rangliste</h1>
@@ -216,6 +217,7 @@ function Leaderboard() {
         )}
       </div>
     </div>
+    </BallLoader>
   );
 }
 
