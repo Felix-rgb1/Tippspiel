@@ -7,6 +7,8 @@ import './Dashboard.css';
 function Dashboard() {
   const [matches, setMatches] = useState([]);
   const [tips, setTips] = useState({});
+  const [visibleTipsByMatch, setVisibleTipsByMatch] = useState({});
+  const [expandedTipsMatches, setExpandedTipsMatches] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -24,14 +26,22 @@ function Dashboard() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const [response, bonusResponse] = await Promise.all([
+      const [matchesResult, bonusResult] = await Promise.allSettled([
         matchAPI.getAll(),
         tipAPI.getBonusTip()
       ]);
-      setMatches(response.data);
+
+      if (matchesResult.status !== 'fulfilled') {
+        throw matchesResult.reason;
+      }
+
+      setMatches(matchesResult.value.data);
 
       // Fetch user's tips
-      const tipsResponse = await tipAPI.getUserTips(user.id);
+      const [tipsResponse, visibleTipsResponse] = await Promise.all([
+        tipAPI.getUserTips(user.id),
+        tipAPI.getVisibleTips()
+      ]);
       const tipsMap = {};
       tipsResponse.data.forEach(tip => {
         tipsMap[tip.match_id] = {
@@ -41,13 +51,27 @@ function Dashboard() {
       });
       setTips(tipsMap);
 
-      if (bonusResponse?.data) {
-        setBonusLocked(Boolean(bonusResponse.data.locked));
-        setBonusDeadline(bonusResponse.data.deadline);
+      const groupedVisibleTips = {};
+      visibleTipsResponse.data.forEach((tip) => {
+        if (!groupedVisibleTips[tip.match_id]) {
+          groupedVisibleTips[tip.match_id] = [];
+        }
+
+        groupedVisibleTips[tip.match_id].push(tip);
+      });
+      setVisibleTipsByMatch(groupedVisibleTips);
+
+      if (bonusResult.status === 'fulfilled' && bonusResult.value?.data) {
+        setBonusLocked(Boolean(bonusResult.value.data.locked));
+        setBonusDeadline(bonusResult.value.data.deadline);
         setBonusTip({
-          champion_team: bonusResponse.data.bonusTip?.champion_team || '',
-          runner_up_team: bonusResponse.data.bonusTip?.runner_up_team || ''
+          champion_team: bonusResult.value.data.bonusTip?.champion_team || '',
+          runner_up_team: bonusResult.value.data.bonusTip?.runner_up_team || ''
         });
+      } else {
+        setBonusLocked(true);
+        setBonusDeadline(null);
+        setBonusTip({ champion_team: '', runner_up_team: '' });
       }
     } catch (err) {
       setError('Fehler beim Laden der Spiele');
@@ -122,6 +146,13 @@ function Dashboard() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const toggleVisibleTips = (matchId) => {
+    setExpandedTipsMatches((prev) => ({
+      ...prev,
+      [matchId]: !prev[matchId],
+    }));
   };
 
   const allTeams = Array.from(
@@ -237,6 +268,18 @@ function Dashboard() {
         {visibleMatches.map(match => {
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const deadlinePasssed = isDeadlinePassed(match.match_date);
+          const visibleTips = (visibleTipsByMatch[match.id] || []).slice().sort((firstTip, secondTip) => {
+            if (firstTip.user_id === user.id && secondTip.user_id !== user.id) {
+              return -1;
+            }
+
+            if (firstTip.user_id !== user.id && secondTip.user_id === user.id) {
+              return 1;
+            }
+
+            return firstTip.username.localeCompare(secondTip.username, 'de');
+          });
+          const isTipsExpanded = Boolean(expandedTipsMatches[match.id]);
 
           return (
             <div key={match.id} className="match-card" style={getMatchThemeStyle(match.home_team, match.away_team)}>
@@ -296,6 +339,37 @@ function Dashboard() {
               {match.finished && tip.home_goals !== undefined && (
                 <div className="submitted-tip">
                   Mein Tipp: {tip.home_goals}:{tip.away_goals}
+                </div>
+              )}
+
+              {deadlinePasssed && visibleTips.length > 0 && (
+                <div className="visible-tips-panel">
+                  <button
+                    type="button"
+                    className="visible-tips-toggle"
+                    onClick={() => toggleVisibleTips(match.id)}
+                  >
+                    <span className="visible-tips-title">Tipps aller Spieler</span>
+                    <span className="visible-tips-meta">
+                      {visibleTips.length} {visibleTips.length === 1 ? 'Tipp' : 'Tipps'} {isTipsExpanded ? 'ausblenden' : 'anzeigen'}
+                    </span>
+                  </button>
+                  {isTipsExpanded && (
+                    <div className="visible-tips-list">
+                      {visibleTips.map((visibleTip) => (
+                        <div
+                          key={`${match.id}-${visibleTip.user_id}`}
+                          className={`visible-tip-row${visibleTip.user_id === user.id ? ' own-tip-row' : ''}`}
+                        >
+                          <span className="visible-tip-user">
+                            {visibleTip.username}
+                            {visibleTip.user_id === user.id && <span className="visible-tip-badge">Du</span>}
+                          </span>
+                          <strong className="visible-tip-score">{visibleTip.home_goals}:{visibleTip.away_goals}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

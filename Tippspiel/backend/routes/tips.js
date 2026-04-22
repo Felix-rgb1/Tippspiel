@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 
 const router = express.Router();
 
@@ -76,10 +77,47 @@ router.get('/user/:userId', authMiddleware, async (req, res) => {
   }
 });
 
+// Get visible tips from all players for matches whose deadline has passed
+router.get('/visible', authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         t.match_id,
+         t.user_id,
+         u.username,
+         t.home_goals,
+         t.away_goals,
+         t.created_at,
+         t.updated_at
+       FROM tips t
+       JOIN users u ON u.id = t.user_id
+       JOIN matches m ON m.id = t.match_id
+       WHERE NOW() > (m.match_date - INTERVAL '1 hour')
+       ORDER BY m.match_date ASC, u.username ASC`
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch visible tips' });
+  }
+});
+
 // Get current user's bonus tips
 router.get('/bonus/me', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
+
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    if (!bonusFeaturesAvailable) {
+      return res.json({
+        bonusTip: null,
+        deadline: null,
+        locked: false,
+        unavailable: true
+      });
+    }
 
     const bonusResult = await pool.query(
       'SELECT champion_team, runner_up_team, created_at, updated_at FROM bonus_tips WHERE user_id = $1',
@@ -101,6 +139,14 @@ router.get('/bonus/me', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.json({
+        bonusTip: null,
+        deadline: null,
+        locked: false,
+        unavailable: true
+      });
+    }
     res.status(500).json({ error: 'Failed to fetch bonus tips' });
   }
 });
@@ -110,6 +156,12 @@ router.post('/bonus', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { champion_team, runner_up_team } = req.body;
+
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    if (!bonusFeaturesAvailable) {
+      return res.status(503).json({ error: 'Bonusfragen sind noch nicht aktiviert. Migration fehlt.' });
+    }
 
     if (!champion_team || !runner_up_team) {
       return res.status(400).json({ error: 'Bitte Weltmeister und Vizemeister angeben' });
@@ -142,6 +194,9 @@ router.post('/bonus', authMiddleware, async (req, res) => {
     res.json({ message: 'Bonusfragen gespeichert' });
   } catch (err) {
     console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.status(503).json({ error: 'Bonusfragen sind noch nicht aktiviert. Migration fehlt.' });
+    }
     res.status(500).json({ error: 'Failed to save bonus tips' });
   }
 });

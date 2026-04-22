@@ -1,12 +1,15 @@
 const express = require('express');
 const pool = require('../db');
+const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 
 const router = express.Router();
 
 // Get leaderboard
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    const leaderboardQuery = bonusFeaturesAvailable ? `
       WITH scored_tips AS (
         SELECT
           t.user_id,
@@ -77,11 +80,76 @@ router.get('/', async (req, res) => {
                trend_matches DESC,
                tt.first_tip_submitted_at ASC NULLS LAST,
                u.username ASC
-    `);
+    ` : `
+      WITH scored_tips AS (
+        SELECT
+          t.user_id,
+          CASE
+            WHEN t.home_goals = m.home_goals AND t.away_goals = m.away_goals THEN 3
+            WHEN (t.home_goals > t.away_goals AND m.home_goals > m.away_goals) OR
+                 (t.home_goals < t.away_goals AND m.home_goals < m.away_goals) OR
+                 (t.home_goals = t.away_goals AND m.home_goals = m.away_goals) THEN 1
+            ELSE 0
+          END AS points,
+          CASE
+            WHEN t.home_goals = m.home_goals AND t.away_goals = m.away_goals THEN 1
+            ELSE 0
+          END AS exact_hit,
+          CASE
+            WHEN (t.home_goals > t.away_goals AND m.home_goals > m.away_goals) OR
+                 (t.home_goals < t.away_goals AND m.home_goals < m.away_goals) OR
+                 (t.home_goals = t.away_goals AND m.home_goals = m.away_goals) THEN 1
+            ELSE 0
+          END AS trend_hit
+        FROM tips t
+        JOIN matches m ON m.id = t.match_id
+        WHERE m.home_goals IS NOT NULL AND m.away_goals IS NOT NULL
+      ),
+      scored_totals AS (
+        SELECT
+          user_id,
+          SUM(points) AS match_points,
+          SUM(exact_hit) AS exact_matches,
+          SUM(trend_hit) AS trend_matches
+        FROM scored_tips
+        GROUP BY user_id
+      ),
+      tips_totals AS (
+        SELECT
+          user_id,
+          COUNT(*) AS tips_submitted,
+          MIN(created_at) AS first_tip_submitted_at
+        FROM tips
+        GROUP BY user_id
+      )
+      SELECT
+        u.id,
+        u.username,
+        COALESCE(tt.tips_submitted, 0) AS tips_submitted,
+        COALESCE(st.match_points, 0) AS match_points,
+        0 AS bonus_points,
+        COALESCE(st.match_points, 0) AS total_points,
+        COALESCE(st.exact_matches, 0) AS exact_matches,
+        COALESCE(st.trend_matches, 0) AS trend_matches,
+        tt.first_tip_submitted_at
+      FROM users u
+      LEFT JOIN tips_totals tt ON tt.user_id = u.id
+      LEFT JOIN scored_totals st ON st.user_id = u.id
+      ORDER BY total_points DESC,
+               exact_matches DESC,
+               trend_matches DESC,
+               tt.first_tip_submitted_at ASC NULLS LAST,
+               u.username ASC
+    `;
+
+    const result = await pool.query(leaderboardQuery);
 
     res.json(result.rows);
   } catch (err) {
     console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.status(500).json({ error: 'Bonus-Migration fehlt. Bitte Backend aktualisieren.' });
+    }
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
   }
 });
@@ -161,7 +229,9 @@ router.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const statsResult = await pool.query(`
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    const statsQuery = bonusFeaturesAvailable ? `
       WITH scored_tips AS (
         SELECT
           t.user_id,
@@ -225,7 +295,62 @@ router.get('/user/:userId', async (req, res) => {
       FROM users u
       WHERE u.id = $1
       GROUP BY u.id, u.username, u.created_at
-    `, [userId]);
+    ` : `
+      WITH scored_tips AS (
+        SELECT
+          t.user_id,
+          m.id AS match_id,
+          m.round,
+          m.match_date,
+          CASE
+            WHEN t.home_goals = m.home_goals AND t.away_goals = m.away_goals THEN 3
+            WHEN (t.home_goals > t.away_goals AND m.home_goals > m.away_goals) OR
+                 (t.home_goals < t.away_goals AND m.home_goals < m.away_goals) OR
+                 (t.home_goals = t.away_goals AND m.home_goals = m.away_goals) THEN 1
+            ELSE 0
+          END AS points,
+          CASE
+            WHEN t.home_goals = m.home_goals AND t.away_goals = m.away_goals THEN 1
+            ELSE 0
+          END AS exact_hit,
+          CASE
+            WHEN (t.home_goals > t.away_goals AND m.home_goals > m.away_goals) OR
+                 (t.home_goals < t.away_goals AND m.home_goals < m.away_goals) OR
+                 (t.home_goals = t.away_goals AND m.home_goals = m.away_goals) THEN 1
+            ELSE 0
+          END AS trend_hit
+        FROM tips t
+        JOIN matches m ON t.match_id = m.id
+        WHERE m.home_goals IS NOT NULL AND m.away_goals IS NOT NULL
+      ),
+      user_scored AS (
+        SELECT * FROM scored_tips WHERE user_id = $1
+      )
+      SELECT
+        u.id,
+        u.username,
+        u.created_at,
+        COALESCE((SELECT COUNT(*) FROM tips t WHERE t.user_id = u.id), 0) AS tips_submitted,
+        COALESCE((SELECT SUM(points) FROM user_scored), 0) AS total_points,
+        COALESCE((SELECT SUM(points) FROM user_scored), 0) AS match_points,
+        0 AS bonus_points,
+        COALESCE((SELECT SUM(exact_hit) FROM user_scored), 0) AS exact_matches,
+        COALESCE((SELECT SUM(trend_hit) FROM user_scored), 0) AS trend_matches,
+        (SELECT COUNT(*) FROM matches) AS total_matches,
+        (
+          SELECT COALESCE(
+            ROUND((COUNT(*) FILTER (WHERE t.user_id = u.id)::numeric / NULLIF(COUNT(*), 0)::numeric) * 100, 1),
+            0
+          )
+          FROM matches m
+          LEFT JOIN tips t ON t.match_id = m.id AND t.user_id = u.id
+        ) AS activity_rate
+      FROM users u
+      WHERE u.id = $1
+      GROUP BY u.id, u.username, u.created_at
+    `;
+
+    const statsResult = await pool.query(statsQuery, [userId]);
 
     if (statsResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -273,10 +398,14 @@ router.get('/user/:userId', async (req, res) => {
       LIMIT 5
     `, [userId]);
 
-    const bonusTipResult = await pool.query(
-      'SELECT champion_team, runner_up_team FROM bonus_tips WHERE user_id = $1',
-      [userId]
-    );
+    let bonusTipResult = { rows: [] };
+
+    if (bonusFeaturesAvailable) {
+      bonusTipResult = await pool.query(
+        'SELECT champion_team, runner_up_team FROM bonus_tips WHERE user_id = $1',
+        [userId]
+      );
+    }
 
     res.json({
       ...statsResult.rows[0],
@@ -286,6 +415,9 @@ router.get('/user/:userId', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.status(500).json({ error: 'Bonus-Migration fehlt. Bitte Backend aktualisieren.' });
+    }
     res.status(500).json({ error: 'Failed to fetch user stats' });
   }
 });

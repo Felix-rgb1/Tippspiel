@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const { adminMiddleware } = require('../middleware/auth');
 const { syncMatchesFromFootballData } = require('../services/footballData');
+const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 
 const router = express.Router();
 
@@ -21,6 +22,12 @@ router.post('/matches/sync', adminMiddleware, async (req, res) => {
 // Get current tournament bonus result settings
 router.get('/bonus-result', adminMiddleware, async (req, res) => {
   try {
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    if (!bonusFeaturesAvailable) {
+      return res.json(null);
+    }
+
     const result = await pool.query(
       `SELECT id, champion_team, runner_up_team, champion_points, runner_up_points, updated_at
        FROM tournament_bonus_result
@@ -30,6 +37,9 @@ router.get('/bonus-result', adminMiddleware, async (req, res) => {
     res.json(result.rows[0] || null);
   } catch (err) {
     console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.json(null);
+    }
     res.status(500).json({ error: 'Failed to fetch bonus result config' });
   }
 });
@@ -37,6 +47,12 @@ router.get('/bonus-result', adminMiddleware, async (req, res) => {
 // Set tournament bonus result settings
 router.put('/bonus-result', adminMiddleware, async (req, res) => {
   try {
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    if (!bonusFeaturesAvailable) {
+      return res.status(503).json({ error: 'Bonus-Auswertung ist noch nicht aktiviert. Migration fehlt.' });
+    }
+
     const {
       champion_team,
       runner_up_team,
@@ -71,6 +87,9 @@ router.put('/bonus-result', adminMiddleware, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.status(503).json({ error: 'Bonus-Auswertung ist noch nicht aktiviert. Migration fehlt.' });
+    }
     res.status(500).json({ error: 'Failed to update bonus result config' });
   }
 });

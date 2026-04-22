@@ -65,6 +65,7 @@ export const tipAPI = {
   submit: (matchId, homeGoals, awayGoals) =>
     apiPost('/tips', { match_id: matchId, home_goals: homeGoals, away_goals: awayGoals }),
   getUserTips: (userId) => apiGet(`/tips/user/${userId}`),
+  getVisibleTips: () => apiGet('/tips/visible'),
   getBonusTip: () => apiGet('/tips/bonus/me'),
   submitBonusTip: (championTeam, runnerUpTeam) =>
     apiPost('/tips/bonus', { champion_team: championTeam, runner_up_team: runnerUpTeam }),

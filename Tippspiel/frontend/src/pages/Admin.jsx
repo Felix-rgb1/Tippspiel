@@ -63,19 +63,24 @@ function Admin() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const [response, bonusConfig] = await Promise.all([
+      const [matchesResult, bonusConfigResult] = await Promise.allSettled([
         matchAPI.getAll(),
         adminAPI.getBonusResult()
       ]);
-      setMatches(response.data);
+
+      if (matchesResult.status !== 'fulfilled') {
+        throw matchesResult.reason;
+      }
+
+      setMatches(matchesResult.value.data);
       setEditingId(null);
 
-      if (bonusConfig.data) {
+      if (bonusConfigResult.status === 'fulfilled' && bonusConfigResult.value.data) {
         setBonusResult({
-          championTeam: bonusConfig.data.champion_team || '',
-          runnerUpTeam: bonusConfig.data.runner_up_team || '',
-          championPoints: bonusConfig.data.champion_points || 5,
-          runnerUpPoints: bonusConfig.data.runner_up_points || 3
+          championTeam: bonusConfigResult.value.data.champion_team || '',
+          runnerUpTeam: bonusConfigResult.value.data.runner_up_team || '',
+          championPoints: bonusConfigResult.value.data.champion_points || 5,
+          runnerUpPoints: bonusConfigResult.value.data.runner_up_points || 3
         });
       }
     } catch (err) {

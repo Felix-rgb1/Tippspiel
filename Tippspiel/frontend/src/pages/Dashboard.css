@@ -204,6 +204,83 @@
   font-weight: 500;
 }
 
+.visible-tips-panel {
+  margin-top: 1rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+}
+
+.visible-tips-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.visible-tips-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.visible-tips-meta {
+  font-size: 0.82rem;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.visible-tips-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.visible-tip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.45rem 0.55rem;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 0.35rem;
+}
+
+.visible-tip-user {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.visible-tip-score {
+  color: var(--primary);
+}
+
+.own-tip-row {
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.visible-tip-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: #0f172a;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 @media (max-width: 600px) {
   .bonus-grid {
     grid-template-columns: 1fr;
