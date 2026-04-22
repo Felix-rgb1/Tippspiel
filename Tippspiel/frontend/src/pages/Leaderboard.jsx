@@ -4,6 +4,9 @@ import './Leaderboard.css';
 
 function Leaderboard() {
   const [leaderboard, setLeaderboard] = useState([]);
+  const [matchdayRounds, setMatchdayRounds] = useState([]);
+  const [selectedRound, setSelectedRound] = useState('');
+  const [matchdayEntries, setMatchdayEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -15,13 +18,30 @@ function Leaderboard() {
   const fetchLeaderboard = async () => {
     try {
       setLoading(true);
-      const response = await leaderboardAPI.getAll();
+      const [response, matchdayResponse] = await Promise.all([
+        leaderboardAPI.getAll(),
+        leaderboardAPI.getMatchday()
+      ]);
       setLeaderboard(response.data);
+      setMatchdayRounds(matchdayResponse.data.rounds || []);
+      setSelectedRound(matchdayResponse.data.selectedRound || '');
+      setMatchdayEntries(matchdayResponse.data.entries || []);
     } catch (err) {
       setError('Fehler beim Laden der Rangliste');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMatchday = async (round) => {
+    try {
+      const response = await leaderboardAPI.getMatchday(round);
+      setMatchdayRounds(response.data.rounds || []);
+      setSelectedRound(response.data.selectedRound || '');
+      setMatchdayEntries(response.data.entries || []);
+    } catch (err) {
+      setError('Fehler beim Laden der Spieltagwertung');
     }
   };
 
@@ -38,6 +58,8 @@ function Leaderboard() {
         Platz: index + 1,
         Spieler: entry.username,
         Tipps: entry.tips_submitted || 0,
+        Spielpunkte: entry.match_points || 0,
+        Bonuspunkte: entry.bonus_points || 0,
         Punkte: entry.total_points || 0,
       }));
 
@@ -65,6 +87,11 @@ function Leaderboard() {
         <p>Aktuelle Punktestand</p>
       </div>
 
+      <div className="tie-breaker-box">
+        <h3>Tiebreaker-Regeln</h3>
+        <p>Bei Punktgleichstand entscheidet die Reihenfolge: 1) Exakte Tipps, 2) Richtige Tendenzen, 3) Frühere Tippabgabe.</p>
+      </div>
+
       <div className="leaderboard-actions">
         <button
           type="button"
@@ -83,6 +110,7 @@ function Leaderboard() {
           <div className="col-rank">Platz</div>
           <div className="col-name">Spieler</div>
           <div className="col-tips">Tipps</div>
+          <div className="col-points">Bonus</div>
           <div className="col-points">Punkte</div>
         </div>
 
@@ -96,6 +124,7 @@ function Leaderboard() {
             </div>
             <div className="col-name">{entry.username}</div>
             <div className="col-tips">{entry.tips_submitted || 0}</div>
+            <div className="col-points">{entry.bonus_points || 0}</div>
             <div className="col-points">
               <strong>{entry.total_points || 0}</strong>
             </div>
@@ -104,6 +133,40 @@ function Leaderboard() {
 
         {leaderboard.length === 0 && (
           <div className="table-empty">Noch keine Spieler</div>
+        )}
+      </div>
+
+      <div className="matchday-board">
+        <div className="matchday-header">
+          <h2>Spieltagwertung</h2>
+          {matchdayRounds.length > 0 && (
+            <select value={selectedRound} onChange={(e) => fetchMatchday(e.target.value)}>
+              {matchdayRounds.map((round) => (
+                <option key={round} value={round}>{round}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {matchdayEntries.length > 0 ? (
+          <div className="leaderboard-table">
+            <div className="table-header matchday-grid">
+              <div className="col-rank">Platz</div>
+              <div className="col-name">Spieler</div>
+              <div className="col-points">Tipps</div>
+              <div className="col-points">Punkte</div>
+            </div>
+            {matchdayEntries.map((entry, index) => (
+              <div key={`matchday-${entry.id}`} className="table-row matchday-grid">
+                <div className="col-rank">{index + 1}.</div>
+                <div className="col-name">{entry.username}</div>
+                <div className="col-points">{entry.tips_count || 0}</div>
+                <div className="col-points"><strong>{entry.round_points || 0}</strong></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="table-empty">Noch keine abgeschlossenen Spieltage</div>
         )}
       </div>
     </div>

@@ -56,6 +56,83 @@
   font-size: 1.5rem;
 }
 
+.activity-block {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.activity-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.activity-bar {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.activity-fill {
+  height: 100%;
+  background: #facc15;
+}
+
+.activity-block p {
+  margin-top: 0.5rem;
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.chart-card h2 {
+  margin-bottom: 0.9rem;
+}
+
+.form-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  min-height: 110px;
+}
+
+.form-bar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+}
+
+.form-bar {
+  width: 100%;
+  border-radius: 0.4rem 0.4rem 0 0;
+  color: white;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.8;
+  font-size: 0.85rem;
+}
+
+.points-0 { background: #ef4444; }
+.points-1 { background: #f59e0b; }
+.points-2 { background: #3b82f6; }
+.points-3 { background: #10b981; }
+
+.round-points-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.round-points-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.6rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.45rem;
+}
+
 @media (max-width: 600px) {
   .profile-grid {
     grid-template-columns: 1fr;

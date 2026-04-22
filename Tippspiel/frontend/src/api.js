@@ -65,12 +65,16 @@ export const tipAPI = {
   submit: (matchId, homeGoals, awayGoals) =>
     apiPost('/tips', { match_id: matchId, home_goals: homeGoals, away_goals: awayGoals }),
   getUserTips: (userId) => apiGet(`/tips/user/${userId}`),
+  getBonusTip: () => apiGet('/tips/bonus/me'),
+  submitBonusTip: (championTeam, runnerUpTeam) =>
+    apiPost('/tips/bonus', { champion_team: championTeam, runner_up_team: runnerUpTeam }),
 };
 
 // Leaderboard
 export const leaderboardAPI = {
   getAll: () => apiGet('/leaderboard'),
   getUserStats: (userId) => apiGet(`/leaderboard/user/${userId}`),
+  getMatchday: (round) => apiGet('/leaderboard/matchday', { params: { round } }),
 };
 
 // User
@@ -99,6 +103,14 @@ export const adminAPI = {
     apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),
   getUsers: () => apiGet('/admin/users'),
   deleteUser: (userId) => apiDelete(`/admin/users/${userId}`),
+  getBonusResult: () => apiGet('/admin/bonus-result'),
+  updateBonusResult: (championTeam, runnerUpTeam, championPoints, runnerUpPoints) =>
+    apiPut('/admin/bonus-result', {
+      champion_team: championTeam,
+      runner_up_team: runnerUpTeam,
+      champion_points: championPoints,
+      runner_up_points: runnerUpPoints,
+    }),
 };
 
 export default api;

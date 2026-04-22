@@ -156,6 +156,55 @@ function Profile() {
               <span>Trend-Treffer:</span>
               <strong>{stats.trend_matches || 0}</strong>
             </div>
+            <div className="stat-item">
+              <span>Bonuspunkte:</span>
+              <strong>{stats.bonus_points || 0}</strong>
+            </div>
+            <div className="activity-block">
+              <div className="activity-label">
+                <span>Aktivität</span>
+                <strong>{stats.activity_rate || 0}%</strong>
+              </div>
+              <div className="activity-bar">
+                <div className="activity-fill" style={{ width: `${stats.activity_rate || 0}%` }} />
+              </div>
+              <p>{stats.tips_submitted || 0} von {stats.total_matches || 0} Spielen getippt</p>
+            </div>
+          </div>
+        )}
+
+        {stats && (
+          <div className="card chart-card">
+            <h2>Formkurve (letzte 5 Spiele)</h2>
+            <div className="form-chart">
+              {(stats.form_last_five || []).map((item) => (
+                <div key={`form-${item.id}`} className="form-bar-wrap">
+                  <div
+                    className={`form-bar points-${item.points || 0}`}
+                    style={{ height: `${Math.max(18, ((item.points || 0) / 3) * 90)}px` }}
+                    title={`${item.home_team} vs ${item.away_team}: ${item.points || 0} Punkte`}
+                  >
+                    {item.points || 0}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(stats.form_last_five || []).length === 0 && <p>Noch keine abgeschlossenen Tipps.</p>}
+          </div>
+        )}
+
+        {stats && (
+          <div className="card chart-card">
+            <h2>Punkte pro Runde</h2>
+            <div className="round-points-list">
+              {(stats.round_points || []).map((row) => (
+                <div key={`round-${row.round}`} className="round-points-item">
+                  <span>{row.round}</span>
+                  <strong>{row.points || 0} Punkte</strong>
+                </div>
+              ))}
+            </div>
+            {(stats.round_points || []).length === 0 && <p>Noch keine abgeschlossenen Runden.</p>}
           </div>
         )}
       </div>

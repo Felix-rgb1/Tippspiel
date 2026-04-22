@@ -18,6 +18,63 @@ router.post('/matches/sync', adminMiddleware, async (req, res) => {
   }
 });
 
+// Get current tournament bonus result settings
+router.get('/bonus-result', adminMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, champion_team, runner_up_team, champion_points, runner_up_points, updated_at
+       FROM tournament_bonus_result
+       WHERE id = 1`
+    );
+
+    res.json(result.rows[0] || null);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch bonus result config' });
+  }
+});
+
+// Set tournament bonus result settings
+router.put('/bonus-result', adminMiddleware, async (req, res) => {
+  try {
+    const {
+      champion_team,
+      runner_up_team,
+      champion_points,
+      runner_up_points
+    } = req.body;
+
+    if (!champion_team || !runner_up_team) {
+      return res.status(400).json({ error: 'Weltmeister und Vizemeister sind erforderlich' });
+    }
+
+    if (champion_team === runner_up_team) {
+      return res.status(400).json({ error: 'Weltmeister und Vizemeister müssen unterschiedlich sein' });
+    }
+
+    const championPoints = Number.isInteger(champion_points) ? champion_points : 5;
+    const runnerUpPoints = Number.isInteger(runner_up_points) ? runner_up_points : 3;
+
+    const result = await pool.query(
+      `INSERT INTO tournament_bonus_result (id, champion_team, runner_up_team, champion_points, runner_up_points)
+       VALUES (1, $1, $2, $3, $4)
+       ON CONFLICT (id)
+       DO UPDATE SET champion_team = EXCLUDED.champion_team,
+                     runner_up_team = EXCLUDED.runner_up_team,
+                     champion_points = EXCLUDED.champion_points,
+                     runner_up_points = EXCLUDED.runner_up_points,
+                     updated_at = NOW()
+       RETURNING id, champion_team, runner_up_team, champion_points, runner_up_points, updated_at`,
+      [champion_team, runner_up_team, championPoints, runnerUpPoints]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update bonus result config' });
+  }
+});
+
 // Create match
 router.post('/matches', adminMiddleware, async (req, res) => {
   try {

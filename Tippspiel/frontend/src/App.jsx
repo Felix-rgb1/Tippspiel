@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
+import Rules from './pages/Rules';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import './index.css';
@@ -54,6 +55,11 @@ function App() {
             <Route path="/leaderboard" element={
               <ProtectedRoute>
                 <Leaderboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/rules" element={
+              <ProtectedRoute>
+                <Rules />
               </ProtectedRoute>
             } />
             <Route path="/profile" element={

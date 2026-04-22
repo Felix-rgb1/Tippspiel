@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { adminAPI, matchAPI } from '../api';
+import { getMatchThemeStyle } from '../utils/teamTheme';
 import './Admin.css';
 
 function Admin() {
@@ -21,21 +22,35 @@ function Admin() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [savingBonusResult, setSavingBonusResult] = useState(false);
 
-  // Form states
-  const [homeTeam, setHomeTeam] = useState('');
-  const [awayTeam, setAwayTeam] = useState('');
-  const [matchDate, setMatchDate] = useState('');
-  const [round, setRound] = useState('');
-  const [matchId, setMatchId] = useState('');
-  const [homeGoals, setHomeGoals] = useState('');
-  const [awayGoals, setAwayGoals] = useState('');
-  const [editMatchId, setEditMatchId] = useState('');
-  const [editHomeTeam, setEditHomeTeam] = useState('');
-  const [editAwayTeam, setEditAwayTeam] = useState('');
-  const [editMatchDate, setEditMatchDate] = useState('');
-  const [editRound, setEditRound] = useState('');
-  const [resetResult, setResetResult] = useState(false);
+  // Quick edit form
+  const [editForm, setEditForm] = useState({
+    homeTeam: '',
+    awayTeam: '',
+    matchDate: '',
+    round: '',
+    homeGoals: '',
+    awayGoals: '',
+    resetResult: false
+  });
+
+  // New match form
+  const [newMatch, setNewMatch] = useState({
+    homeTeam: '',
+    awayTeam: '',
+    matchDate: '',
+    round: ''
+  });
+
+  const [bonusResult, setBonusResult] = useState({
+    championTeam: '',
+    runnerUpTeam: '',
+    championPoints: 5,
+    runnerUpPoints: 3
+  });
+
 
   useEffect(() => {
     if (activeTab === 'matches') {
@@ -48,8 +63,21 @@ function Admin() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const response = await matchAPI.getAll();
+      const [response, bonusConfig] = await Promise.all([
+        matchAPI.getAll(),
+        adminAPI.getBonusResult()
+      ]);
       setMatches(response.data);
+      setEditingId(null);
+
+      if (bonusConfig.data) {
+        setBonusResult({
+          championTeam: bonusConfig.data.champion_team || '',
+          runnerUpTeam: bonusConfig.data.runner_up_team || '',
+          championPoints: bonusConfig.data.champion_points || 5,
+          runnerUpPoints: bonusConfig.data.runner_up_points || 3
+        });
+      }
     } catch (err) {
       setError('Fehler beim Laden der Spiele');
     } finally {
@@ -69,99 +97,85 @@ function Admin() {
     }
   };
 
-  const handleCreateMatch = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    try {
-      await adminAPI.createMatch(homeTeam, awayTeam, matchDate, round);
-      setHomeTeam('');
-      setAwayTeam('');
-      setMatchDate('');
-      setRound('');
-      setSuccess('Spiel erstellt!');
-      fetchMatches();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Fehler beim Erstellen');
-    }
-  };
-
   const toDateTimeLocal = (date) => {
     const parsedDate = new Date(date);
     const timezoneOffset = parsedDate.getTimezoneOffset() * 60000;
     return new Date(parsedDate.getTime() - timezoneOffset).toISOString().slice(0, 16);
   };
 
-  const handleEditMatchSelect = (selectedMatchId) => {
-    setEditMatchId(selectedMatchId);
-    setResetResult(false);
-
-    if (!selectedMatchId) {
-      setEditHomeTeam('');
-      setEditAwayTeam('');
-      setEditMatchDate('');
-      setEditRound('');
-      return;
-    }
-
-    const selectedMatch = matches.find((m) => m.id === parseInt(selectedMatchId, 10));
-
-    if (!selectedMatch) {
-      return;
-    }
-
-    setEditHomeTeam(selectedMatch.home_team);
-    setEditAwayTeam(selectedMatch.away_team);
-    setEditMatchDate(toDateTimeLocal(selectedMatch.match_date));
-    setEditRound(selectedMatch.round || '');
+  const startEdit = (match) => {
+    setEditingId(match.id);
+    setEditForm({
+      homeTeam: match.home_team,
+      awayTeam: match.away_team,
+      matchDate: toDateTimeLocal(match.match_date),
+      round: match.round || '',
+      homeGoals: match.home_goals || '',
+      awayGoals: match.away_goals || '',
+      resetResult: false
+    });
   };
 
-  const handleUpdateMatch = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({
+      homeTeam: '',
+      awayTeam: '',
+      matchDate: '',
+      round: '',
+      homeGoals: '',
+      awayGoals: '',
+      resetResult: false
+    });
+  };
 
-    if (!editMatchId || !editHomeTeam || !editAwayTeam || !editMatchDate) {
-      setError('Bitte alle Felder fuer die Spielbearbeitung ausfuellen');
+  const handleSaveMatch = async (matchId) => {
+    if (!editForm.homeTeam || !editForm.awayTeam || !editForm.matchDate) {
+      setError('Bitte Heimteam, Gastteam und Datum ausfüllen');
       return;
     }
 
     try {
+      setError('');
       await adminAPI.updateMatch(
-        editMatchId,
-        editHomeTeam,
-        editAwayTeam,
-        editMatchDate,
-        editRound,
-        resetResult
+        matchId,
+        editForm.homeTeam,
+        editForm.awayTeam,
+        editForm.matchDate,
+        editForm.round,
+        editForm.resetResult
       );
-      setSuccess('Spiel aktualisiert!');
+
+      // Update result if provided
+      if ((editForm.homeGoals !== '' || editForm.awayGoals !== '') && editForm.homeGoals !== '' && editForm.awayGoals !== '') {
+        await adminAPI.updateMatchResult(matchId, parseInt(editForm.homeGoals), parseInt(editForm.awayGoals));
+      }
+
+      setSuccess('Spiel gespeichert!');
+      setTimeout(() => setSuccess(''), 3000);
       fetchMatches();
+      cancelEdit();
     } catch (err) {
-      setError(err.response?.data?.error || 'Fehler beim Bearbeiten des Spiels');
+      setError(err.response?.data?.error || 'Fehler beim Speichern');
     }
   };
 
-  const handleUpdateResult = async (e) => {
+  const handleCreateNewMatch = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!matchId || homeGoals === '' || awayGoals === '') {
-      setError('Bitte alle Felder ausfüllen');
+    if (!newMatch.homeTeam || !newMatch.awayTeam || !newMatch.matchDate) {
+      setError('Bitte Heimteam, Gastteam und Datum ausfüllen');
       return;
     }
 
     try {
-      await adminAPI.updateMatchResult(matchId, parseInt(homeGoals), parseInt(awayGoals));
-      setMatchId('');
-      setHomeGoals('');
-      setAwayGoals('');
-      setSuccess('Ergebnis aktualisiert!');
+      setError('');
+      await adminAPI.createMatch(newMatch.homeTeam, newMatch.awayTeam, newMatch.matchDate, newMatch.round);
+      setSuccess('Spiel erstellt!');
+      setNewMatch({ homeTeam: '', awayTeam: '', matchDate: '', round: '' });
+      setTimeout(() => setSuccess(''), 3000);
       fetchMatches();
     } catch (err) {
-      setError(err.response?.data?.error || 'Fehler beim Aktualisieren');
+      setError(err.response?.data?.error || 'Fehler beim Erstellen');
     }
   };
 
@@ -181,7 +195,6 @@ function Admin() {
     try {
       setSyncing(true);
       setError('');
-      setSuccess('');
       const response = await adminAPI.syncMatches();
       setSuccess(response.data.message || 'Synchronisierung abgeschlossen');
       fetchMatches();
@@ -192,10 +205,42 @@ function Admin() {
     }
   };
 
+  const handleSaveBonusResult = async () => {
+    if (!bonusResult.championTeam || !bonusResult.runnerUpTeam) {
+      setError('Bitte Weltmeister und Vizemeister setzen');
+      return;
+    }
+
+    if (bonusResult.championTeam === bonusResult.runnerUpTeam) {
+      setError('Weltmeister und Vizemeister müssen unterschiedlich sein');
+      return;
+    }
+
+    try {
+      setSavingBonusResult(true);
+      setError('');
+      await adminAPI.updateBonusResult(
+        bonusResult.championTeam,
+        bonusResult.runnerUpTeam,
+        Number(bonusResult.championPoints) || 5,
+        Number(bonusResult.runnerUpPoints) || 3
+      );
+      setSuccess('Bonus-Auswertung gespeichert');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Fehler beim Speichern der Bonus-Auswertung');
+    } finally {
+      setSavingBonusResult(false);
+    }
+  };
+
   const formatDate = (date) => {
     const d = new Date(date);
     return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   };
+
+  const allTeams = Array.from(
+    new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, 'de'));
 
   return (
     <div className="container">
@@ -211,212 +256,247 @@ function Admin() {
           className={`tab-btn ${activeTab === 'matches' ? 'active' : ''}`}
           onClick={() => setActiveTab('matches')}
         >
-          Spiele verwalten
+          Spiele
         </button>
         <button
           className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
-          Benutzer verwalten
+          Benutzer
         </button>
       </div>
 
       {activeTab === 'matches' && (
         <div className="admin-section">
-          <div className="admin-hero card">
-            <h2>Match Center</h2>
-            <p>Automatisiere den Import oder bearbeite Spiele manuell vor dem Anpfiff.</p>
-          </div>
-
-          <div className="card">
-            <h2>Automatischer Import</h2>
-            <p className="admin-hint">
-              Importiert Spiele und aktualisiert Ergebnisse automatisch ueber football-data.org.
-            </p>
-            <button type="button" className="btn-primary" onClick={handleSyncMatches} disabled={syncing}>
-              {syncing ? 'Synchronisiert...' : 'Spiele und Ergebnisse synchronisieren'}
+          <div className="admin-actions">
+            <button 
+              type="button" 
+              className="btn-primary" 
+              onClick={handleSyncMatches} 
+              disabled={syncing}
+            >
+              {syncing ? '⏳ Synchronisiert...' : '🔄 Spiele synchronisieren'}
             </button>
           </div>
 
           <div className="card">
-            <h2>Neues Spiel erstellen</h2>
-            <form onSubmit={handleCreateMatch}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Heimmannschaft</label>
-                  <input
-                    type="text"
-                    value={homeTeam}
-                    onChange={(e) => setHomeTeam(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Gastmannschaft</label>
-                  <input
-                    type="text"
-                    value={awayTeam}
-                    onChange={(e) => setAwayTeam(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Spieltermin</label>
-                <input
-                  type="datetime-local"
-                  value={matchDate}
-                  onChange={(e) => setMatchDate(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Runde / Spieltag</label>
-                <select value={round} onChange={(e) => setRound(e.target.value)}>
-                  <option value="">-- optional --</option>
-                  {roundOptions.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-              <button type="submit" className="btn-primary">Spiel erstellen</button>
-            </form>
-          </div>
-
-          <div className="card">
-            <h2>Spiel bearbeiten</h2>
-            <form onSubmit={handleUpdateMatch}>
-              <div className="form-group">
-                <label>Spiel waehlen</label>
-                <select value={editMatchId} onChange={(e) => handleEditMatchSelect(e.target.value)} required>
-                  <option value="">-- Spiel waehlen --</option>
-                  {matches.map((match) => (
-                    <option key={match.id} value={match.id}>
-                      {match.home_team} vs {match.away_team} ({formatDate(match.match_date)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Heimmannschaft</label>
-                  <input
-                    type="text"
-                    value={editHomeTeam}
-                    onChange={(e) => setEditHomeTeam(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Gastmannschaft</label>
-                  <input
-                    type="text"
-                    value={editAwayTeam}
-                    onChange={(e) => setEditAwayTeam(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Spieltermin</label>
-                <input
-                  type="datetime-local"
-                  value={editMatchDate}
-                  onChange={(e) => setEditMatchDate(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Runde / Spieltag</label>
-                <select value={editRound} onChange={(e) => setEditRound(e.target.value)}>
-                  <option value="">-- optional --</option>
-                  {roundOptions.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-
-              <label className="checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={resetResult}
-                  onChange={(e) => setResetResult(e.target.checked)}
-                />
-                Ergebnis zuruecksetzen (falls bereits eingetragen)
-              </label>
-
-              <button type="submit" className="btn-primary">Spiel speichern</button>
-            </form>
-          </div>
-
-          <div className="card">
-            <h2>Ergebnis eintragen</h2>
-            <form onSubmit={handleUpdateResult}>
-              <div className="form-group">
-                <label>Spiel auswählen</label>
+            <h2>Bonus-Auswertung (Weltmeister / Vizemeister)</h2>
+            <div className="bonus-admin-grid">
+              <div>
+                <label>Weltmeister</label>
                 <select
-                  value={matchId}
-                  onChange={(e) => setMatchId(e.target.value)}
-                  required
+                  value={bonusResult.championTeam}
+                  onChange={(e) => setBonusResult((prev) => ({ ...prev, championTeam: e.target.value }))}
                 >
-                  <option value="">-- Spiel wählen --</option>
-                  {matches.filter(m => !m.finished).map(match => (
-                    <option key={match.id} value={match.id}>
-                      {match.home_team} vs {match.away_team} ({formatDate(match.match_date)})
-                    </option>
+                  <option value="">-- wählen --</option>
+                  {allTeams.map((team) => (
+                    <option key={`bonus-champion-${team}`} value={team}>{team}</option>
                   ))}
                 </select>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Heimtore</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="20"
-                    value={homeGoals}
-                    onChange={(e) => setHomeGoals(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Gasttore</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="20"
-                    value={awayGoals}
-                    onChange={(e) => setAwayGoals(e.target.value)}
-                    required
-                  />
-                </div>
+              <div>
+                <label>Vizemeister</label>
+                <select
+                  value={bonusResult.runnerUpTeam}
+                  onChange={(e) => setBonusResult((prev) => ({ ...prev, runnerUpTeam: e.target.value }))}
+                >
+                  <option value="">-- wählen --</option>
+                  {allTeams.map((team) => (
+                    <option key={`bonus-runner-${team}`} value={team}>{team}</option>
+                  ))}
+                </select>
               </div>
-              <button type="submit" className="btn-primary">Ergebnis speichern</button>
+              <div>
+                <label>Punkte Weltmeister</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={bonusResult.championPoints}
+                  onChange={(e) => setBonusResult((prev) => ({ ...prev, championPoints: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>Punkte Vizemeister</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={bonusResult.runnerUpPoints}
+                  onChange={(e) => setBonusResult((prev) => ({ ...prev, runnerUpPoints: e.target.value }))}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSaveBonusResult}
+                disabled={savingBonusResult}
+              >
+                {savingBonusResult ? 'Speichert...' : 'Bonus-Auswertung speichern'}
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Neues Spiel</h2>
+            <form onSubmit={handleCreateNewMatch} className="quick-form">
+              <div className="form-row">
+                <input
+                  type="text"
+                  placeholder="Heimteam"
+                  value={newMatch.homeTeam}
+                  onChange={(e) => setNewMatch({...newMatch, homeTeam: e.target.value})}
+                  required
+                />
+                <span className="vs">vs</span>
+                <input
+                  type="text"
+                  placeholder="Gastteam"
+                  value={newMatch.awayTeam}
+                  onChange={(e) => setNewMatch({...newMatch, awayTeam: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-row">
+                <input
+                  type="datetime-local"
+                  value={newMatch.matchDate}
+                  onChange={(e) => setNewMatch({...newMatch, matchDate: e.target.value})}
+                  required
+                />
+                <select 
+                  value={newMatch.round} 
+                  onChange={(e) => setNewMatch({...newMatch, round: e.target.value})}
+                >
+                  <option value="">-- Runde --</option>
+                  {roundOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit" className="btn-primary">Erstellen</button>
             </form>
           </div>
 
           <div className="card">
-            <h2>Alle Spiele</h2>
+            <h2>Spiele ({matches.length})</h2>
             {loading ? (
               <p>Lädt...</p>
             ) : (
-              <div className="matches-list">
+              <div className="matches-table">
                 {matches.map(match => (
-                  <div key={match.id} className="match-item">
-                    <div>
-                      <strong>{match.home_team} vs {match.away_team}</strong>
-                      <div className="match-info">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
-                    </div>
-                    <div className="match-result">
-                      {match.finished ? (
-                        <span className="finished">{match.home_goals}:{match.away_goals}</span>
-                      ) : (
-                        <span className="pending">Ausstehend</span>
-                      )}
-                    </div>
+                  <div key={match.id} className="match-row" style={getMatchThemeStyle(match.home_team, match.away_team)}>
+                    {editingId === match.id ? (
+                      <>
+                        <div className="match-edit-form">
+                          <div className="edit-row">
+                            <input
+                              type="text"
+                              value={editForm.homeTeam}
+                              onChange={(e) => setEditForm({...editForm, homeTeam: e.target.value})}
+                              placeholder="Heimteam"
+                            />
+                            <span className="vs">vs</span>
+                            <input
+                              type="text"
+                              value={editForm.awayTeam}
+                              onChange={(e) => setEditForm({...editForm, awayTeam: e.target.value})}
+                              placeholder="Gastteam"
+                            />
+                          </div>
+                          <div className="edit-row">
+                            <input
+                              type="datetime-local"
+                              value={editForm.matchDate}
+                              onChange={(e) => setEditForm({...editForm, matchDate: e.target.value})}
+                            />
+                            <select 
+                              value={editForm.round} 
+                              onChange={(e) => setEditForm({...editForm, round: e.target.value})}
+                            >
+                              <option value="">-- Runde --</option>
+                              {roundOptions.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {!match.finished && (
+                            <div className="edit-row">
+                              <label>Ergebnis:</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                value={editForm.homeGoals}
+                                onChange={(e) => setEditForm({...editForm, homeGoals: e.target.value})}
+                                placeholder="H-Tore"
+                                style={{width: '60px'}}
+                              />
+                              <span>:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                value={editForm.awayGoals}
+                                onChange={(e) => setEditForm({...editForm, awayGoals: e.target.value})}
+                                placeholder="G-Tore"
+                                style={{width: '60px'}}
+                              />
+                            </div>
+                          )}
+                          <label className="checkbox-line">
+                            <input
+                              type="checkbox"
+                              checked={editForm.resetResult}
+                              onChange={(e) => setEditForm({...editForm, resetResult: e.target.checked})}
+                            />
+                            Ergebnis zurücksetzen
+                          </label>
+                          <div className="edit-actions">
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={() => handleSaveMatch(match.id)}
+                            >
+                              💾 Speichern
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={cancelEdit}
+                            >
+                              Abbrechen
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="match-info">
+                          <div className="match-teams">
+                            <strong>{match.home_team}</strong>
+                            <span>vs</span>
+                            <strong>{match.away_team}</strong>
+                          </div>
+                          <div className="match-meta">
+                            {formatDate(match.match_date)}
+                            {match.round && <span className="badge">{match.round}</span>}
+                          </div>
+                        </div>
+                        <div className="match-status">
+                          {match.finished ? (
+                            <span className="result-badge">{match.home_goals}:{match.away_goals}</span>
+                          ) : (
+                            <span className="status-badge">Ausstehend</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => startEdit(match)}
+                        >
+                          ✏️ Bearbeiten
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -438,7 +518,7 @@ function Admin() {
                     <div>
                       <strong>{user.username}</strong>
                       <div className="user-info">{user.email}</div>
-                      <div className="user-role">{user.role === 'admin' ? '👑 Admin' : 'Benutzer'}</div>
+                      <div className="user-role">{user.role === 'admin' ? '👑 Admin' : 'Spieler'}</div>
                     </div>
                     <button
                       className="btn-danger"

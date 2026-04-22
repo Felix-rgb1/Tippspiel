@@ -76,4 +76,74 @@ router.get('/user/:userId', authMiddleware, async (req, res) => {
   }
 });
 
+// Get current user's bonus tips
+router.get('/bonus/me', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const bonusResult = await pool.query(
+      'SELECT champion_team, runner_up_team, created_at, updated_at FROM bonus_tips WHERE user_id = $1',
+      [userId]
+    );
+
+    const firstMatchResult = await pool.query('SELECT MIN(match_date) AS first_match_date FROM matches');
+    const firstMatchDate = firstMatchResult.rows[0]?.first_match_date;
+    const deadline = firstMatchDate
+      ? new Date(new Date(firstMatchDate).getTime() - 60 * 60 * 1000)
+      : null;
+
+    const locked = deadline ? new Date() > deadline : false;
+
+    res.json({
+      bonusTip: bonusResult.rows[0] || null,
+      deadline: deadline ? deadline.toISOString() : null,
+      locked
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch bonus tips' });
+  }
+});
+
+// Submit or update bonus tips (Weltmeister / Vizemeister)
+router.post('/bonus', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { champion_team, runner_up_team } = req.body;
+
+    if (!champion_team || !runner_up_team) {
+      return res.status(400).json({ error: 'Bitte Weltmeister und Vizemeister angeben' });
+    }
+
+    if (champion_team === runner_up_team) {
+      return res.status(400).json({ error: 'Weltmeister und Vizemeister müssen unterschiedlich sein' });
+    }
+
+    const firstMatchResult = await pool.query('SELECT MIN(match_date) AS first_match_date FROM matches');
+    const firstMatchDate = firstMatchResult.rows[0]?.first_match_date;
+    const deadline = firstMatchDate
+      ? new Date(new Date(firstMatchDate).getTime() - 60 * 60 * 1000)
+      : null;
+
+    if (deadline && new Date() > deadline) {
+      return res.status(400).json({ error: 'Deadline für Bonusfragen ist abgelaufen' });
+    }
+
+    await pool.query(
+      `INSERT INTO bonus_tips (user_id, champion_team, runner_up_team)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id)
+       DO UPDATE SET champion_team = EXCLUDED.champion_team,
+                     runner_up_team = EXCLUDED.runner_up_team,
+                     updated_at = NOW()`,
+      [userId, champion_team, runner_up_team]
+    );
+
+    res.json({ message: 'Bonusfragen gespeichert' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save bonus tips' });
+  }
+});
+
 module.exports = router;

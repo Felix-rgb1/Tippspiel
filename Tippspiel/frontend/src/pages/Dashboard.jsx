@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { getMatchThemeStyle } from '../utils/teamTheme';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -10,6 +11,10 @@ function Dashboard() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeRound, setActiveRound] = useState('Alle');
+  const [bonusTip, setBonusTip] = useState({ champion_team: '', runner_up_team: '' });
+  const [bonusLocked, setBonusLocked] = useState(false);
+  const [bonusDeadline, setBonusDeadline] = useState(null);
+  const [savingBonus, setSavingBonus] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -19,7 +24,10 @@ function Dashboard() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const response = await matchAPI.getAll();
+      const [response, bonusResponse] = await Promise.all([
+        matchAPI.getAll(),
+        tipAPI.getBonusTip()
+      ]);
       setMatches(response.data);
 
       // Fetch user's tips
@@ -32,11 +40,49 @@ function Dashboard() {
         };
       });
       setTips(tipsMap);
+
+      if (bonusResponse?.data) {
+        setBonusLocked(Boolean(bonusResponse.data.locked));
+        setBonusDeadline(bonusResponse.data.deadline);
+        setBonusTip({
+          champion_team: bonusResponse.data.bonusTip?.champion_team || '',
+          runner_up_team: bonusResponse.data.bonusTip?.runner_up_team || ''
+        });
+      }
     } catch (err) {
       setError('Fehler beim Laden der Spiele');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBonusTipSubmit = async () => {
+    if (bonusLocked) {
+      setError('Die Deadline für Bonusfragen ist bereits abgelaufen');
+      return;
+    }
+
+    if (!bonusTip.champion_team || !bonusTip.runner_up_team) {
+      setError('Bitte Weltmeister und Vizemeister auswählen');
+      return;
+    }
+
+    if (bonusTip.champion_team === bonusTip.runner_up_team) {
+      setError('Weltmeister und Vizemeister müssen unterschiedlich sein');
+      return;
+    }
+
+    try {
+      setSavingBonus(true);
+      setError('');
+      await tipAPI.submitBonusTip(bonusTip.champion_team, bonusTip.runner_up_team);
+      setSuccess('Bonusfragen gespeichert!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Fehler beim Speichern der Bonusfragen');
+    } finally {
+      setSavingBonus(false);
     }
   };
 
@@ -77,6 +123,10 @@ function Dashboard() {
       minute: '2-digit'
     });
   };
+
+  const allTeams = Array.from(
+    new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, 'de'));
 
   if (loading) return <div className="container"><p>Lädt...</p></div>;
 
@@ -121,6 +171,54 @@ function Dashboard() {
         </div>
       </div>
 
+      <div className="bonus-card">
+        <h2>⭐ Bonusfragen</h2>
+        <p>
+          Tipp auf Weltmeister und Vizemeister für Extrapunkte.
+          {bonusDeadline && (
+            <span className="bonus-deadline">
+              {' '}Deadline: {formatDate(bonusDeadline)}
+            </span>
+          )}
+        </p>
+        <div className="bonus-grid">
+          <div>
+            <label>Weltmeister</label>
+            <select
+              value={bonusTip.champion_team}
+              disabled={bonusLocked || savingBonus}
+              onChange={(e) => setBonusTip((prev) => ({ ...prev, champion_team: e.target.value }))}
+            >
+              <option value="">-- wählen --</option>
+              {allTeams.map((team) => (
+                <option key={`champ-${team}`} value={team}>{team}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label>Vizemeister</label>
+            <select
+              value={bonusTip.runner_up_team}
+              disabled={bonusLocked || savingBonus}
+              onChange={(e) => setBonusTip((prev) => ({ ...prev, runner_up_team: e.target.value }))}
+            >
+              <option value="">-- wählen --</option>
+              {allTeams.map((team) => (
+                <option key={`runner-${team}`} value={team}>{team}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleBonusTipSubmit}
+            disabled={bonusLocked || savingBonus}
+          >
+            {bonusLocked ? 'Deadline abgelaufen' : (savingBonus ? 'Speichert...' : 'Bonusfragen speichern')}
+          </button>
+        </div>
+      </div>
+
       {rounds.length > 1 && (
         <div className="round-filter">
           {rounds.map(r => (
@@ -141,7 +239,7 @@ function Dashboard() {
           const deadlinePasssed = isDeadlinePassed(match.match_date);
 
           return (
-            <div key={match.id} className="match-card">
+            <div key={match.id} className="match-card" style={getMatchThemeStyle(match.home_team, match.away_team)}>
               <div className="match-date">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
               
               <div className="match-teams">

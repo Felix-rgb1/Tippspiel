@@ -5,6 +5,55 @@
   margin-bottom: 1.5rem;
 }
 
+.bonus-card {
+  background: linear-gradient(160deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fdba74;
+  border-radius: 0.75rem;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.bonus-card h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.bonus-card p {
+  color: #7c2d12;
+  margin-bottom: 0.9rem;
+  font-size: 0.92rem;
+}
+
+.bonus-deadline {
+  font-weight: 600;
+}
+
+.bonus-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.bonus-grid label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.85rem;
+  color: #7c2d12;
+}
+
+.bonus-grid select {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #fed7aa;
+  border-radius: 0.4rem;
+}
+
+.bonus-grid button {
+  white-space: nowrap;
+  padding: 0.65rem 0.9rem;
+}
+
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -156,6 +205,10 @@
 }
 
 @media (max-width: 600px) {
+  .bonus-grid {
+    grid-template-columns: 1fr;
+  }
+
   .matches-grid {
     grid-template-columns: 1fr;
   }

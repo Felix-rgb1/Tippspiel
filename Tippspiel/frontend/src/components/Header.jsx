@@ -21,6 +21,7 @@ function Header() {
           <nav className="nav">
             <Link to="/">Dashboard</Link>
             <Link to="/leaderboard">Rangliste</Link>
+            <Link to="/rules">Regeln</Link>
             {user.role === 'admin' && <Link to="/admin">Admin</Link>}
             <Link to="/profile">Profil</Link>
             <button onClick={handleLogout} className="btn-primary">Abmelden</button>
