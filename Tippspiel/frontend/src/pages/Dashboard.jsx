@@ -13,6 +13,7 @@ function Dashboard() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeRound, setActiveRound] = useState('Alle');
+  const [matchStatusFilter, setMatchStatusFilter] = useState('Alle');
   const [bonusTip, setBonusTip] = useState({ champion_team: '', runner_up_team: '' });
   const [bonusLocked, setBonusLocked] = useState(false);
   const [bonusDeadline, setBonusDeadline] = useState(null);
@@ -165,9 +166,23 @@ function Dashboard() {
     new Set(matches.map(m => m.round).filter(Boolean))
   )];
 
-  const visibleMatches = activeRound === 'Alle'
+  const roundFilteredMatches = activeRound === 'Alle'
     ? matches
-    : matches.filter(m => m.round === activeRound);
+    : matches.filter((match) => match.round === activeRound);
+
+  const statusFilteredMatches = matchStatusFilter === 'Alle'
+    ? roundFilteredMatches
+    : roundFilteredMatches.filter((match) =>
+      matchStatusFilter === 'Offen' ? !match.finished : Boolean(match.finished)
+    );
+
+  const visibleMatches = statusFilteredMatches.slice().sort((firstMatch, secondMatch) => {
+    if (matchStatusFilter === 'Alle' && firstMatch.finished !== secondMatch.finished) {
+      return firstMatch.finished ? 1 : -1;
+    }
+
+    return new Date(firstMatch.match_date) - new Date(secondMatch.match_date);
+  });
 
   const finishedCount = matches.filter((m) => m.finished).length;
   const openCount = matches.length - finishedCount;
@@ -248,6 +263,18 @@ function Dashboard() {
             {bonusLocked ? 'Deadline abgelaufen' : (savingBonus ? 'Speichert...' : 'Bonusfragen speichern')}
           </button>
         </div>
+      </div>
+
+      <div className="round-filter">
+        {['Alle', 'Offen', 'Abgeschlossen'].map((status) => (
+          <button
+            key={status}
+            className={`round-btn${matchStatusFilter === status ? ' active' : ''}`}
+            onClick={() => setMatchStatusFilter(status)}
+          >
+            {status}
+          </button>
+        ))}
       </div>
 
       {rounds.length > 1 && (
