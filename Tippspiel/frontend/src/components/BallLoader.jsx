@@ -1,27 +1,53 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './BallLoader.css';
 
+const EXIT_DURATION_MS = 640;
+
 function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }) {
-  const [phase, setPhase] = useState(() => (loading ? 'loading' : 'done'));
+  const [isExiting, setIsExiting] = useState(false);
+  const previousLoadingRef = useRef(loading);
 
   useEffect(() => {
-    if (!loading && phase === 'loading') {
-      setPhase('kick');
-      const t1 = setTimeout(() => setPhase('expand'), 620);
-      const t2 = setTimeout(() => setPhase('done'), 1260);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
+    const previousLoading = previousLoadingRef.current;
+    let timeoutId;
+
+    if (previousLoading && !loading) {
+      setIsExiting(true);
+      timeoutId = setTimeout(() => setIsExiting(false), EXIT_DURATION_MS);
     }
-  }, [loading, phase]);
+
+    if (!previousLoading && loading) {
+      setIsExiting(false);
+    }
+
+    previousLoadingRef.current = loading;
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [loading]);
+
+  const showOverlay = loading || isExiting;
+  const overlayClassName = `bl-overlay ${loading ? 'bl-is-loading' : 'bl-is-exiting'}`;
 
   return (
     <>
-      {phase !== 'done' && (
-        <div className={`bl-overlay bl-phase-${phase}`} aria-hidden="true">
+      {showOverlay && (
+        <div className={overlayClassName} aria-hidden={!loading}>
+          <div className="bl-aurora bl-aurora-a" />
+          <div className="bl-aurora bl-aurora-b" />
           <div className="bl-stage">
-            <div className={`bl-ball bl-ball-${phase}`}>
+            <div className="bl-ball-wrap">
+              <div className="bl-ball-glow" />
+              <div className="bl-ball-shadow" />
+              <div className="bl-trail" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="bl-ball">
               <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <clipPath id="bl-clip">
@@ -50,9 +76,10 @@ function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }
                 {/* Outline */}
                 <circle cx="50" cy="50" r="46" fill="none" stroke="#111827" strokeWidth="2.5" />
               </svg>
+              </div>
             </div>
 
-            {phase === 'loading' && (
+            {loading && (
               <div className="bl-text" role="status" aria-live="polite">
                 <h2 className="bl-title">{title}</h2>
                 {subtitle && <p className="bl-subtitle">{subtitle}</p>}
@@ -62,7 +89,7 @@ function BallLoader({ loading, title = 'Wird geladen', subtitle = '', children }
         </div>
       )}
 
-      <div className={phase !== 'done' ? 'bl-hidden' : undefined}>
+      <div className={showOverlay ? 'bl-hidden' : undefined}>
         {children}
       </div>
     </>

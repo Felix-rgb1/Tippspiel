@@ -1,121 +1,283 @@
-/* ── Overlay ─────────────────────────────────────── */
 .bl-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background-color: #0f172a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* no overflow:hidden – ball must overflow during expand */
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(56, 189, 248, 0.16) 0%, rgba(56, 189, 248, 0) 48%),
+    radial-gradient(circle at 82% 76%, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0) 50%),
+    linear-gradient(130deg, #020617 0%, #0b173b 45%, #071126 100%);
 }
 
-/* Phase: kick → hide text but keep ball centered */
-.bl-phase-kick .bl-text,
-.bl-phase-expand .bl-text {
-  display: none;
-}
-
-/* Phase: expand → background fades to transparent while ball grows */
-.bl-phase-expand {
-  animation: bl-bg-fade 0.52s ease 0.08s forwards;
+.bl-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(148, 163, 184, 0.06), rgba(148, 163, 184, 0));
+  opacity: 0.9;
   pointer-events: none;
 }
 
-/* ── Stage ───────────────────────────────────────── */
-.bl-stage {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2rem;
+.bl-aurora {
+  position: absolute;
+  width: 58vmax;
+  height: 58vmax;
+  border-radius: 999px;
+  filter: blur(70px);
+  opacity: 0.24;
+  pointer-events: none;
 }
 
-/* ── Ball ────────────────────────────────────────── */
+.bl-aurora-a {
+  left: -10vmax;
+  top: -14vmax;
+  background: #0284c7;
+  animation: bl-aurora-drift-a 7.5s ease-in-out infinite alternate;
+}
+
+.bl-aurora-b {
+  right: -8vmax;
+  bottom: -16vmax;
+  background: #0ea5e9;
+  animation: bl-aurora-drift-b 6.6s ease-in-out infinite alternate;
+}
+
+.bl-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 1.2rem;
+}
+
+.bl-ball-wrap {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  display: grid;
+  place-items: center;
+}
+
+.bl-ball-glow {
+  position: absolute;
+  inset: 6px;
+  border-radius: 999px;
+  background: radial-gradient(circle at center, rgba(148, 163, 184, 0.42) 0%, rgba(148, 163, 184, 0) 70%);
+  animation: bl-glow-breathe 1.4s ease-in-out infinite;
+}
+
+.bl-ball-shadow {
+  position: absolute;
+  width: 70px;
+  height: 16px;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.6);
+  filter: blur(2px);
+  animation: bl-shadow-pulse 1s ease-in-out infinite;
+}
+
 .bl-ball {
+  position: relative;
   width: 92px;
   height: 92px;
-  flex-shrink: 0;
-  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.75));
+  border-radius: 999px;
+  filter: drop-shadow(0 14px 34px rgba(2, 6, 23, 0.72));
   transform-origin: center center;
 }
 
 .bl-ball svg {
   width: 100%;
   height: 100%;
+  animation: bl-ball-spin 0.72s linear infinite;
 }
 
-/* Loading: combined bounce + spin in one keyframe to avoid transform conflict */
-.bl-ball-loading {
-  animation: bl-bounce-spin 0.95s ease-in-out infinite;
+.bl-is-loading .bl-ball {
+  animation: bl-ball-bounce 0.76s cubic-bezier(0.36, 0, 0.66, 1) infinite;
 }
 
-/* Kick: wind-up then shoot upward with fast spin */
-.bl-ball-kick {
-  animation: bl-kick 0.62s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+.bl-trail {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
 }
 
-/* Expand: ball zooms toward camera until it fills and goes beyond screen */
-.bl-ball-expand {
-  animation: bl-expand 0.6s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+.bl-trail span {
+  position: absolute;
+  right: 60px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: rgba(226, 232, 240, 0.55);
+  filter: blur(0.3px);
 }
 
-/* ── Content hidden while loading ────────────────── */
+.bl-trail span:nth-child(1) {
+  margin-right: 16px;
+  opacity: 0.45;
+}
+
+.bl-trail span:nth-child(2) {
+  margin-right: 34px;
+  width: 8px;
+  height: 8px;
+  opacity: 0.28;
+}
+
+.bl-trail span:nth-child(3) {
+  margin-right: 50px;
+  width: 6px;
+  height: 6px;
+  opacity: 0.18;
+}
+
+.bl-title {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 0.01em;
+}
+
+.bl-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
 .bl-hidden {
   opacity: 0;
   pointer-events: none;
 }
 
-/* ── Text ────────────────────────────────────────── */
-.bl-title {
-  margin: 0;
-  color: #f1f5f9;
-  font-size: 1.1rem;
-  font-weight: 700;
-  text-align: center;
+.bl-is-exiting {
+  pointer-events: none;
+  animation: bl-overlay-out 0.64s cubic-bezier(0.2, 0.75, 0.3, 1) forwards;
 }
 
-.bl-subtitle {
-  margin: 0.35rem 0 0;
-  color: #64748b;
-  font-size: 0.88rem;
-  text-align: center;
+.bl-is-exiting .bl-text {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.1s ease, transform 0.1s ease;
 }
 
-/* ── Keyframes ───────────────────────────────────── */
-
-/* Bounce + spin combined (single transform to avoid conflict) */
-@keyframes bl-bounce-spin {
-  0%   { transform: translateY(0px)   rotate(0deg); }
-  25%  { transform: translateY(-24px) rotate(90deg); }
-  50%  { transform: translateY(-6px)  rotate(180deg); }
-  75%  { transform: translateY(-24px) rotate(270deg); }
-  100% { transform: translateY(0px)   rotate(360deg); }
+.bl-is-exiting .bl-ball-shadow {
+  animation: bl-shadow-out 0.64s ease forwards;
 }
 
-/* Kick: slight wind-up backwards, then strong upward shot with spin */
-@keyframes bl-kick {
-  0%   { transform: translate(0px, 0px)    rotate(0deg)   scale(1); }
-  18%  { transform: translate(-14px, 8px)  rotate(-25deg) scale(0.9); }
-  100% { transform: translate(4px, -12px)  rotate(380deg) scale(1.15); }
+.bl-is-exiting .bl-trail {
+  opacity: 1;
+  animation: bl-trail-shoot 0.64s ease forwards;
 }
 
-/* Expand: ball zooms toward viewer, fills entire screen, then fades */
-@keyframes bl-expand {
-  0%   { transform: translate(4px, -12px) scale(1.15) rotate(380deg); opacity: 1; }
-  65%  { opacity: 1; }
-  100% { transform: translate(4px, -12px) scale(44)   rotate(460deg); opacity: 0; }
+.bl-is-exiting .bl-ball {
+  animation: bl-ball-shoot-out 0.64s cubic-bezier(0.18, 0.88, 0.24, 1) forwards;
 }
 
-/* Background fade (overlay bg goes transparent while ball grows) */
-@keyframes bl-bg-fade {
-  0%   { background-color: rgba(15, 23, 42, 1); }
-  100% { background-color: rgba(15, 23, 42, 0); }
+.bl-is-exiting .bl-ball svg {
+  animation: bl-ball-spin-fast 0.64s linear forwards;
 }
 
-/* ── Reduced motion ──────────────────────────────── */
+@keyframes bl-ball-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bl-ball-spin-fast {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(1080deg); }
+}
+
+@keyframes bl-ball-bounce {
+  0%,
+  100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+
+@keyframes bl-shadow-pulse {
+  0%,
+  100% {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(-50%) scaleX(0.72);
+    opacity: 0.25;
+  }
+}
+
+@keyframes bl-glow-breathe {
+  0%,
+  100% { opacity: 0.55; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes bl-aurora-drift-a {
+  from { transform: translate(0, 0); }
+  to { transform: translate(5vmax, 3vmax); }
+}
+
+@keyframes bl-aurora-drift-b {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-4vmax, -2vmax); }
+}
+
+@keyframes bl-ball-shoot-out {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  10% {
+    transform: translate(-10px, 7px) scale(0.9);
+  }
+  100% {
+    transform: translate(8px, -10px) scale(36);
+    opacity: 0;
+  }
+}
+
+@keyframes bl-overlay-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes bl-shadow-out {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateX(-50%) scaleX(0.2); }
+}
+
+@keyframes bl-trail-shoot {
+  0% { transform: translateX(0); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateX(-36px); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .bl-ball-loading { animation: none; }
-  .bl-ball-kick    { animation: none; }
-  .bl-ball-expand  { animation: none; opacity: 0; }
-  .bl-phase-expand { animation: none; background-color: rgba(15, 23, 42, 0); }
+  .bl-aurora,
+  .bl-ball,
+  .bl-ball svg,
+  .bl-ball-shadow,
+  .bl-ball-glow {
+    animation: none !important;
+  }
+
+  .bl-is-exiting,
+  .bl-is-exiting .bl-ball,
+  .bl-is-exiting .bl-ball svg,
+  .bl-is-exiting .bl-ball-shadow,
+  .bl-is-exiting .bl-trail {
+    animation: none !important;
+  }
+
+  .bl-overlay {
+    opacity: 0;
+    transition: opacity 0.08s linear;
+  }
 }
