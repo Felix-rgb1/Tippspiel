@@ -87,6 +87,11 @@ function Leaderboard() {
   const ownRankIndex = leaderboard.findIndex((entry) => String(entry.id) === String(user?.id));
   const ownRankEntry = ownRankIndex >= 0 ? leaderboard[ownRankIndex] : null;
 
+  const matchdayRankMap = {};
+  matchdayEntries.forEach((entry, idx) => {
+    matchdayRankMap[String(entry.id)] = idx + 1;
+  });
+
   return (
     <div className="container">
       <div className="page-title">
@@ -141,6 +146,14 @@ function Leaderboard() {
 
         {leaderboard.map((entry, index) => {
           const isOwnRow = String(entry.id) === String(user?.id);
+          const overallRank = index + 1;
+          const matchdayRank = matchdayRankMap[String(entry.id)];
+          let trendEl = null;
+          if (matchdayRank !== undefined) {
+            if (matchdayRank < overallRank) trendEl = <span className="trend-up" title="Im letzten Spieltag besser">↑</span>;
+            else if (matchdayRank > overallRank) trendEl = <span className="trend-down" title="Im letzten Spieltag schlechter">↓</span>;
+            else trendEl = <span className="trend-stable" title="Unveränderter Trend">—</span>;
+          }
 
           return (
           <div key={entry.id} className={`table-row${isOwnRow ? ' own-row' : ''}`}>
@@ -149,6 +162,7 @@ function Leaderboard() {
               {index === 1 && '🥈'}
               {index === 2 && '🥉'}
               {index > 2 && `${index + 1}.`}
+              {trendEl}
             </div>
             <div className="col-name">
               {entry.username}

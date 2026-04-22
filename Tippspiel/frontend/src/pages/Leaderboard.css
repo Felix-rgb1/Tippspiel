@@ -177,6 +177,25 @@
   padding: 0.12rem 0.4rem;
 }
 
+.trend-up {
+  color: #22c55e;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.trend-down {
+  color: #ef4444;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.trend-stable {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .leaderboard-table,
   .podium-card,

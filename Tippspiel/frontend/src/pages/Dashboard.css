@@ -445,10 +445,55 @@
   font-weight: 700;
 }
 
+/* Missing tips banner */
+.missing-tips-banner {
+  background: linear-gradient(135deg, #92400e 0%, #b45309 100%);
+  color: #fef3c7;
+  border: 1px solid #d97706;
+  border-radius: 10px;
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.missing-tips-banner strong {
+  color: #fbbf24;
+  font-size: 1.05rem;
+}
+
+/* Countdown badge */
+.countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 5px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: 0.04em;
+  animation: countdown-pulse 1s ease-in-out infinite;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+@keyframes countdown-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-stats .stat-card,
   .next-matches-panel,
   .match-card {
+    animation: none;
+  }
+  .countdown-badge {
     animation: none;
   }
 }

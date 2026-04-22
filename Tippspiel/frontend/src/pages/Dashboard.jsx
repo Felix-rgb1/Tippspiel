@@ -20,11 +20,17 @@ function Dashboard() {
   const [bonusLocked, setBonusLocked] = useState(false);
   const [bonusDeadline, setBonusDeadline] = useState(null);
   const [savingBonus, setSavingBonus] = useState(false);
+  const [now, setNow] = useState(new Date());
   const { user } = useAuth();
 
   useEffect(() => {
     fetchMatches();
   }, [user]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const fetchMatches = async () => {
     try {
@@ -159,6 +165,16 @@ function Dashboard() {
     });
   };
 
+  const getCountdown = (matchDate) => {
+    const deadline = new Date(new Date(matchDate).getTime() - 60 * 60 * 1000);
+    const diff = deadline - now;
+    if (diff <= 0 || diff > 2 * 60 * 60 * 1000) return null;
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
   const toggleVisibleTips = (matchId) => {
     setExpandedTipsMatches((prev) => ({
       ...prev,
@@ -215,6 +231,10 @@ function Dashboard() {
     .sort((firstMatch, secondMatch) => new Date(firstMatch.match_date) - new Date(secondMatch.match_date))
     .slice(0, 3);
 
+  const missingTipsCount = matches.filter(
+    m => !m.finished && !isDeadlinePassed(m.match_date) && !tips[m.id]
+  ).length;
+
   return (
     <div className="container">
       <div className="page-title">
@@ -224,6 +244,12 @@ function Dashboard() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
+
+      {missingTipsCount > 0 && (
+        <div className="missing-tips-banner">
+          ⚠️ Du hast noch <strong>{missingTipsCount}</strong> {missingTipsCount === 1 ? 'Spiel' : 'Spiele'} ohne Tipp!
+        </div>
+      )}
 
       <div className="dashboard-stats">
         <div className="stat-card">
@@ -263,6 +289,9 @@ function Dashboard() {
                   <div className="next-match-meta">
                     <span>{formatDate(match.match_date)}</span>
                     {match.round && <span>{match.round}</span>}
+                    {getCountdown(match.match_date) && (
+                      <span className="countdown-badge">⏱ {getCountdown(match.match_date)}</span>
+                    )}
                   </div>
                   <span className={`match-status-badge ${status.className}`}>{status.label}</span>
                   {!match.finished && (
@@ -400,11 +429,15 @@ function Dashboard() {
             return firstTip.username.localeCompare(secondTip.username, 'de');
           });
           const isTipsExpanded = Boolean(expandedTipsMatches[match.id]);
+          const countdown = getCountdown(match.match_date);
 
           return (
             <div key={match.id} className="match-card" style={getMatchThemeStyle(match.home_team, match.away_team)}>
               <div className="match-topline">
-                <div className="match-date">{formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}</div>
+                <div className="match-date">
+                  {formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}
+                  {countdown && <span className="countdown-badge">⏱ {countdown}</span>}
+                </div>
                 <span className={`match-status-badge ${status.className}`}>{status.label}</span>
               </div>
               
