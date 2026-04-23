@@ -181,7 +181,7 @@ input:focus, textarea:focus {
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 768px) and (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) {
   :root {
     --primary: #0f172a;
     --primary-light: #1e293b;

@@ -128,6 +128,15 @@ function Dashboard() {
       }
     }));
   };
+  const inputRefs = useRef({});
+
+  const handleTipStep = (matchId, field, delta) => {
+    setTips(prev => {
+      const current = prev[matchId] || { home_goals: 0, away_goals: 0 };
+      const newVal = Math.max(0, Math.min(20, (current[field] ?? 0) + delta));
+      return { ...prev, [matchId]: { ...current, [field]: newVal } };
+    });
+  };
 
   const handleSubmitTip = async (matchId, source = 'default') => {
     try {
@@ -296,23 +305,34 @@ function Dashboard() {
                   {!match.finished && (
                     <div className="next-match-tip-row">
                       <div className="next-tip-inputs">
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={tip.home_goals}
-                          onChange={(e) => handleTipChange(match.id, 'home_goals', e.target.value)}
-                          disabled={deadlinePasssed}
-                        />
-                        <span>:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={tip.away_goals}
-                          onChange={(e) => handleTipChange(match.id, 'away_goals', e.target.value)}
-                          disabled={deadlinePasssed}
-                        />
+                          <div className="tip-stepper">
+                            <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', -1)} disabled={deadlinePasssed} aria-label="Weniger">−</button>
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={tip.home_goals}
+                              onChange={(e) => handleTipChange(match.id, 'home_goals', e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); inputRefs.current[`n${match.id}`]?.away?.focus(); } }}
+                              disabled={deadlinePasssed}
+                              ref={(el) => { if (!inputRefs.current[`n${match.id}`]) inputRefs.current[`n${match.id}`] = {}; inputRefs.current[`n${match.id}`].home = el; }}
+                            />
+                            <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', 1)} disabled={deadlinePasssed} aria-label="Mehr">+</button>
+                          </div>
+                          <span className="tip-colon">:</span>
+                          <div className="tip-stepper">
+                            <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', -1)} disabled={deadlinePasssed} aria-label="Weniger">−</button>
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={tip.away_goals}
+                              onChange={(e) => handleTipChange(match.id, 'away_goals', e.target.value)}
+                              disabled={deadlinePasssed}
+                              ref={(el) => { if (!inputRefs.current[`n${match.id}`]) inputRefs.current[`n${match.id}`] = {}; inputRefs.current[`n${match.id}`].away = el; }}
+                            />
+                            <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', 1)} disabled={deadlinePasssed} aria-label="Mehr">+</button>
+                          </div>
                       </div>
                       {deadlinePasssed ? (
                         <div className="next-tip-locked">Deadline verpasst</div>
@@ -432,7 +452,7 @@ function Dashboard() {
           const savedInline = Boolean(nextTipSavedByMatch[match.id]);
 
           return (
-            <div key={match.id} className="match-card" style={getMatchThemeStyle(match.home_team, match.away_team)}>
+            <div key={match.id} className={`match-card${match.finished ? ' match-card-finished' : deadlinePasssed ? ' match-card-locked' : ''}`} style={getMatchThemeStyle(match.home_team, match.away_team)}>
               <div className="match-topline">
                 <div className="match-date">
                   {formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}
@@ -460,23 +480,34 @@ function Dashboard() {
               {!match.finished && (
                 <>
                   <div className="tip-inputs">
-                    <input
-                      type="number"
-                      min="0"
-                      max="20"
-                      value={tip.home_goals}
-                      onChange={(e) => handleTipChange(match.id, 'home_goals', e.target.value)}
-                      disabled={deadlinePasssed}
-                    />
-                    <span>:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="20"
-                      value={tip.away_goals}
-                      onChange={(e) => handleTipChange(match.id, 'away_goals', e.target.value)}
-                      disabled={deadlinePasssed}
-                    />
+                    <div className="tip-stepper">
+                      <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', -1)} disabled={deadlinePasssed} aria-label="Weniger">−</button>
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={tip.home_goals}
+                        onChange={(e) => handleTipChange(match.id, 'home_goals', e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); inputRefs.current[match.id]?.away?.focus(); } }}
+                        disabled={deadlinePasssed}
+                        ref={(el) => { if (!inputRefs.current[match.id]) inputRefs.current[match.id] = {}; inputRefs.current[match.id].home = el; }}
+                      />
+                      <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', 1)} disabled={deadlinePasssed} aria-label="Mehr">+</button>
+                    </div>
+                    <span className="tip-colon">:</span>
+                    <div className="tip-stepper">
+                      <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', -1)} disabled={deadlinePasssed} aria-label="Weniger">−</button>
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={tip.away_goals}
+                        onChange={(e) => handleTipChange(match.id, 'away_goals', e.target.value)}
+                        disabled={deadlinePasssed}
+                        ref={(el) => { if (!inputRefs.current[match.id]) inputRefs.current[match.id] = {}; inputRefs.current[match.id].away = el; }}
+                      />
+                      <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', 1)} disabled={deadlinePasssed} aria-label="Mehr">+</button>
+                    </div>
                   </div>
 
                   {deadlinePasssed ? (

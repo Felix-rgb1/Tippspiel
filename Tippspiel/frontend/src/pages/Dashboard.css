@@ -349,6 +349,109 @@
   align-items: center;
 }
 
+.tip-colon {
+  font-size: 1.35rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  padding: 0 0.1rem;
+  color: var(--primary);
+}
+
+/* ── Stepper ──────────────────────────────────────── */
+.tip-stepper {
+  display: flex;
+  align-items: stretch;
+}
+
+.tip-stepper-btn {
+  width: 40px;
+  height: 48px;
+  border: 1px solid var(--gray-300);
+  background: var(--gray-100);
+  color: var(--primary);
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tip-stepper-btn:first-child {
+  border-radius: 0.45rem 0 0 0.45rem;
+  border-right: none;
+}
+
+.tip-stepper-btn:last-child {
+  border-radius: 0 0.45rem 0.45rem 0;
+  border-left: none;
+}
+
+.tip-stepper-btn:hover:not(:disabled) {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  z-index: 1;
+}
+
+.tip-stepper-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.tip-stepper-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.tip-stepper input {
+  width: 52px;
+  height: 48px;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+/* smaller stepper inside next-match panel */
+.next-tip-inputs .tip-stepper-btn {
+  width: 34px;
+  height: 38px;
+  font-size: 1.1rem;
+}
+
+.next-tip-inputs .tip-stepper input {
+  width: 40px;
+  height: 38px;
+  font-size: 1rem;
+}
+
+/* ── Finished / Locked card dimming ─────────────── */
+.match-card-finished {
+  opacity: 0.62;
+  filter: saturate(0.55);
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.match-card-finished:hover {
+  opacity: 0.82;
+  filter: saturate(0.75);
+  transform: none;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+}
+
+.match-card-locked {
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fffdf5 0%, #fefce8 100%);
+}
+
 .match-card button {
   width: 100%;
   padding: 0.75rem;
@@ -670,7 +773,7 @@
   }
 }
 
-@media (max-width: 768px) and (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) {
   .bonus-card {
     background: linear-gradient(160deg, #31200b 0%, #1f1408 100%);
     border-color: #b45309;
@@ -783,6 +886,33 @@
     background: #0b1220;
     color: #e2e8f0;
     border-color: #334155;
+  }
+
+  .tip-stepper-btn {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .tip-stepper-btn:hover:not(:disabled) {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: white;
+  }
+
+  .tip-stepper input {
+    background: #0b1220;
+    color: #e2e8f0;
+    border-color: #334155;
+  }
+
+  .match-card-locked {
+    border-color: #92400e;
+    background: linear-gradient(180deg, #1c1007 0%, #2d1a07 100%) !important;
+  }
+
+  .tip-colon {
+    color: #e2e8f0;
   }
 
   .deadline-passed {
