@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
+const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -419,6 +420,78 @@ router.get('/user/:userId', async (req, res) => {
       return res.status(500).json({ error: 'Bonus-Migration fehlt. Bitte Backend aktualisieren.' });
     }
     res.status(500).json({ error: 'Failed to fetch user stats' });
+  }
+});
+
+// Head-to-head comparison between logged-in user and another user
+router.get('/compare/:otherId', authMiddleware, async (req, res) => {
+  try {
+    const myId = req.user.id;
+    const otherId = parseInt(req.params.otherId, 10);
+
+    if (isNaN(otherId) || otherId < 1) {
+      return res.status(400).json({ error: 'Ungültige Benutzer-ID' });
+    }
+
+    if (myId === otherId) {
+      return res.status(400).json({ error: 'Kein Vergleich mit dir selbst möglich' });
+    }
+
+    const [myResult, otherResult] = await Promise.all([
+      pool.query('SELECT id, username FROM users WHERE id = $1', [myId]),
+      pool.query('SELECT id, username FROM users WHERE id = $1', [otherId]),
+    ]);
+
+    if (myResult.rows.length === 0 || otherResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+
+    const matchesResult = await pool.query(`
+      SELECT
+        m.id,
+        m.home_team,
+        m.away_team,
+        m.home_goals AS match_home,
+        m.away_goals AS match_away,
+        m.round,
+        m.match_date,
+        t1.home_goals AS my_home,
+        t1.away_goals AS my_away,
+        t2.home_goals AS opp_home,
+        t2.away_goals AS opp_away,
+        CASE
+          WHEN t1.home_goals IS NULL THEN NULL
+          WHEN t1.home_goals = m.home_goals AND t1.away_goals = m.away_goals THEN 3
+          WHEN (t1.home_goals > t1.away_goals AND m.home_goals > m.away_goals) OR
+               (t1.home_goals < t1.away_goals AND m.home_goals < m.away_goals) OR
+               (t1.home_goals = t1.away_goals AND m.home_goals = m.away_goals) THEN 1
+          ELSE 0
+        END AS my_points,
+        CASE
+          WHEN t2.home_goals IS NULL THEN NULL
+          WHEN t2.home_goals = m.home_goals AND t2.away_goals = m.away_goals THEN 3
+          WHEN (t2.home_goals > t2.away_goals AND m.home_goals > m.away_goals) OR
+               (t2.home_goals < t2.away_goals AND m.home_goals < m.away_goals) OR
+               (t2.home_goals = t2.away_goals AND m.home_goals = m.away_goals) THEN 1
+          ELSE 0
+        END AS opp_points
+      FROM matches m
+      LEFT JOIN tips t1 ON t1.match_id = m.id AND t1.user_id = $1
+      LEFT JOIN tips t2 ON t2.match_id = m.id AND t2.user_id = $2
+      WHERE m.finished = true
+        AND m.home_goals IS NOT NULL
+        AND m.away_goals IS NOT NULL
+      ORDER BY m.match_date ASC
+    `, [myId, otherId]);
+
+    res.json({
+      me: { id: myResult.rows[0].id, username: myResult.rows[0].username },
+      opponent: { id: otherResult.rows[0].id, username: otherResult.rows[0].username },
+      matches: matchesResult.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Fehler beim Laden des Direktvergleichs' });
   }
 });
 

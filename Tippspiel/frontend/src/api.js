@@ -76,6 +76,7 @@ export const leaderboardAPI = {
   getAll: () => apiGet('/leaderboard'),
   getUserStats: (userId) => apiGet(`/leaderboard/user/${userId}`),
   getMatchday: (round) => apiGet('/leaderboard/matchday', { params: { round } }),
+  compare: (otherId) => apiGet(`/leaderboard/compare/${otherId}`),
 };
 
 // User

@@ -12,6 +12,10 @@ function Leaderboard() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
+  const [compareUser, setCompareUser] = useState(null);
+  const [compareData, setCompareData] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState('');
   const { user } = useAuth();
 
   useEffect(() => {
@@ -46,6 +50,27 @@ function Leaderboard() {
     } catch (err) {
       setError('Fehler beim Laden der Spieltagwertung');
     }
+  };
+
+  const openCompare = async (entry) => {
+    setCompareUser(entry);
+    setCompareData(null);
+    setCompareError('');
+    setCompareLoading(true);
+    try {
+      const res = await leaderboardAPI.compare(entry.id);
+      setCompareData(res.data);
+    } catch (err) {
+      setCompareError(err.response?.data?.error || 'Fehler beim Laden des Vergleichs');
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
+  const closeCompare = () => {
+    setCompareUser(null);
+    setCompareData(null);
+    setCompareError('');
   };
 
   const exportLeaderboardToExcel = async () => {
@@ -157,7 +182,12 @@ function Leaderboard() {
           }
 
           return (
-          <div key={entry.id} className={`table-row${isOwnRow ? ' own-row' : ''}`}>
+          <div
+            key={entry.id}
+            className={`table-row${isOwnRow ? ' own-row' : ' row-clickable'}`}
+            onClick={isOwnRow ? undefined : () => openCompare(entry)}
+            title={isOwnRow ? undefined : `Direktvergleich mit ${entry.username}`}
+          >
             <div className="col-rank">
               {index === 0 && '🥇'}
               {index === 1 && '🥈'}
@@ -168,6 +198,7 @@ function Leaderboard() {
             <div className="col-name">
               {entry.username}
               {isOwnRow && <span className="own-pill">Du</span>}
+              {!isOwnRow && <span className="compare-hint">⚔️</span>}
             </div>
             <div className="col-tips">{entry.tips_submitted || 0}</div>
             <div className="col-points">{entry.bonus_points || 0}</div>
@@ -217,6 +248,77 @@ function Leaderboard() {
         )}
       </div>
     </div>
+
+    {compareUser && (
+      <div className="compare-overlay" role="dialog" aria-modal="true" aria-label={`Direktvergleich mit ${compareUser.username}`} onClick={(e) => { if (e.target === e.currentTarget) closeCompare(); }}>
+        <div className="compare-modal">
+          <button className="compare-close" onClick={closeCompare} aria-label="Schließen">✕</button>
+
+          <div className="compare-header">
+            <span className="compare-me">Du</span>
+            <span className="compare-vs">⚔️ vs</span>
+            <span className="compare-opp">{compareUser.username}</span>
+          </div>
+
+          {compareLoading && <div className="compare-loading">Wird geladen…</div>}
+          {compareError && <div className="alert alert-error">{compareError}</div>}
+
+          {compareData && (() => {
+            const finished = compareData.matches;
+            const myTotal = finished.reduce((s, m) => s + (m.my_points ?? 0), 0);
+            const oppTotal = finished.reduce((s, m) => s + (m.opp_points ?? 0), 0);
+            const wins = finished.filter(m => (m.my_points ?? 0) > (m.opp_points ?? 0)).length;
+            const losses = finished.filter(m => (m.my_points ?? 0) < (m.opp_points ?? 0)).length;
+            const ties = finished.filter(m => m.my_points !== null && m.opp_points !== null && m.my_points === m.opp_points).length;
+
+            return (
+              <>
+                <div className="compare-score-bar">
+                  <div className={`compare-score-me${myTotal >= oppTotal ? ' compare-score-leading' : ''}`}>{myTotal} Pkt</div>
+                  <div className="compare-score-record">{wins}W · {ties}U · {losses}N</div>
+                  <div className={`compare-score-opp${oppTotal > myTotal ? ' compare-score-leading' : ''}`}>{oppTotal} Pkt</div>
+                </div>
+
+                {finished.length === 0 ? (
+                  <div className="compare-empty">Noch keine abgeschlossenen Spiele</div>
+                ) : (
+                  <div className="compare-table-wrap">
+                    <div className="compare-table-header">
+                      <div>Spiel</div>
+                      <div>Ergebnis</div>
+                      <div>Dein Tipp</div>
+                      <div>Tipp {compareData.opponent.username}</div>
+                    </div>
+                    {finished.map(m => {
+                      const myPts = m.my_points;
+                      const oppPts = m.opp_points;
+                      let rowClass = 'compare-table-row';
+                      if (myPts !== null && oppPts !== null) {
+                        if (myPts > oppPts) rowClass += ' compare-row-win';
+                        else if (myPts < oppPts) rowClass += ' compare-row-loss';
+                        else rowClass += ' compare-row-tie';
+                      }
+                      const myTip = m.my_home !== null ? `${m.my_home}:${m.my_away}` : '–';
+                      const oppTip = m.opp_home !== null ? `${m.opp_home}:${m.opp_away}` : '–';
+                      const myPtsLabel = myPts !== null ? `(${myPts}P)` : '';
+                      const oppPtsLabel = oppPts !== null ? `(${oppPts}P)` : '';
+                      return (
+                        <div key={m.id} className={rowClass}>
+                          <div className="compare-cell-match">{m.home_team} – {m.away_team}</div>
+                          <div className="compare-cell-result">{m.match_home}:{m.match_away}</div>
+                          <div className="compare-cell-tip">{myTip} <span className="compare-pts">{myPtsLabel}</span></div>
+                          <div className="compare-cell-tip">{oppTip} <span className="compare-pts">{oppPtsLabel}</span></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </div>
+    )}
     </BallLoader>
   );
 }
