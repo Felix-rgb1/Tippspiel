@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getMatchThemeStyle } from '../utils/teamTheme';
