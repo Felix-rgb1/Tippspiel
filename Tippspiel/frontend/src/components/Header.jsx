@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Header.css';
 
-function Header() {
+function Header({ isDarkMode, onToggleTheme }) {
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
@@ -16,17 +16,29 @@ function Header() {
         <Link to="/" className="logo">
           ⚽ WM Tippspiel
         </Link>
-        
-        {user && (
-          <nav className="nav">
-            <Link to="/">Dashboard</Link>
-            <Link to="/leaderboard">Rangliste</Link>
-            <Link to="/rules">Regeln</Link>
-            {user.role === 'admin' && <Link to="/admin">Admin</Link>}
-            <Link to="/profile">Profil</Link>
-            <button onClick={handleLogout} className="btn-primary">Abmelden</button>
-          </nav>
-        )}
+
+        <div className="header-actions">
+          {user && (
+            <nav className="nav">
+              <Link to="/">Dashboard</Link>
+              <Link to="/leaderboard">Rangliste</Link>
+              <Link to="/rules">Regeln</Link>
+              {user.role === 'admin' && <Link to="/admin">Admin</Link>}
+              <Link to="/profile">Profil</Link>
+              <button onClick={handleLogout} className="btn-primary">Abmelden</button>
+            </nav>
+          )}
+
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={onToggleTheme}
+            aria-pressed={isDarkMode}
+            title={isDarkMode ? 'Dark Mode deaktivieren' : 'Dark Mode aktivieren'}
+          >
+            {isDarkMode ? '☀️ Hell' : '🌙 Dunkel'}
+          </button>
+        </div>
       </div>
     </header>
   );

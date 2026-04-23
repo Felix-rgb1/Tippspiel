@@ -773,197 +773,195 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .bonus-card {
-    background: linear-gradient(160deg, #31200b 0%, #1f1408 100%);
-    border-color: #b45309;
-  }
+:root[data-theme='dark'] .bonus-card {
+  background: linear-gradient(160deg, #31200b 0%, #1f1408 100%);
+  border-color: #b45309;
+}
 
-  .bonus-card h2 {
-    color: #fde68a;
-  }
+:root[data-theme='dark'] .bonus-card h2 {
+  color: #fde68a;
+}
 
-  .bonus-card p,
-  .bonus-grid label {
-    color: #fdba74;
-  }
+:root[data-theme='dark'] .bonus-card p,
+:root[data-theme='dark'] .bonus-grid label {
+  color: #fdba74;
+}
 
-  .bonus-grid select {
-    background: #0f172a;
-    color: #e2e8f0;
-    border-color: #92400e;
-  }
+:root[data-theme='dark'] .bonus-grid select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-color: #92400e;
+}
 
-  .stat-card {
-    background: linear-gradient(160deg, #0f172a 0%, #16233b 100%);
-    border-color: #334155;
-  }
+:root[data-theme='dark'] .stat-card {
+  background: linear-gradient(160deg, #0f172a 0%, #16233b 100%);
+  border-color: #334155;
+}
 
-  .stat-card .label {
-    color: #93c5fd;
-  }
+:root[data-theme='dark'] .stat-card .label {
+  color: #93c5fd;
+}
 
-  .stat-card .value {
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .stat-card .value {
+  color: #e2e8f0;
+}
 
-  .next-matches-panel {
-    background: linear-gradient(160deg, #0f172a 0%, #172554 100%);
-    border-color: #2563eb;
-  }
+:root[data-theme='dark'] .next-matches-panel {
+  background: linear-gradient(160deg, #0f172a 0%, #172554 100%);
+  border-color: #2563eb;
+}
 
-  .next-matches-headline h2 {
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .next-matches-headline h2 {
+  color: #e2e8f0;
+}
 
-  .next-matches-headline span {
-    color: #bfdbfe;
-    background: rgba(30, 58, 138, 0.55);
-  }
+:root[data-theme='dark'] .next-matches-headline span {
+  color: #bfdbfe;
+  background: rgba(30, 58, 138, 0.55);
+}
 
-  .next-match-card {
-    background: rgba(15, 23, 42, 0.76);
-    border-color: rgba(96, 165, 250, 0.4);
-  }
+:root[data-theme='dark'] .next-match-card {
+  background: rgba(15, 23, 42, 0.76);
+  border-color: rgba(96, 165, 250, 0.4);
+}
 
-  .next-match-teams {
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .next-match-teams {
+  color: #e2e8f0;
+}
 
-  .next-match-meta {
-    color: #93c5fd;
-  }
+:root[data-theme='dark'] .next-match-meta {
+  color: #93c5fd;
+}
 
-  .next-tip-locked {
-    color: #fbbf24;
-    background: rgba(120, 53, 15, 0.45);
-    border-color: rgba(251, 191, 36, 0.5);
-  }
+:root[data-theme='dark'] .next-tip-locked {
+  color: #fbbf24;
+  background: rgba(120, 53, 15, 0.45);
+  border-color: rgba(251, 191, 36, 0.5);
+}
 
-  .next-tip-saved {
-    color: #86efac;
-    background: rgba(6, 78, 59, 0.4);
-    border-color: rgba(74, 222, 128, 0.45);
-  }
+:root[data-theme='dark'] .next-tip-saved {
+  color: #86efac;
+  background: rgba(6, 78, 59, 0.4);
+  border-color: rgba(74, 222, 128, 0.45);
+}
 
-  .tip-saved-chip {
-    color: #86efac;
-    background: rgba(6, 78, 59, 0.4);
-    border-color: rgba(74, 222, 128, 0.45);
-  }
+:root[data-theme='dark'] .tip-saved-chip {
+  color: #86efac;
+  background: rgba(6, 78, 59, 0.4);
+  border-color: rgba(74, 222, 128, 0.45);
+}
 
-  .round-btn {
-    background: #111827;
-    color: #cbd5e1;
-    border-color: #334155;
-  }
+:root[data-theme='dark'] .round-btn {
+  background: #111827;
+  color: #cbd5e1;
+  border-color: #334155;
+}
 
-  .round-btn:hover,
-  .round-btn.active {
-    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-    border-color: #1e40af;
-    color: #eff6ff;
-  }
+:root[data-theme='dark'] .round-btn:hover,
+:root[data-theme='dark'] .round-btn.active {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  border-color: #1e40af;
+  color: #eff6ff;
+}
 
-  .match-card {
-    background: linear-gradient(165deg, #0f172a 0%, #111c31 100%) !important;
-    border-color: #334155 !important;
-    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
-  }
+:root[data-theme='dark'] .match-card {
+  background: linear-gradient(165deg, #0f172a 0%, #111c31 100%) !important;
+  border-color: #334155 !important;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+}
 
-  .match-date,
-  .score {
-    color: #93c5fd;
-  }
+:root[data-theme='dark'] .match-date,
+:root[data-theme='dark'] .score {
+  color: #93c5fd;
+}
 
-  .team,
-  .final-score {
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .team,
+:root[data-theme='dark'] .final-score {
+  color: #e2e8f0;
+}
 
-  .tip-inputs input,
-  .next-tip-inputs input {
-    background: #0b1220;
-    color: #e2e8f0;
-    border-color: #334155;
-  }
+:root[data-theme='dark'] .tip-inputs input,
+:root[data-theme='dark'] .next-tip-inputs input {
+  background: #0b1220;
+  color: #e2e8f0;
+  border-color: #334155;
+}
 
-  .tip-stepper-btn {
-    background: #1e293b;
-    border-color: #334155;
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .tip-stepper-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
 
-  .tip-stepper-btn:hover:not(:disabled) {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
-    color: white;
-  }
+:root[data-theme='dark'] .tip-stepper-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+}
 
-  .tip-stepper input {
-    background: #0b1220;
-    color: #e2e8f0;
-    border-color: #334155;
-  }
+:root[data-theme='dark'] .tip-stepper input {
+  background: #0b1220;
+  color: #e2e8f0;
+  border-color: #334155;
+}
 
-  .match-card-locked {
-    border-color: #92400e;
-    background: linear-gradient(180deg, #1c1007 0%, #2d1a07 100%) !important;
-  }
+:root[data-theme='dark'] .match-card-locked {
+  border-color: #92400e;
+  background: linear-gradient(180deg, #1c1007 0%, #2d1a07 100%) !important;
+}
 
-  .tip-colon {
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .tip-colon {
+  color: #e2e8f0;
+}
 
-  .deadline-passed {
-    background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
-  }
+:root[data-theme='dark'] .deadline-passed {
+  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+}
 
-  .submitted-tip {
-    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
-  }
+:root[data-theme='dark'] .submitted-tip {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+}
 
-  .visible-tips-panel,
-  .visible-tip-row,
-  .own-tip-row {
-    background: rgba(15, 23, 42, 0.7);
-    border-color: rgba(100, 116, 139, 0.4);
-  }
+:root[data-theme='dark'] .visible-tips-panel,
+:root[data-theme='dark'] .visible-tip-row,
+:root[data-theme='dark'] .own-tip-row {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(100, 116, 139, 0.4);
+}
 
-  .visible-tips-title,
-  .visible-tip-user,
-  .visible-tip-score {
-    color: #e2e8f0;
-  }
+:root[data-theme='dark'] .visible-tips-title,
+:root[data-theme='dark'] .visible-tip-user,
+:root[data-theme='dark'] .visible-tip-score {
+  color: #e2e8f0;
+}
 
-  .visible-tips-meta {
-    color: #93c5fd;
-  }
+:root[data-theme='dark'] .visible-tips-meta {
+  color: #93c5fd;
+}
 
-  .missing-tips-banner {
-    background: linear-gradient(135deg, #7c2d12 0%, #9a3412 100%);
-    border-color: #ea580c;
-    color: #fed7aa;
-  }
+:root[data-theme='dark'] .missing-tips-banner {
+  background: linear-gradient(135deg, #7c2d12 0%, #9a3412 100%);
+  border-color: #ea580c;
+  color: #fed7aa;
+}
 
-  .countdown-badge {
-    background: rgba(127, 29, 29, 0.45);
-    border-color: rgba(248, 113, 113, 0.55);
-    color: #fecaca;
-  }
+:root[data-theme='dark'] .countdown-badge {
+  background: rgba(127, 29, 29, 0.45);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
 
-  .status-open {
-    background: rgba(6, 95, 70, 0.45);
-    color: #86efac;
-  }
+:root[data-theme='dark'] .status-open {
+  background: rgba(6, 95, 70, 0.45);
+  color: #86efac;
+}
 
-  .status-locked {
-    background: rgba(120, 53, 15, 0.45);
-    color: #fcd34d;
-  }
+:root[data-theme='dark'] .status-locked {
+  background: rgba(120, 53, 15, 0.45);
+  color: #fcd34d;
+}
 
-  .status-finished {
-    background: rgba(51, 65, 85, 0.55);
-    color: #cbd5e1;
-  }
+:root[data-theme='dark'] .status-finished {
+  background: rgba(51, 65, 85, 0.55);
+  color: #cbd5e1;
 }
