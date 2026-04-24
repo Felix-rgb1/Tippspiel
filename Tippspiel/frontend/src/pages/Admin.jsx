@@ -20,6 +20,7 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [exportingTips, setExportingTips] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -210,6 +211,38 @@ function Admin() {
     }
   };
 
+  const handleExportTipsExcel = async () => {
+    try {
+      setExportingTips(true);
+      setError('');
+
+      const response = await adminAPI.exportTipsExcel();
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+
+      const contentDisposition = response.headers?.['content-disposition'] || '';
+      const fileNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+      const fileName = fileNameMatch?.[1] || 'tipps-export.xlsx';
+
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      setSuccess('Excel-Export wurde heruntergeladen');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Fehler beim Export der Tipps');
+    } finally {
+      setExportingTips(false);
+    }
+  };
+
   const handleSaveBonusResult = async () => {
     if (!bonusResult.championTeam || !bonusResult.runnerUpTeam) {
       setError('Bitte Weltmeister und Vizemeister setzen');
@@ -281,6 +314,14 @@ function Admin() {
               disabled={syncing}
             >
               {syncing ? '⏳ Synchronisiert...' : '🔄 Spiele synchronisieren'}
+            </button>
+            <button
+              type="button"
+              className="btn-success"
+              onClick={handleExportTipsExcel}
+              disabled={exportingTips}
+            >
+              {exportingTips ? '⏳ Export läuft...' : '📥 Tipps als Excel herunterladen'}
             </button>
           </div>
 

@@ -105,6 +105,7 @@ export const adminAPI = {
     apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),
   getUsers: () => apiGet('/admin/users'),
   deleteUser: (userId) => apiDelete(`/admin/users/${userId}`),
+  exportTipsExcel: () => apiGet('/admin/tips/export', { responseType: 'blob' }),
   getBonusResult: () => apiGet('/admin/bonus-result'),
   updateBonusResult: (championTeam, runnerUpTeam, championPoints, runnerUpPoints) =>
     apiPut('/admin/bonus-result', {

@@ -1,10 +1,96 @@
 const express = require('express');
 const pool = require('../db');
+const ExcelJS = require('exceljs');
 const { adminMiddleware } = require('../middleware/auth');
 const { syncMatchesFromFootballData } = require('../services/footballData');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 
 const router = express.Router();
+
+router.get('/tips/export', adminMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         t.id,
+         u.username,
+         u.email,
+         m.round,
+         m.match_date,
+         m.home_team,
+         m.away_team,
+         t.home_goals,
+         t.away_goals,
+         t.created_at,
+         t.updated_at
+       FROM tips t
+       JOIN users u ON u.id = t.user_id
+       JOIN matches m ON m.id = t.match_id
+       ORDER BY m.match_date ASC, u.username ASC`
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'WM Tippspiel';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('Tipps');
+    worksheet.columns = [
+      { header: 'Tipp-ID', key: 'tip_id', width: 10 },
+      { header: 'Benutzername', key: 'username', width: 24 },
+      { header: 'E-Mail', key: 'email', width: 30 },
+      { header: 'Runde', key: 'round', width: 18 },
+      { header: 'Spieldatum', key: 'match_date', width: 20 },
+      { header: 'Heimteam', key: 'home_team', width: 20 },
+      { header: 'Gastteam', key: 'away_team', width: 20 },
+      { header: 'Tipp Heimtore', key: 'home_goals', width: 14 },
+      { header: 'Tipp Gasttore', key: 'away_goals', width: 14 },
+      { header: 'Erstellt am', key: 'created_at', width: 20 },
+      { header: 'Aktualisiert am', key: 'updated_at', width: 20 }
+    ];
+
+    const dateFormat = new Intl.DateTimeFormat('de-DE', {
+      dateStyle: 'short',
+      timeStyle: 'medium'
+    });
+
+    result.rows.forEach((row) => {
+      worksheet.addRow({
+        tip_id: row.id,
+        username: row.username,
+        email: row.email,
+        round: row.round || '-',
+        match_date: dateFormat.format(new Date(row.match_date)),
+        home_team: row.home_team,
+        away_team: row.away_team,
+        home_goals: row.home_goals,
+        away_goals: row.away_goals,
+        created_at: dateFormat.format(new Date(row.created_at)),
+        updated_at: dateFormat.format(new Date(row.updated_at))
+      });
+    });
+
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: worksheet.columns.length }
+    };
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const fileName = `tipps-export-${yyyy}-${mm}-${dd}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Fehler beim Erstellen des Excel-Exports' });
+  }
+});
 
 router.post('/matches/sync', adminMiddleware, async (req, res) => {
   try {
