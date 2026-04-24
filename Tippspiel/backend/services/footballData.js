@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const { fetchRapidApiProbabilities } = require('./rapidApi');
 
 const API_BASE_URL = process.env.FOOTBALL_DATA_API_URL || 'https://api.football-data.org/v4';
 const COMPETITION_CODE = process.env.FOOTBALL_DATA_COMPETITION_CODE || 'WC';
@@ -456,6 +457,22 @@ async function getMatchInsights(pool, matchId) {
     }));
 
   const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
+
+  try {
+    const rapidApiProbabilities = await fetchRapidApiProbabilities(
+      match.home_team,
+      match.away_team,
+      match.match_date
+    );
+    if (rapidApiProbabilities) {
+      probabilities.homeWin = rapidApiProbabilities.homeWin;
+      probabilities.draw = rapidApiProbabilities.draw;
+      probabilities.awayWin = rapidApiProbabilities.awayWin;
+      probabilities.note = rapidApiProbabilities.note;
+    }
+  } catch (err) {
+    // Keep fallback probabilities if RapidAPI is unavailable or mapping fails.
+  }
 
   return {
     match,

@@ -4,8 +4,40 @@ const ExcelJS = require('exceljs');
 const { adminMiddleware } = require('../middleware/auth');
 const { syncMatchesFromFootballData } = require('../services/footballData');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
+const { testRapidApi, isRapidApiConfigured } = require('../services/rapidApi');
 
 const router = express.Router();
+
+router.get('/integrations/rapidapi/test', adminMiddleware, async (req, res) => {
+  try {
+    if (!isRapidApiConfigured()) {
+      return res.status(400).json({
+        error: 'RapidAPI ist nicht konfiguriert',
+        requiredEnv: ['RAPIDAPI_KEY', 'RAPIDAPI_HOST'],
+        optionalEnv: ['RAPIDAPI_TEST_PATH', 'RAPIDAPI_ODDS_PATH']
+      });
+    }
+
+    const path = req.query.path || process.env.RAPIDAPI_TEST_PATH || process.env.RAPIDAPI_ODDS_PATH;
+    if (!path) {
+      return res.status(400).json({
+        error: 'Kein Testpfad gesetzt. Uebergib ?path=/... oder setze RAPIDAPI_TEST_PATH'
+      });
+    }
+
+    const queryParams = { ...req.query };
+    delete queryParams.path;
+
+    const result = await testRapidApi(path, queryParams);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({
+      error: err.message || 'RapidAPI Test fehlgeschlagen',
+      details: err.details || null
+    });
+  }
+});
 
 router.get('/tips/export', adminMiddleware, async (req, res) => {
   try {

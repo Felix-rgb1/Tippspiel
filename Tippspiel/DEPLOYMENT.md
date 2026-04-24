@@ -27,6 +27,10 @@
    JWT_SECRET=<generiere-einen-zufälligen-string>
    FOOTBALL_DATA_API_KEY=<dein-football-data-api-key>
    FOOTBALL_DATA_COMPETITION_CODE=WC
+   RAPIDAPI_KEY=<dein-rapidapi-key>
+   RAPIDAPI_HOST=<api-host-von-rapidapi>
+   RAPIDAPI_TEST_PATH=/status
+   RAPIDAPI_ODDS_PATH=/odds
    NODE_ENV=production
    FRONTEND_URL=https://<deine-netlify-url>
    ```

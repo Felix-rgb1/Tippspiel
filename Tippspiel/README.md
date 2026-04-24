@@ -27,6 +27,11 @@ cp .env.example .env
 # optional fuer automatischen Import:
 # FOOTBALL_DATA_API_KEY=...
 # FOOTBALL_DATA_COMPETITION_CODE=WC
+# optional fuer RapidAPI-Tests:
+# RAPIDAPI_KEY=...
+# RAPIDAPI_HOST=...
+# RAPIDAPI_TEST_PATH=/status
+# RAPIDAPI_ODDS_PATH=/odds
 npm start
 ```
 
