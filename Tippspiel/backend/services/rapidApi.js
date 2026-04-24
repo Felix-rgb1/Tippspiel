@@ -63,11 +63,24 @@ const TEAM_NAME_SEARCH_ALIAS = {
 };
 
 function isRapidApiConfigured() {
-  return Boolean(process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_HOST);
+  return Boolean((process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_HOST) || isApiSportsDirectMode());
+}
+
+function getProviderMode() {
+  const mode = (process.env.RAPIDAPI_PROVIDER || '').trim().toLowerCase();
+  if (mode === 'api-football-direct' || mode === 'direct') {
+    return 'api-football-direct';
+  }
+  return 'rapidapi';
 }
 
 function isApiFootballHost() {
-  return (process.env.RAPIDAPI_HOST || '').toLowerCase().includes('api-football');
+  return isApiSportsDirectMode() ||
+    (process.env.RAPIDAPI_HOST || '').toLowerCase().includes('api-football');
+}
+
+function isApiSportsDirectMode() {
+  return getProviderMode() === 'api-football-direct' && Boolean(process.env.APIFOOTBALL_KEY);
 }
 
 function normalizeComparableName(value) {
@@ -238,7 +251,13 @@ async function rapidApiRequest(path, queryParams = {}) {
   }
 
   const safePath = path.startsWith('/') ? path : `/${path}`;
-  const url = new URL(`https://${process.env.RAPIDAPI_HOST}${safePath}`);
+  const normalizedPath = isApiSportsDirectMode()
+    ? (safePath.replace(/^\/v3(?=\/|$)/, '') || '/')
+    : safePath;
+  const baseUrl = isApiSportsDirectMode()
+    ? (process.env.APIFOOTBALL_BASE_URL || 'https://v3.football.api-sports.io')
+    : `https://${process.env.RAPIDAPI_HOST}`;
+  const url = new URL(`${baseUrl}${normalizedPath}`);
 
   Object.entries(queryParams).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
@@ -248,10 +267,14 @@ async function rapidApiRequest(path, queryParams = {}) {
 
   const response = await fetch(url.toString(), {
     method: 'GET',
-    headers: {
-      'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
-      'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
-    }
+    headers: isApiSportsDirectMode()
+      ? {
+        'x-apisports-key': process.env.APIFOOTBALL_KEY
+      }
+      : {
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+        'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
+      }
   });
 
   const contentType = response.headers.get('content-type') || '';
@@ -492,7 +515,11 @@ async function testRapidApi(path, queryParams = {}) {
 
   return {
     configured: isRapidApiConfigured(),
+    mode: isApiSportsDirectMode() ? 'api-sports-direct' : `rapidapi:${process.env.RAPIDAPI_HOST || 'unknown-host'}`,
     host: process.env.RAPIDAPI_HOST,
+    baseUrl: isApiSportsDirectMode()
+      ? (process.env.APIFOOTBALL_BASE_URL || 'https://v3.football.api-sports.io')
+      : `https://${process.env.RAPIDAPI_HOST}`,
     path,
     extractedProbabilities: probabilities,
     sample: payload

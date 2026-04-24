@@ -12,9 +12,12 @@ router.get('/integrations/rapidapi/test', adminMiddleware, async (req, res) => {
   try {
     if (!isRapidApiConfigured()) {
       return res.status(400).json({
-        error: 'RapidAPI ist nicht konfiguriert',
-        requiredEnv: ['RAPIDAPI_KEY', 'RAPIDAPI_HOST'],
-        optionalEnv: ['RAPIDAPI_TEST_PATH', 'RAPIDAPI_ODDS_PATH']
+        error: 'API-FOOTBALL ist nicht konfiguriert',
+        requiredEnvEither: [
+          ['RAPIDAPI_KEY', 'RAPIDAPI_HOST'],
+          ['APIFOOTBALL_KEY']
+        ],
+        optionalEnv: ['APIFOOTBALL_BASE_URL', 'RAPIDAPI_TEST_PATH', 'RAPIDAPI_ODDS_PATH']
       });
     }
 

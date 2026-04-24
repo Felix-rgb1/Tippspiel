@@ -32,6 +32,9 @@ cp .env.example .env
 # RAPIDAPI_HOST=...
 # RAPIDAPI_TEST_PATH=/status
 # RAPIDAPI_ODDS_PATH=/odds
+# alternativ direkt via API-FOOTBALL Dashboard:
+# APIFOOTBALL_KEY=...
+# APIFOOTBALL_BASE_URL=https://v3.football.api-sports.io
 npm start
 ```
 
