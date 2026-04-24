@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { adminAPI, matchAPI } from '../api';
+import * as XLSX from 'xlsx';
+import { adminAPI, matchAPI, tipAPI } from '../api';
 import { getMatchThemeStyle } from '../utils/teamTheme';
 import './Admin.css';
 
@@ -211,6 +212,78 @@ function Admin() {
     }
   };
 
+  const extractApiErrorMessage = async (err, fallbackMessage) => {
+    const responseData = err?.response?.data;
+
+    if (responseData instanceof Blob) {
+      try {
+        const text = await responseData.text();
+        const parsed = JSON.parse(text);
+        return parsed?.error || fallbackMessage;
+      } catch {
+        return fallbackMessage;
+      }
+    }
+
+    return responseData?.error || fallbackMessage;
+  };
+
+  const downloadTipsExcelInBrowser = async () => {
+    const usersResponse = await adminAPI.getUsers();
+    const users = usersResponse.data || [];
+
+    const tipsPerUser = await Promise.all(
+      users.map(async (user) => {
+        const tipsResponse = await tipAPI.getUserTips(user.id);
+        return (tipsResponse.data || []).map((tip) => ({
+          tipId: tip.id,
+          username: user.username,
+          email: user.email,
+          round: tip.round || '-',
+          matchDate: tip.match_date,
+          homeTeam: tip.home_team,
+          awayTeam: tip.away_team,
+          homeGoals: tip.home_goals,
+          awayGoals: tip.away_goals,
+          createdAt: tip.created_at,
+          updatedAt: tip.updated_at
+        }));
+      })
+    );
+
+    const rows = tipsPerUser
+      .flat()
+      .sort((a, b) => {
+        const dateA = new Date(a.matchDate).getTime();
+        const dateB = new Date(b.matchDate).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.username.localeCompare(b.username, 'de');
+      })
+      .map((row) => ({
+        'Tipp-ID': row.tipId,
+        Benutzername: row.username,
+        'E-Mail': row.email,
+        Runde: row.round,
+        Spieldatum: formatDate(row.matchDate),
+        Heimteam: row.homeTeam,
+        Gastteam: row.awayTeam,
+        'Tipp Heimtore': row.homeGoals,
+        'Tipp Gasttore': row.awayGoals,
+        'Erstellt am': formatDate(row.createdAt),
+        'Aktualisiert am': formatDate(row.updatedAt)
+      }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Tipps');
+
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    XLSX.writeFile(workbook, `tipps-export-${yyyy}-${mm}-${dd}.xlsx`);
+  };
+
   const handleExportTipsExcel = async () => {
     try {
       setExportingTips(true);
@@ -237,7 +310,15 @@ function Admin() {
       setSuccess('Excel-Export wurde heruntergeladen');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Fehler beim Export der Tipps');
+      try {
+        await downloadTipsExcelInBrowser();
+        setSuccess('Excel-Export wurde per Browser-Fallback heruntergeladen');
+        setTimeout(() => setSuccess(''), 3000);
+      } catch (fallbackErr) {
+        const msg = await extractApiErrorMessage(err, 'Fehler beim Export der Tipps');
+        const fallbackMsg = await extractApiErrorMessage(fallbackErr, msg);
+        setError(fallbackMsg);
+      }
     } finally {
       setExportingTips(false);
     }
