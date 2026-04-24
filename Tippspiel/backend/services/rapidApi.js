@@ -1,5 +1,8 @@
 const fetch = require('node-fetch');
 
+const RAPIDAPI_CACHE_TTL_MS = Number.parseInt(process.env.RAPIDAPI_CACHE_TTL_MS || '120000', 10);
+const rapidApiCache = new Map();
+
 const TEAM_NAME_SEARCH_ALIAS = {
   Deutschland: 'Germany',
   Argentinien: 'Argentina',
@@ -77,6 +80,10 @@ function getProviderMode() {
 function isApiFootballHost() {
   return isApiSportsDirectMode() ||
     (process.env.RAPIDAPI_HOST || '').toLowerCase().includes('api-football');
+}
+
+function isSofascoreHost() {
+  return (process.env.RAPIDAPI_HOST || '').toLowerCase().includes('sofascore');
 }
 
 function isApiSportsDirectMode() {
@@ -265,6 +272,13 @@ async function rapidApiRequest(path, queryParams = {}) {
     }
   });
 
+  const cacheKey = url.toString();
+  const cached = rapidApiCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.payload;
+  }
+
   const response = await fetch(url.toString(), {
     method: 'GET',
     headers: isApiSportsDirectMode()
@@ -282,11 +296,20 @@ async function rapidApiRequest(path, queryParams = {}) {
   const payload = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
+    if (response.status === 429 && cached?.payload) {
+      return cached.payload;
+    }
+
     const err = new Error(`RapidAPI Fehler: ${response.status}`);
     err.statusCode = 502;
     err.details = payload;
     throw err;
   }
+
+  rapidApiCache.set(cacheKey, {
+    payload,
+    expiresAt: now + RAPIDAPI_CACHE_TTL_MS
+  });
 
   return payload;
 }
@@ -371,6 +394,179 @@ function mapFixtureToHeadToHead(entry) {
     awayTeam: entry?.teams?.away?.name,
     score: `${homeGoals}:${awayGoals}`
   };
+}
+
+function normalizeSofascoreTeamResult(result) {
+  const entity = result?.entity;
+  if (!entity || entity?.sport?.slug !== 'football') {
+    return null;
+  }
+
+  if (typeof entity.id !== 'number') {
+    return null;
+  }
+
+  if (typeof entity.national !== 'boolean') {
+    return null;
+  }
+
+  return {
+    id: entity.id,
+    name: entity.name,
+    country: entity?.country?.name || null
+  };
+}
+
+function getSofascoreScoreValue(scoreObject) {
+  if (!scoreObject || typeof scoreObject !== 'object') {
+    return null;
+  }
+
+  const direct = parseNumeric(scoreObject.current);
+  if (direct !== null) {
+    return direct;
+  }
+
+  const display = parseNumeric(scoreObject.display);
+  if (display !== null) {
+    return display;
+  }
+
+  return null;
+}
+
+function mapSofascoreEventToRecentMatch(event, teamId) {
+  const homeId = event?.homeTeam?.id;
+  const awayId = event?.awayTeam?.id;
+  if (homeId !== teamId && awayId !== teamId) {
+    return null;
+  }
+
+  const isHomeTeam = homeId === teamId;
+  const homeGoals = getSofascoreScoreValue(event?.homeScore);
+  const awayGoals = getSofascoreScoreValue(event?.awayScore);
+  if (homeGoals === null || awayGoals === null) {
+    return null;
+  }
+
+  const ownGoals = isHomeTeam ? homeGoals : awayGoals;
+  const opponentGoals = isHomeTeam ? awayGoals : homeGoals;
+
+  return {
+    date: event?.startTimestamp ? new Date(event.startTimestamp * 1000).toISOString() : null,
+    opponent: isHomeTeam ? event?.awayTeam?.name : event?.homeTeam?.name,
+    ownGoals,
+    opponentGoals,
+    outcome: getOutcome(ownGoals, opponentGoals, true)
+  };
+}
+
+function mapSofascoreEventToHeadToHead(event) {
+  const homeGoals = getSofascoreScoreValue(event?.homeScore);
+  const awayGoals = getSofascoreScoreValue(event?.awayScore);
+  if (homeGoals === null || awayGoals === null) {
+    return null;
+  }
+
+  return {
+    date: event?.startTimestamp ? new Date(event.startTimestamp * 1000).toISOString() : null,
+    homeTeam: event?.homeTeam?.name,
+    awayTeam: event?.awayTeam?.name,
+    score: `${homeGoals}:${awayGoals}`
+  };
+}
+
+function buildTeamSearchCandidates(teamName) {
+  return [teamName, TEAM_NAME_SEARCH_ALIAS[teamName]].filter(Boolean);
+}
+
+async function findSofascoreTeam(teamName) {
+  const candidates = buildTeamSearchCandidates(teamName);
+
+  for (const candidate of candidates) {
+    const payload = await rapidApiRequest('/search', {
+      q: candidate,
+      type: 'all',
+      page: 0
+    });
+
+    const normalizedTarget = normalizeComparableName(candidate);
+    const teams = (payload?.results || [])
+      .map(normalizeSofascoreTeamResult)
+      .filter(Boolean);
+
+    if (!teams.length) {
+      continue;
+    }
+
+    const exactMatch = teams.find((entry) => {
+      const name = normalizeComparableName(entry.name);
+      const country = normalizeComparableName(entry.country || '');
+      return name === normalizedTarget || country === normalizedTarget;
+    });
+
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    return teams[0];
+  }
+
+  return null;
+}
+
+async function fetchSofascoreRawLastMatches(teamId) {
+  const payload = await rapidApiRequest('/teams/get-last-matches', {
+    teamId,
+    pageIndex: 0
+  });
+
+  return payload?.events || [];
+}
+
+async function fetchSofascoreRecentMatchesForTeam(teamName, last = 5) {
+  const team = await findSofascoreTeam(teamName);
+  if (!team?.id) {
+    return [];
+  }
+
+  const events = await fetchSofascoreRawLastMatches(team.id);
+  return events
+    .map((event) => mapSofascoreEventToRecentMatch(event, team.id))
+    .filter(Boolean)
+    .slice(0, last);
+}
+
+async function fetchSofascoreHeadToHead(homeTeam, awayTeam, last = 5) {
+  const home = await findSofascoreTeam(homeTeam);
+  const away = await findSofascoreTeam(awayTeam);
+  if (!home?.id || !away?.id) {
+    return [];
+  }
+
+  const [homeEvents, awayEvents] = await Promise.all([
+    fetchSofascoreRawLastMatches(home.id),
+    fetchSofascoreRawLastMatches(away.id)
+  ]);
+
+  const allEventsById = new Map();
+  [...homeEvents, ...awayEvents].forEach((event) => {
+    if (event?.id) {
+      allEventsById.set(event.id, event);
+    }
+  });
+
+  const h2hEvents = Array.from(allEventsById.values())
+    .filter((event) => {
+      const ids = [event?.homeTeam?.id, event?.awayTeam?.id];
+      return ids.includes(home.id) && ids.includes(away.id);
+    })
+    .sort((first, second) => (second?.startTimestamp || 0) - (first?.startTimestamp || 0));
+
+  return h2hEvents
+    .map(mapSofascoreEventToHeadToHead)
+    .filter(Boolean)
+    .slice(0, last);
 }
 
 async function findApiFootballFixtureId(homeTeamId, awayTeamId, matchDate) {
@@ -465,21 +661,31 @@ async function fetchApiFootballHeadToHead(homeTeam, awayTeam, last = 5) {
 }
 
 async function fetchRapidApiMatchInsights(homeTeam, awayTeam) {
-  if (!isApiFootballHost()) {
-    return {
-      homeRecentMatches: [],
-      awayRecentMatches: [],
-      headToHead: []
-    };
+  if (isApiFootballHost()) {
+    const [homeRecentMatches, awayRecentMatches, headToHead] = await Promise.all([
+      fetchApiFootballRecentMatchesForTeam(homeTeam, 5),
+      fetchApiFootballRecentMatchesForTeam(awayTeam, 5),
+      fetchApiFootballHeadToHead(homeTeam, awayTeam, 5)
+    ]);
+
+    return { homeRecentMatches, awayRecentMatches, headToHead };
   }
 
-  const [homeRecentMatches, awayRecentMatches, headToHead] = await Promise.all([
-    fetchApiFootballRecentMatchesForTeam(homeTeam, 5),
-    fetchApiFootballRecentMatchesForTeam(awayTeam, 5),
-    fetchApiFootballHeadToHead(homeTeam, awayTeam, 5)
-  ]);
+  if (isSofascoreHost()) {
+    const [homeRecentMatches, awayRecentMatches, headToHead] = await Promise.all([
+      fetchSofascoreRecentMatchesForTeam(homeTeam, 5),
+      fetchSofascoreRecentMatchesForTeam(awayTeam, 5),
+      fetchSofascoreHeadToHead(homeTeam, awayTeam, 5)
+    ]);
 
-  return { homeRecentMatches, awayRecentMatches, headToHead };
+    return { homeRecentMatches, awayRecentMatches, headToHead };
+  }
+
+  return {
+    homeRecentMatches: [],
+    awayRecentMatches: [],
+    headToHead: []
+  };
 }
 
 async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate) {
