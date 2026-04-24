@@ -5,6 +5,119 @@ import { getMatchThemeStyle } from '../utils/teamTheme';
 import BallLoader from '../components/BallLoader';
 import './Dashboard.css';
 
+const TEAM_ISO_MAP = {
+  argentina: 'AR',
+  australien: 'AU',
+  australia: 'AU',
+  belgien: 'BE',
+  belgium: 'BE',
+  bolivien: 'BO',
+  bolivia: 'BO',
+  bosnia: 'BA',
+  bosnien: 'BA',
+  brasilien: 'BR',
+  brazil: 'BR',
+  canada: 'CA',
+  kanada: 'CA',
+  chile: 'CL',
+  china: 'CN',
+  costa rica: 'CR',
+  daenemark: 'DK',
+  danemark: 'DK',
+  denmark: 'DK',
+  deutschland: 'DE',
+  ecuador: 'EC',
+  england: 'GB',
+  frankreich: 'FR',
+  france: 'FR',
+  georgien: 'GE',
+  georgia: 'GE',
+  germany: 'DE',
+  ghana: 'GH',
+  iran: 'IR',
+  irak: 'IQ',
+  iraq: 'IQ',
+  italien: 'IT',
+  italy: 'IT',
+  japan: 'JP',
+  kamerun: 'CM',
+  cameroon: 'CM',
+  katar: 'QA',
+  qatar: 'QA',
+  kolumbien: 'CO',
+  colombia: 'CO',
+  kroatien: 'HR',
+  croatia: 'HR',
+  marokko: 'MA',
+  morocco: 'MA',
+  mexiko: 'MX',
+  mexico: 'MX',
+  neuseeland: 'NZ',
+  new zealand: 'NZ',
+  niederlande: 'NL',
+  netherlands: 'NL',
+  norwegen: 'NO',
+  norway: 'NO',
+  paraguay: 'PY',
+  peru: 'PE',
+  polen: 'PL',
+  poland: 'PL',
+  portugal: 'PT',
+  rumaenien: 'RO',
+  romania: 'RO',
+  saudi arabia: 'SA',
+  saudi arabien: 'SA',
+  schweiz: 'CH',
+  switzerland: 'CH',
+  senegal: 'SN',
+  serbien: 'RS',
+  serbia: 'RS',
+  spanien: 'ES',
+  spain: 'ES',
+  suedafrika: 'ZA',
+  south africa: 'ZA',
+  suedkorea: 'KR',
+  sudkorea: 'KR',
+  south korea: 'KR',
+  tschechien: 'CZ',
+  czech republic: 'CZ',
+  tunesien: 'TN',
+  tunisia: 'TN',
+  uruguay: 'UY',
+  usa: 'US',
+  vereinigte staaten: 'US',
+  united states: 'US',
+  venezuela: 'VE'
+};
+
+function normalizeTeamName(teamName) {
+  return (teamName || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getFlagEmojiFromIso(isoCode) {
+  if (!isoCode || isoCode.length !== 2) {
+    return '🏳️';
+  }
+
+  const upperIso = isoCode.toUpperCase();
+  return String.fromCodePoint(...upperIso.split('').map((char) => 127397 + char.charCodeAt()));
+}
+
+function getTeamDisplay(teamName) {
+  const normalized = normalizeTeamName(teamName);
+  const isoCode = TEAM_ISO_MAP[normalized];
+
+  return {
+    flag: getFlagEmojiFromIso(isoCode),
+    label: teamName
+  };
+}
+
 function Dashboard() {
   const [matches, setMatches] = useState([]);
   const [tips, setTips] = useState({});
@@ -293,7 +406,17 @@ function Dashboard() {
 
               return (
                 <div key={`next-${match.id}`} className="next-match-card">
-                  <div className="next-match-teams">{match.home_team} vs {match.away_team}</div>
+                  <div className="next-match-teams">
+                    <span className="next-match-team">
+                      <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.home_team).flag}</span>
+                      <span className="team-name">{getTeamDisplay(match.home_team).label}</span>
+                    </span>
+                    <span className="next-vs">vs</span>
+                    <span className="next-match-team">
+                      <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.away_team).flag}</span>
+                      <span className="team-name">{getTeamDisplay(match.away_team).label}</span>
+                    </span>
+                  </div>
                   <div className="next-match-meta">
                     <span>{formatDate(match.match_date)}</span>
                     {match.round && <span>{match.round}</span>}
@@ -462,7 +585,10 @@ function Dashboard() {
               </div>
               
               <div className="match-teams">
-                <div className="team">{match.home_team}</div>
+                <div className="team">
+                  <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.home_team).flag}</span>
+                  <span className="team-name">{getTeamDisplay(match.home_team).label}</span>
+                </div>
                 <div className="score">
                   {match.finished ? (
                     <div className="final-score">
@@ -474,7 +600,10 @@ function Dashboard() {
                     <div>vs</div>
                   )}
                 </div>
-                <div className="team">{match.away_team}</div>
+                <div className="team">
+                  <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.away_team).flag}</span>
+                  <span className="team-name">{getTeamDisplay(match.away_team).label}</span>
+                </div>
               </div>
 
               {!match.finished && (
