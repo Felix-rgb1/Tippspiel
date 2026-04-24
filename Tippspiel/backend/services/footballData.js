@@ -1,5 +1,5 @@
 const fetch = require('node-fetch');
-const { fetchRapidApiProbabilities } = require('./rapidApi');
+const { fetchRapidApiProbabilities, fetchRapidApiMatchInsights } = require('./rapidApi');
 
 const API_BASE_URL = process.env.FOOTBALL_DATA_API_URL || 'https://api.football-data.org/v4';
 const COMPETITION_CODE = process.env.FOOTBALL_DATA_COMPETITION_CODE || 'WC';
@@ -455,6 +455,31 @@ async function getMatchInsights(pool, matchId) {
       awayTeam: row.away_team,
       score: `${row.home_goals}:${row.away_goals}`
     }));
+
+  try {
+    if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
+      const rapidInsights = await fetchRapidApiMatchInsights(match.home_team, match.away_team);
+
+      if (homeRecentMatches.length === 0 && rapidInsights.homeRecentMatches.length > 0) {
+        homeRecentMatches.push(...rapidInsights.homeRecentMatches);
+      }
+
+      if (awayRecentMatches.length === 0 && rapidInsights.awayRecentMatches.length > 0) {
+        awayRecentMatches.push(...rapidInsights.awayRecentMatches);
+      }
+
+      if (headToHead.length === 0 && rapidInsights.headToHead.length > 0) {
+        headToHead.push(...rapidInsights.headToHead);
+      }
+
+      if (source === 'local' &&
+        (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0)) {
+        source = 'rapidapi';
+      }
+    }
+  } catch (err) {
+    // Keep existing data when RapidAPI fallback is unavailable.
+  }
 
   const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
 

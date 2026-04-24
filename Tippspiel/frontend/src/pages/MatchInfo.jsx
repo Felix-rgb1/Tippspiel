@@ -49,7 +49,9 @@ function MatchInfo() {
 
   const sourceLabel = useMemo(() => {
     if (!insights?.source) return 'lokale Daten';
-    return insights.source === 'football-data' ? 'football-data API' : 'lokale Daten';
+    if (insights.source === 'football-data') return 'football-data API';
+    if (insights.source === 'rapidapi') return 'RapidAPI / API-FOOTBALL';
+    return 'lokale Daten';
   }, [insights]);
 
   if (loading) {

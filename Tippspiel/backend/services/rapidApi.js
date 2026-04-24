@@ -78,6 +78,18 @@ function normalizeComparableName(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function getOutcome(homeGoals, awayGoals, isHomeTeam) {
+  if (homeGoals === awayGoals) {
+    return 'U';
+  }
+
+  if (isHomeTeam) {
+    return homeGoals > awayGoals ? 'S' : 'N';
+  }
+
+  return awayGoals > homeGoals ? 'S' : 'N';
+}
+
 function toDateOnly(matchDate) {
   const date = new Date(matchDate);
   if (Number.isNaN(date.getTime())) {
@@ -303,6 +315,41 @@ function findFixtureIdInList(fixtures, homeTeamId, awayTeamId) {
   return swappedMatch?.fixture?.id || null;
 }
 
+function mapFixtureToRecentMatch(entry, teamId) {
+  const homeId = entry?.teams?.home?.id;
+  const isHomeTeam = homeId === teamId;
+  const ownGoals = isHomeTeam ? entry?.goals?.home : entry?.goals?.away;
+  const opponentGoals = isHomeTeam ? entry?.goals?.away : entry?.goals?.home;
+
+  if (ownGoals === null || ownGoals === undefined || opponentGoals === null || opponentGoals === undefined) {
+    return null;
+  }
+
+  return {
+    date: entry?.fixture?.date,
+    opponent: isHomeTeam ? entry?.teams?.away?.name : entry?.teams?.home?.name,
+    ownGoals,
+    opponentGoals,
+    outcome: getOutcome(ownGoals, opponentGoals, true)
+  };
+}
+
+function mapFixtureToHeadToHead(entry) {
+  const homeGoals = entry?.goals?.home;
+  const awayGoals = entry?.goals?.away;
+
+  if (homeGoals === null || homeGoals === undefined || awayGoals === null || awayGoals === undefined) {
+    return null;
+  }
+
+  return {
+    date: entry?.fixture?.date,
+    homeTeam: entry?.teams?.home?.name,
+    awayTeam: entry?.teams?.away?.name,
+    score: `${homeGoals}:${awayGoals}`
+  };
+}
+
 async function findApiFootballFixtureId(homeTeamId, awayTeamId, matchDate) {
   const dateOnly = toDateOnly(matchDate);
   if (!dateOnly) {
@@ -354,6 +401,64 @@ async function fetchApiFootballProbabilities(homeTeam, awayTeam, matchDate) {
   };
 }
 
+async function fetchApiFootballRecentMatchesForTeam(teamName, last = 5) {
+  const teamId = await findApiFootballTeamId(teamName);
+  if (!teamId) {
+    return [];
+  }
+
+  const payload = await rapidApiRequest('/v3/fixtures', {
+    team: teamId,
+    last,
+    status: 'FT'
+  });
+
+  const fixtures = payload?.response || [];
+  return fixtures
+    .map((entry) => mapFixtureToRecentMatch(entry, teamId))
+    .filter(Boolean)
+    .slice(0, last);
+}
+
+async function fetchApiFootballHeadToHead(homeTeam, awayTeam, last = 5) {
+  const homeTeamId = await findApiFootballTeamId(homeTeam);
+  const awayTeamId = await findApiFootballTeamId(awayTeam);
+
+  if (!homeTeamId || !awayTeamId) {
+    return [];
+  }
+
+  const payload = await rapidApiRequest('/v3/fixtures/headtohead', {
+    h2h: `${homeTeamId}-${awayTeamId}`,
+    last,
+    status: 'FT'
+  });
+
+  const fixtures = payload?.response || [];
+  return fixtures
+    .map(mapFixtureToHeadToHead)
+    .filter(Boolean)
+    .slice(0, last);
+}
+
+async function fetchRapidApiMatchInsights(homeTeam, awayTeam) {
+  if (!isApiFootballHost()) {
+    return {
+      homeRecentMatches: [],
+      awayRecentMatches: [],
+      headToHead: []
+    };
+  }
+
+  const [homeRecentMatches, awayRecentMatches, headToHead] = await Promise.all([
+    fetchApiFootballRecentMatchesForTeam(homeTeam, 5),
+    fetchApiFootballRecentMatchesForTeam(awayTeam, 5),
+    fetchApiFootballHeadToHead(homeTeam, awayTeam, 5)
+  ]);
+
+  return { homeRecentMatches, awayRecentMatches, headToHead };
+}
+
 async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate) {
   if (isApiFootballHost()) {
     return fetchApiFootballProbabilities(homeTeam, awayTeam, matchDate);
@@ -397,5 +502,6 @@ async function testRapidApi(path, queryParams = {}) {
 module.exports = {
   isRapidApiConfigured,
   fetchRapidApiProbabilities,
+  fetchRapidApiMatchInsights,
   testRapidApi
 };
