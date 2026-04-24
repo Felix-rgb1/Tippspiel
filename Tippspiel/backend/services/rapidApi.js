@@ -569,6 +569,25 @@ async function fetchSofascoreHeadToHead(homeTeam, awayTeam, last = 5) {
     .slice(0, last);
 }
 
+function buildSofascoreHeadToHeadFromEvents(homeTeamId, awayTeamId, homeEvents, awayEvents, last = 5) {
+  const allEventsById = new Map();
+  [...homeEvents, ...awayEvents].forEach((event) => {
+    if (event?.id) {
+      allEventsById.set(event.id, event);
+    }
+  });
+
+  return Array.from(allEventsById.values())
+    .filter((event) => {
+      const ids = [event?.homeTeam?.id, event?.awayTeam?.id];
+      return ids.includes(homeTeamId) && ids.includes(awayTeamId);
+    })
+    .sort((first, second) => (second?.startTimestamp || 0) - (first?.startTimestamp || 0))
+    .map(mapSofascoreEventToHeadToHead)
+    .filter(Boolean)
+    .slice(0, last);
+}
+
 async function findApiFootballFixtureId(homeTeamId, awayTeamId, matchDate) {
   const dateOnly = toDateOnly(matchDate);
   if (!dateOnly) {
@@ -672,11 +691,36 @@ async function fetchRapidApiMatchInsights(homeTeam, awayTeam) {
   }
 
   if (isSofascoreHost()) {
-    const [homeRecentMatches, awayRecentMatches, headToHead] = await Promise.all([
-      fetchSofascoreRecentMatchesForTeam(homeTeam, 5),
-      fetchSofascoreRecentMatchesForTeam(awayTeam, 5),
-      fetchSofascoreHeadToHead(homeTeam, awayTeam, 5)
+    const home = await findSofascoreTeam(homeTeam);
+    const away = await findSofascoreTeam(awayTeam);
+
+    if (!home?.id || !away?.id) {
+      return {
+        homeRecentMatches: [],
+        awayRecentMatches: [],
+        headToHead: []
+      };
+    }
+
+    const [homeEventsResult, awayEventsResult] = await Promise.allSettled([
+      fetchSofascoreRawLastMatches(home.id),
+      fetchSofascoreRawLastMatches(away.id)
     ]);
+
+    const homeEvents = homeEventsResult.status === 'fulfilled' ? homeEventsResult.value : [];
+    const awayEvents = awayEventsResult.status === 'fulfilled' ? awayEventsResult.value : [];
+
+    const homeRecentMatches = homeEvents
+      .map((event) => mapSofascoreEventToRecentMatch(event, home.id))
+      .filter(Boolean)
+      .slice(0, 5);
+
+    const awayRecentMatches = awayEvents
+      .map((event) => mapSofascoreEventToRecentMatch(event, away.id))
+      .filter(Boolean)
+      .slice(0, 5);
+
+    const headToHead = buildSofascoreHeadToHeadFromEvents(home.id, away.id, homeEvents, awayEvents, 5);
 
     return { homeRecentMatches, awayRecentMatches, headToHead };
   }

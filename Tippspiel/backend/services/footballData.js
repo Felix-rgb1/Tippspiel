@@ -472,8 +472,7 @@ async function getMatchInsights(pool, matchId) {
         headToHead.push(...rapidInsights.headToHead);
       }
 
-      if (source === 'local' &&
-        (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0)) {
+      if (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0) {
         source = 'rapidapi';
       }
     }
