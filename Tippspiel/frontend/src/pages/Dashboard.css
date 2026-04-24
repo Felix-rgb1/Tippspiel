@@ -171,6 +171,11 @@
   min-width: 0;
 }
 
+.next-match-team .team-name {
+  font-size: 1.12rem;
+  font-weight: 800;
+}
+
 .next-vs {
   font-size: 0.8rem;
   color: #64748b;
@@ -368,14 +373,27 @@
   border-radius: 0.5rem;
 }
 
-.team-flag {
+.team-flag-img {
   flex: 0 0 auto;
-  font-size: 1.2rem;
+  width: 20px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+  line-height: 1;
+}
+
+.team-flag-fallback {
+  flex: 0 0 auto;
+  font-size: 1rem;
   line-height: 1;
 }
 
 .team-name {
   min-width: 0;
+  font-size: 1.32rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   text-wrap: balance;
 }
 
@@ -922,8 +940,21 @@
     padding: 0.35rem;
   }
 
-  .team-flag {
+  .team-flag-fallback {
     font-size: 1rem;
+  }
+
+  .team-flag-img {
+    width: 16px;
+    height: 12px;
+  }
+
+  .next-match-team .team-name {
+    font-size: 0.96rem;
+  }
+
+  .team-name {
+    font-size: 1.06rem;
   }
 
   .final-score {

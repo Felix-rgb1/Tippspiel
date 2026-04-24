@@ -99,13 +99,8 @@ function normalizeTeamName(teamName) {
     .trim();
 }
 
-function getFlagEmojiFromIso(isoCode) {
-  if (!isoCode || isoCode.length !== 2) {
-    return '🏳️';
-  }
-
-  const upperIso = isoCode.toUpperCase();
-  return String.fromCodePoint(...upperIso.split('').map((char) => 127397 + char.charCodeAt()));
+function getFlagImageUrl(isoCode) {
+  return `https://flagcdn.com/w40/${isoCode.toLowerCase()}.png`;
 }
 
 function getTeamDisplay(teamName) {
@@ -113,9 +108,26 @@ function getTeamDisplay(teamName) {
   const isoCode = TEAM_ISO_MAP[normalized];
 
   return {
-    flag: getFlagEmojiFromIso(isoCode),
+    isoCode,
     label: teamName
   };
+}
+
+function TeamFlag({ teamDisplay }) {
+  if (!teamDisplay.isoCode) {
+    return <span className="team-flag-fallback" aria-hidden="true">🏳️</span>;
+  }
+
+  return (
+    <img
+      className="team-flag-img"
+      src={getFlagImageUrl(teamDisplay.isoCode)}
+      alt={`Flagge ${teamDisplay.label}`}
+      loading="lazy"
+      width="20"
+      height="14"
+    />
+  );
 }
 
 function Dashboard() {
@@ -403,18 +415,20 @@ function Dashboard() {
               const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
               const deadlinePasssed = isDeadlinePassed(match.match_date);
               const savedInline = Boolean(nextTipSavedByMatch[match.id]);
+              const homeTeamDisplay = getTeamDisplay(match.home_team);
+              const awayTeamDisplay = getTeamDisplay(match.away_team);
 
               return (
                 <div key={`next-${match.id}`} className="next-match-card">
                   <div className="next-match-teams">
                     <span className="next-match-team">
-                      <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.home_team).flag}</span>
-                      <span className="team-name">{getTeamDisplay(match.home_team).label}</span>
+                      <TeamFlag teamDisplay={homeTeamDisplay} />
+                      <span className="team-name">{homeTeamDisplay.label}</span>
                     </span>
                     <span className="next-vs">vs</span>
                     <span className="next-match-team">
-                      <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.away_team).flag}</span>
-                      <span className="team-name">{getTeamDisplay(match.away_team).label}</span>
+                      <TeamFlag teamDisplay={awayTeamDisplay} />
+                      <span className="team-name">{awayTeamDisplay.label}</span>
                     </span>
                   </div>
                   <div className="next-match-meta">
@@ -559,6 +573,8 @@ function Dashboard() {
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const deadlinePasssed = isDeadlinePassed(match.match_date);
           const status = getMatchStatus(match);
+          const homeTeamDisplay = getTeamDisplay(match.home_team);
+          const awayTeamDisplay = getTeamDisplay(match.away_team);
           const visibleTips = (visibleTipsByMatch[match.id] || []).slice().sort((firstTip, secondTip) => {
             if (firstTip.user_id === user.id && secondTip.user_id !== user.id) {
               return -1;
@@ -586,8 +602,8 @@ function Dashboard() {
               
               <div className="match-teams">
                 <div className="team">
-                  <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.home_team).flag}</span>
-                  <span className="team-name">{getTeamDisplay(match.home_team).label}</span>
+                  <TeamFlag teamDisplay={homeTeamDisplay} />
+                  <span className="team-name">{homeTeamDisplay.label}</span>
                 </div>
                 <div className="score">
                   {match.finished ? (
@@ -601,8 +617,8 @@ function Dashboard() {
                   )}
                 </div>
                 <div className="team">
-                  <span className="team-flag" aria-hidden="true">{getTeamDisplay(match.away_team).flag}</span>
-                  <span className="team-name">{getTeamDisplay(match.away_team).label}</span>
+                  <TeamFlag teamDisplay={awayTeamDisplay} />
+                  <span className="team-name">{awayTeamDisplay.label}</span>
                 </div>
               </div>
 
