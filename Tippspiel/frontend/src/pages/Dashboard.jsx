@@ -14,7 +14,11 @@ const TEAM_ISO_MAP = {
   bolivien: 'BO',
   bolivia: 'BO',
   bosnia: 'BA',
+  'bosnia herzegovina': 'BA',
+  'bosnia hercegovina': 'BA',
   bosnien: 'BA',
+  'bosnien herzegowina': 'BA',
+  'bosnien hercegowina': 'BA',
   brasilien: 'BR',
   brazil: 'BR',
   canada: 'CA',
@@ -34,6 +38,7 @@ const TEAM_ISO_MAP = {
   georgia: 'GE',
   germany: 'DE',
   ghana: 'GH',
+  haiti: 'HT',
   iran: 'IR',
   irak: 'IQ',
   iraq: 'IQ',
@@ -72,6 +77,8 @@ const TEAM_ISO_MAP = {
   senegal: 'SN',
   serbien: 'RS',
   serbia: 'RS',
+  schottland: 'GB',
+  scotland: 'GB',
   spanien: 'ES',
   spain: 'ES',
   suedafrika: 'ZA',
@@ -83,11 +90,26 @@ const TEAM_ISO_MAP = {
   'czech republic': 'CZ',
   tunesien: 'TN',
   tunisia: 'TN',
+  turkei: 'TR',
+  turkey: 'TR',
   uruguay: 'UY',
   usa: 'US',
   'vereinigte staaten': 'US',
   'united states': 'US',
   venezuela: 'VE'
+};
+
+const TEAM_NAME_SHORT_MAP = {
+  'bosnia herzegovina': 'Bosnien-Herz.',
+  'bosnia hercegovina': 'Bosnien-Herz.',
+  'bosnien herzegowina': 'Bosnien-Herz.',
+  'bosnien hercegowina': 'Bosnien-Herz.',
+  'vereinigte staaten': 'USA',
+  'united states': 'USA',
+  'saudi arabia': 'Saudi-Arab.',
+  'saudi arabien': 'Saudi-Arab.',
+  'costa rica': 'Costa Rica',
+  'new zealand': 'Neuseeland'
 };
 
 function normalizeTeamName(teamName) {
@@ -106,10 +128,13 @@ function getFlagImageUrl(isoCode) {
 function getTeamDisplay(teamName) {
   const normalized = normalizeTeamName(teamName);
   const isoCode = TEAM_ISO_MAP[normalized];
+  const shortLabel = TEAM_NAME_SHORT_MAP[normalized];
+
+  const label = shortLabel || String(teamName || '').trim();
 
   return {
     isoCode,
-    label: teamName
+    label
   };
 }
 
