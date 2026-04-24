@@ -58,6 +58,7 @@ export const authAPI = {
 export const matchAPI = {
   getAll: () => apiGet('/matches'),
   getById: (id) => apiGet(`/matches/${id}`),
+  getInsights: (id) => apiGet(`/matches/${id}/insights`),
 };
 
 // Tips

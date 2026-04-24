@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getMatchThemeStyle } from '../utils/teamTheme';
@@ -173,6 +174,7 @@ function TeamFlag({ teamDisplay }) {
 }
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
   const [tips, setTips] = useState({});
   const [visibleTipsByMatch, setVisibleTipsByMatch] = useState({});
@@ -368,6 +370,10 @@ function Dashboard() {
     return { label: 'Offen', className: 'status-open' };
   };
 
+  const openMatchInfo = (matchId) => {
+    navigate(`/match/${matchId}`);
+  };
+
   const allTeams = Array.from(
     new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b, 'de'));
@@ -462,7 +468,18 @@ function Dashboard() {
 
               return (
                 <div key={`next-${match.id}`} className="next-match-card">
-                  <div className="next-match-teams">
+                  <div
+                    className="next-match-teams match-info-trigger"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openMatchInfo(match.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openMatchInfo(match.id);
+                      }
+                    }}
+                  >
                     <span className="next-match-team">
                       <TeamFlag teamDisplay={homeTeamDisplay} />
                       <span className="team-name">{homeTeamDisplay.label}</span>
@@ -642,7 +659,18 @@ function Dashboard() {
                 <span className={`match-status-badge ${status.className}`}>{status.label}</span>
               </div>
               
-              <div className="match-teams">
+              <div
+                className="match-teams match-info-trigger"
+                role="button"
+                tabIndex={0}
+                onClick={() => openMatchInfo(match.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openMatchInfo(match.id);
+                  }
+                }}
+              >
                 <div className="team">
                   <TeamFlag teamDisplay={homeTeamDisplay} />
                   <span className="team-name">{homeTeamDisplay.label}</span>

@@ -295,4 +295,182 @@ async function syncMatchesFromFootballData(pool) {
   };
 }
 
-module.exports = { syncMatchesFromFootballData };
+function getOutcome(homeGoals, awayGoals, isHomeTeam) {
+  if (homeGoals === awayGoals) {
+    return 'U';
+  }
+
+  if (isHomeTeam) {
+    return homeGoals > awayGoals ? 'S' : 'N';
+  }
+
+  return awayGoals > homeGoals ? 'S' : 'N';
+}
+
+function toTeamRecentMatch(row, teamName) {
+  const isHomeTeam = row.home_team === teamName;
+  const ownGoals = isHomeTeam ? row.home_goals : row.away_goals;
+  const opponentGoals = isHomeTeam ? row.away_goals : row.home_goals;
+
+  return {
+    date: row.match_date,
+    opponent: isHomeTeam ? row.away_team : row.home_team,
+    ownGoals,
+    opponentGoals,
+    outcome: getOutcome(row.home_goals, row.away_goals, isHomeTeam)
+  };
+}
+
+function buildRecentMatches(rows, teamName, limit = 5) {
+  return rows
+    .filter((row) => row.home_team === teamName || row.away_team === teamName)
+    .sort((first, second) => new Date(second.match_date) - new Date(first.match_date))
+    .slice(0, limit)
+    .map((row) => toTeamRecentMatch(row, teamName));
+}
+
+function calculateFormScore(recentMatches) {
+  if (!recentMatches.length) {
+    return 0;
+  }
+
+  return recentMatches.reduce((sum, match) => {
+    if (match.outcome === 'S') return sum + 3;
+    if (match.outcome === 'U') return sum + 1;
+    return sum;
+  }, 0);
+}
+
+function calculateWinProbabilities(homeRecentMatches, awayRecentMatches) {
+  if (!homeRecentMatches.length && !awayRecentMatches.length) {
+    return {
+      homeWin: 33,
+      draw: 34,
+      awayWin: 33,
+      note: 'Keine ausreichenden Daten, daher neutrale Schätzung.'
+    };
+  }
+
+  const homeFormScore = calculateFormScore(homeRecentMatches);
+  const awayFormScore = calculateFormScore(awayRecentMatches);
+  const homeStrength = homeFormScore + 2.2; // leichter Heimvorteil
+  const awayStrength = awayFormScore + 1.8;
+  const strengthDiff = Math.abs(homeStrength - awayStrength);
+  const drawProbability = Math.max(0.18, 0.28 - Math.min(0.12, strengthDiff * 0.012));
+  const remainingProbability = 1 - drawProbability;
+  const homeWinProbability = remainingProbability * (homeStrength / (homeStrength + awayStrength));
+  const awayWinProbability = remainingProbability * (awayStrength / (homeStrength + awayStrength));
+
+  const homeWin = Math.round(homeWinProbability * 100);
+  const draw = Math.round(drawProbability * 100);
+  const awayWin = Math.max(0, 100 - homeWin - draw);
+
+  return {
+    homeWin,
+    draw,
+    awayWin,
+    note: 'Schätzung auf Basis der letzten Spiele und Heimvorteil.'
+  };
+}
+
+async function fetchLocalFinishedMatches(pool, homeTeam, awayTeam) {
+  const result = await pool.query(
+    `SELECT home_team, away_team, match_date, home_goals, away_goals
+     FROM matches
+     WHERE finished = true
+       AND home_goals IS NOT NULL
+       AND away_goals IS NOT NULL
+       AND (
+         home_team = $1 OR away_team = $1 OR
+         home_team = $2 OR away_team = $2
+       )
+     ORDER BY match_date DESC
+     LIMIT 120`,
+    [homeTeam, awayTeam]
+  );
+
+  return result.rows;
+}
+
+function toNormalizedRowsFromFootballData(matches) {
+  return matches
+    .filter((match) => match.status === 'FINISHED' || match.status === 'AWARDED')
+    .map((match) => {
+      const homeGoals = match.score?.fullTime?.home;
+      const awayGoals = match.score?.fullTime?.away;
+
+      if (homeGoals === null || homeGoals === undefined || awayGoals === null || awayGoals === undefined) {
+        return null;
+      }
+
+      return {
+        home_team: translateTeamNameToGerman(match.homeTeam),
+        away_team: translateTeamNameToGerman(match.awayTeam),
+        match_date: match.utcDate,
+        home_goals: homeGoals,
+        away_goals: awayGoals
+      };
+    })
+    .filter(Boolean);
+}
+
+async function getMatchInsights(pool, matchId) {
+  const matchResult = await pool.query(
+    'SELECT id, home_team, away_team, match_date, round FROM matches WHERE id = $1',
+    [matchId]
+  );
+
+  if (!matchResult.rows.length) {
+    const error = new Error('Match not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const match = matchResult.rows[0];
+  let source = 'local';
+  let normalizedRows;
+
+  try {
+    const externalMatches = await fetchCompetitionMatches();
+    normalizedRows = toNormalizedRowsFromFootballData(externalMatches);
+    source = 'football-data';
+  } catch (err) {
+    normalizedRows = await fetchLocalFinishedMatches(pool, match.home_team, match.away_team);
+  }
+
+  const homeRecentMatches = buildRecentMatches(normalizedRows, match.home_team, 5);
+  const awayRecentMatches = buildRecentMatches(normalizedRows, match.away_team, 5);
+
+  const headToHead = normalizedRows
+    .filter((row) => {
+      const teams = [row.home_team, row.away_team];
+      return teams.includes(match.home_team) && teams.includes(match.away_team);
+    })
+    .sort((first, second) => new Date(second.match_date) - new Date(first.match_date))
+    .slice(0, 5)
+    .map((row) => ({
+      date: row.match_date,
+      homeTeam: row.home_team,
+      awayTeam: row.away_team,
+      score: `${row.home_goals}:${row.away_goals}`
+    }));
+
+  const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
+
+  return {
+    match,
+    source,
+    homeTeam: {
+      name: match.home_team,
+      recentMatches: homeRecentMatches
+    },
+    awayTeam: {
+      name: match.away_team,
+      recentMatches: awayRecentMatches
+    },
+    headToHead,
+    probabilities
+  };
+}
+
+module.exports = { syncMatchesFromFootballData, getMatchInsights };

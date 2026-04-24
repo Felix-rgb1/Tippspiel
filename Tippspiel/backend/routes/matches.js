@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { getMatchInsights } = require('../services/footballData');
 
 const router = express.Router();
 
@@ -33,6 +34,20 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch match' });
+  }
+});
+
+// Get match insights (team form, recent games, estimated win probabilities)
+router.get('/:id/insights', authMiddleware, async (req, res) => {
+  try {
+    const insights = await getMatchInsights(pool, req.params.id);
+    res.json(insights);
+  } catch (err) {
+    console.error(err);
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Failed to fetch match insights' });
   }
 });
 

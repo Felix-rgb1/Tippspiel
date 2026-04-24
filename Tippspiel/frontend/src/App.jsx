@@ -5,6 +5,7 @@ import Header from './components/Header';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import MatchInfo from './pages/MatchInfo';
 import Leaderboard from './pages/Leaderboard';
 import Rules from './pages/Rules';
 import Profile from './pages/Profile';
@@ -68,6 +69,11 @@ function App() {
             <Route path="/" element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/match/:id" element={
+              <ProtectedRoute>
+                <MatchInfo />
               </ProtectedRoute>
             } />
             <Route path="/leaderboard" element={
