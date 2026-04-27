@@ -118,6 +118,15 @@ function toDateOnly(matchDate) {
   return date.toISOString().slice(0, 10);
 }
 
+function getApiFootballSeasonCandidates(matchDate) {
+  const referenceDate = matchDate ? new Date(matchDate) : new Date();
+  const referenceYear = Number.isNaN(referenceDate.getTime())
+    ? new Date().getUTCFullYear()
+    : referenceDate.getUTCFullYear();
+
+  return [referenceYear - 1, referenceYear - 2, referenceYear];
+}
+
 function parseNumeric(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -327,20 +336,35 @@ async function findApiFootballTeamId(teamName) {
 
     const normalizedTarget = normalizeComparableName(candidate);
     const nationalTeams = responseTeams.filter((entry) => entry?.team?.national === true);
-    const exactNationalMatch = nationalTeams.find((entry) => {
+    const exactNationalNameMatch = nationalTeams.find((entry) => {
       const name = normalizeComparableName(entry?.team?.name);
-      const country = normalizeComparableName(entry?.team?.country);
-      return name === normalizedTarget || country === normalizedTarget;
+      return name === normalizedTarget;
     });
+
+    if (exactNationalNameMatch?.team?.id) {
+      return exactNationalNameMatch.team.id;
+    }
+
+    const exactNationalCountryMatch = nationalTeams.find((entry) => {
+      const country = normalizeComparableName(entry?.team?.country);
+      return country === normalizedTarget;
+    });
+
+    if (exactNationalCountryMatch?.team?.id) {
+      return exactNationalCountryMatch.team.id;
+    }
 
     const exactMatch = responseTeams.find((entry) => {
       const name = normalizeComparableName(entry?.team?.name);
       return name === normalizedTarget;
     });
 
-    const selected = exactNationalMatch || exactMatch || nationalTeams[0] || responseTeams[0];
-    if (selected?.team?.id) {
-      return selected.team.id;
+    if (exactMatch?.team?.id) {
+      return exactMatch.team.id;
+    }
+
+    if (nationalTeams.length === 1 && nationalTeams[0]?.team?.id) {
+      return nationalTeams[0].team.id;
     }
   }
 
@@ -645,20 +669,41 @@ async function fetchApiFootballProbabilities(homeTeam, awayTeam, matchDate) {
   };
 }
 
-async function fetchApiFootballRecentMatchesForTeam(teamName, last = 5) {
+async function fetchApiFootballRecentMatchesForTeam(teamName, last = 5, matchDate) {
   const teamId = await findApiFootballTeamId(teamName);
+
+  return fetchApiFootballRecentMatchesForTeamId(teamId, last, matchDate);
+}
+
+async function fetchApiFootballRecentMatchesForTeamId(teamId, last = 5, matchDate) {
   if (!teamId) {
     return [];
   }
 
-  const payload = await rapidApiRequest('/v3/fixtures', {
-    team: teamId,
-    last,
-    status: 'FT'
-  });
+  const fixturesById = new Map();
 
-  const fixtures = payload?.response || [];
-  return fixtures
+  for (const season of getApiFootballSeasonCandidates(matchDate)) {
+    const payload = await rapidApiRequest('/v3/fixtures', {
+      team: teamId,
+      season,
+      status: 'FT'
+    });
+
+    const fixtures = payload?.response || [];
+    fixtures.forEach((entry) => {
+      const fixtureId = entry?.fixture?.id;
+      if (fixtureId) {
+        fixturesById.set(fixtureId, entry);
+      }
+    });
+
+    if (fixturesById.size >= last) {
+      break;
+    }
+  }
+
+  return Array.from(fixturesById.values())
+    .sort((first, second) => new Date(second?.fixture?.date || 0) - new Date(first?.fixture?.date || 0))
     .map((entry) => mapFixtureToRecentMatch(entry, teamId))
     .filter(Boolean)
     .slice(0, last);
@@ -668,13 +713,17 @@ async function fetchApiFootballHeadToHead(homeTeam, awayTeam, last = 5) {
   const homeTeamId = await findApiFootballTeamId(homeTeam);
   const awayTeamId = await findApiFootballTeamId(awayTeam);
 
+  return fetchApiFootballHeadToHeadByTeamIds(homeTeamId, awayTeamId, last);
+}
+
+async function fetchApiFootballHeadToHeadByTeamIds(homeTeamId, awayTeamId, last = 5) {
+
   if (!homeTeamId || !awayTeamId) {
     return [];
   }
 
   const payload = await rapidApiRequest('/v3/fixtures/headtohead', {
     h2h: `${homeTeamId}-${awayTeamId}`,
-    last,
     status: 'FT'
   });
 
@@ -685,13 +734,28 @@ async function fetchApiFootballHeadToHead(homeTeam, awayTeam, last = 5) {
     .slice(0, last);
 }
 
-async function fetchRapidApiMatchInsights(homeTeam, awayTeam) {
+async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate) {
   if (isApiFootballHost()) {
-    const [homeRecentMatches, awayRecentMatches, headToHead] = await Promise.all([
-      fetchApiFootballRecentMatchesForTeam(homeTeam, 5),
-      fetchApiFootballRecentMatchesForTeam(awayTeam, 5),
-      fetchApiFootballHeadToHead(homeTeam, awayTeam, 5)
+    const [homeTeamId, awayTeamId] = await Promise.all([
+      findApiFootballTeamId(homeTeam),
+      findApiFootballTeamId(awayTeam)
     ]);
+
+    const [homeRecentMatchesResult, awayRecentMatchesResult, headToHeadResult] = await Promise.allSettled([
+      fetchApiFootballRecentMatchesForTeamId(homeTeamId, 5, matchDate),
+      fetchApiFootballRecentMatchesForTeamId(awayTeamId, 5, matchDate),
+      fetchApiFootballHeadToHeadByTeamIds(homeTeamId, awayTeamId, 5)
+    ]);
+
+    const homeRecentMatches = homeRecentMatchesResult.status === 'fulfilled'
+      ? homeRecentMatchesResult.value
+      : [];
+    const awayRecentMatches = awayRecentMatchesResult.status === 'fulfilled'
+      ? awayRecentMatchesResult.value
+      : [];
+    const headToHead = headToHeadResult.status === 'fulfilled'
+      ? headToHeadResult.value
+      : [];
 
     return { homeRecentMatches, awayRecentMatches, headToHead };
   }

@@ -458,7 +458,7 @@ async function getMatchInsights(pool, matchId) {
 
   try {
     if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
-      const rapidInsights = await fetchRapidApiMatchInsights(match.home_team, match.away_team);
+      const rapidInsights = await fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date);
 
       if (homeRecentMatches.length === 0 && rapidInsights.homeRecentMatches.length > 0) {
         homeRecentMatches.push(...rapidInsights.homeRecentMatches);
@@ -483,16 +483,18 @@ async function getMatchInsights(pool, matchId) {
   const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
 
   try {
-    const rapidApiProbabilities = await fetchRapidApiProbabilities(
-      match.home_team,
-      match.away_team,
-      match.match_date
-    );
-    if (rapidApiProbabilities) {
-      probabilities.homeWin = rapidApiProbabilities.homeWin;
-      probabilities.draw = rapidApiProbabilities.draw;
-      probabilities.awayWin = rapidApiProbabilities.awayWin;
-      probabilities.note = rapidApiProbabilities.note;
+    if (homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
+      const rapidApiProbabilities = await fetchRapidApiProbabilities(
+        match.home_team,
+        match.away_team,
+        match.match_date
+      );
+      if (rapidApiProbabilities) {
+        probabilities.homeWin = rapidApiProbabilities.homeWin;
+        probabilities.draw = rapidApiProbabilities.draw;
+        probabilities.awayWin = rapidApiProbabilities.awayWin;
+        probabilities.note = rapidApiProbabilities.note;
+      }
     }
   } catch (err) {
     // Keep fallback probabilities if RapidAPI is unavailable or mapping fails.
