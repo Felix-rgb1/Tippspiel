@@ -326,13 +326,19 @@ async function findApiFootballTeamId(teamName) {
     }
 
     const normalizedTarget = normalizeComparableName(candidate);
-    const exactMatch = responseTeams.find((entry) => {
+    const nationalTeams = responseTeams.filter((entry) => entry?.team?.national === true);
+    const exactNationalMatch = nationalTeams.find((entry) => {
       const name = normalizeComparableName(entry?.team?.name);
       const country = normalizeComparableName(entry?.team?.country);
       return name === normalizedTarget || country === normalizedTarget;
     });
 
-    const selected = exactMatch || responseTeams[0];
+    const exactMatch = responseTeams.find((entry) => {
+      const name = normalizeComparableName(entry?.team?.name);
+      return name === normalizedTarget;
+    });
+
+    const selected = exactNationalMatch || exactMatch || nationalTeams[0] || responseTeams[0];
     if (selected?.team?.id) {
       return selected.team.id;
     }
