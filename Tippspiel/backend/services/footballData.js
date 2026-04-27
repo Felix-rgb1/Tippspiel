@@ -6,6 +6,33 @@ const COMPETITION_CODE = process.env.FOOTBALL_DATA_COMPETITION_CODE || 'WC';
 const SEASON = process.env.FOOTBALL_DATA_SEASON;
 const APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS = Number.parseInt(process.env.APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS || '24', 10);
 
+function getInsightsProviderCacheKey() {
+  const provider = (process.env.RAPIDAPI_PROVIDER || '').trim().toLowerCase();
+  const host = (process.env.RAPIDAPI_HOST || '').trim().toLowerCase();
+
+  if (provider === 'odds-api' || provider === 'oddsapi') {
+    return 'odds-api';
+  }
+
+  if (provider === 'api-football-direct' || provider === 'direct') {
+    return 'api-football';
+  }
+
+  if (host.includes('flashscore')) {
+    return 'flashscore';
+  }
+
+  if (host.includes('sofascore')) {
+    return 'sofascore';
+  }
+
+  if (host.includes('api-football')) {
+    return 'api-football';
+  }
+
+  return provider || host || 'rapidapi';
+}
+
 const COUNTRY_NAME_DE_BY_TLA = {
   ARG: 'Argentinien',
   AUS: 'Australien',
@@ -434,16 +461,17 @@ async function ensureInsightsCacheTable(pool) {
 
 async function loadCachedRapidInsights(pool, homeTeam, awayTeam) {
   await ensureInsightsCacheTable(pool);
+  const providerKey = getInsightsProviderCacheKey();
 
   const cacheResult = await pool.query(
     `SELECT home_recent_matches, away_recent_matches, head_to_head
      FROM api_match_insights_cache
-     WHERE provider = 'api-football'
-       AND home_team = $1
-       AND away_team = $2
+     WHERE provider = $1
+       AND home_team = $2
+       AND away_team = $3
        AND expires_at > NOW()
      LIMIT 1`,
-    [homeTeam, awayTeam]
+    [providerKey, homeTeam, awayTeam]
   );
 
   if (!cacheResult.rows.length) {
@@ -460,6 +488,7 @@ async function loadCachedRapidInsights(pool, homeTeam, awayTeam) {
 
 async function saveCachedRapidInsights(pool, homeTeam, awayTeam, insights) {
   await ensureInsightsCacheTable(pool);
+  const providerKey = getInsightsProviderCacheKey();
 
   const ttlHours = Number.isFinite(APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS) && APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS > 0
     ? APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS
@@ -476,14 +505,14 @@ async function saveCachedRapidInsights(pool, homeTeam, awayTeam, insights) {
       updated_at,
       expires_at
     ) VALUES (
-      'api-football',
       $1,
       $2,
-      $3::jsonb,
+      $3,
       $4::jsonb,
       $5::jsonb,
+      $6::jsonb,
       NOW(),
-      NOW() + ($6 || ' hours')::interval
+      NOW() + ($7 || ' hours')::interval
     )
     ON CONFLICT (provider, home_team, away_team)
     DO UPDATE SET
@@ -493,6 +522,7 @@ async function saveCachedRapidInsights(pool, homeTeam, awayTeam, insights) {
       updated_at = NOW(),
       expires_at = EXCLUDED.expires_at`,
     [
+      providerKey,
       homeTeam,
       awayTeam,
       JSON.stringify(insights.homeRecentMatches || []),

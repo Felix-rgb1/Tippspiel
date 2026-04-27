@@ -62,6 +62,7 @@ const TEAM_NAME_SEARCH_ALIAS = {
   Schweiz: 'Switzerland',
   Slowakei: 'Slovakia',
   Schweden: 'Sweden',
+  Suedafrika: 'South Africa',
   Tschechien: 'Czech Republic',
   Tuerkei: 'Turkey',
   Tunesien: 'Tunisia',
@@ -302,13 +303,21 @@ function isLikelyTeamMatch(teamData, eventTeamName) {
   return 0;
 }
 
+function listFlashscoreMatches(payload) {
+  const entries = Array.isArray(payload) ? payload : [];
+  if (entries.some((entry) => Array.isArray(entry?.matches))) {
+    return entries.flatMap((entry) => Array.isArray(entry?.matches) ? entry.matches : []);
+  }
+
+  return entries;
+}
+
 function findBestFlashscoreMatch(tournaments, homeTeam, awayTeam, matchDate) {
   const homeMatchingData = buildTeamMatchingData(homeTeam);
   const awayMatchingData = buildTeamMatchingData(awayTeam);
   const matchDateTime = matchDate ? new Date(matchDate).getTime() : null;
 
-  const candidates = (Array.isArray(tournaments) ? tournaments : [])
-    .flatMap((tournament) => Array.isArray(tournament?.matches) ? tournament.matches : [])
+  const candidates = listFlashscoreMatches(tournaments)
     .map((match) => {
       const directHomeScore = isLikelyTeamMatch(homeMatchingData, match?.home_team?.name);
       const directAwayScore = isLikelyTeamMatch(awayMatchingData, match?.away_team?.name);
@@ -341,7 +350,164 @@ function findBestFlashscoreMatch(tournaments, homeTeam, awayTeam, matchDate) {
   return candidates[0]?.match || null;
 }
 
+function toFlashscoreIsoDate(timestamp) {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  return new Date(timestamp * 1000).toISOString();
+}
+
+function mapFlashscoreMatchToRecentMatch(match, teamId) {
+  const homeId = match?.home_team?.team_id;
+  const awayId = match?.away_team?.team_id;
+  if (homeId !== teamId && awayId !== teamId) {
+    return null;
+  }
+
+  const homeGoals = parseNumeric(match?.scores?.home);
+  const awayGoals = parseNumeric(match?.scores?.away);
+  if (homeGoals === null || awayGoals === null) {
+    return null;
+  }
+
+  const isHomeTeam = homeId === teamId;
+  const ownGoals = isHomeTeam ? homeGoals : awayGoals;
+  const opponentGoals = isHomeTeam ? awayGoals : homeGoals;
+
+  return {
+    date: toFlashscoreIsoDate(match?.timestamp),
+    opponent: isHomeTeam ? match?.away_team?.name : match?.home_team?.name,
+    ownGoals,
+    opponentGoals,
+    outcome: getOutcome(ownGoals, opponentGoals, true)
+  };
+}
+
+function mapFlashscoreMatchToHeadToHead(match) {
+  const homeGoals = parseNumeric(match?.scores?.home);
+  const awayGoals = parseNumeric(match?.scores?.away);
+  if (homeGoals === null || awayGoals === null) {
+    return null;
+  }
+
+  return {
+    date: toFlashscoreIsoDate(match?.timestamp),
+    homeTeam: match?.home_team?.name,
+    awayTeam: match?.away_team?.name,
+    score: `${homeGoals}:${awayGoals}`
+  };
+}
+
+function dedupeFlashscoreMatches(matches) {
+  const byId = new Map();
+
+  matches.forEach((match) => {
+    const matchId = match?.match_id || `${match?.timestamp || 'na'}:${match?.home_team?.team_id || 'na'}:${match?.away_team?.team_id || 'na'}`;
+    if (matchId) {
+      byId.set(matchId, match);
+    }
+  });
+
+  return Array.from(byId.values());
+}
+
+function getConfiguredFlashscoreTournamentUrl() {
+  return process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
+}
+
+async function fetchFlashscoreTournamentIds() {
+  if (process.env.FLASHSCORE_TOURNAMENT_ID && process.env.FLASHSCORE_TOURNAMENT_STAGE_ID && process.env.FLASHSCORE_TOURNAMENT_TEMPLATE_ID && process.env.FLASHSCORE_SEASON_ID) {
+    return {
+      tournament_id: process.env.FLASHSCORE_TOURNAMENT_ID,
+      tournament_stage_id: process.env.FLASHSCORE_TOURNAMENT_STAGE_ID,
+      tournament_template_id: process.env.FLASHSCORE_TOURNAMENT_TEMPLATE_ID,
+      season_id: process.env.FLASHSCORE_SEASON_ID
+    };
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/tournaments/ids', {
+    tournament_url: getConfiguredFlashscoreTournamentUrl()
+  });
+
+  if (!payload?.tournament_id || !payload?.tournament_template_id || !payload?.season_id) {
+    return null;
+  }
+
+  return payload;
+}
+
+async function fetchFlashscoreTournamentFixtures() {
+  const ids = await fetchFlashscoreTournamentIds();
+  if (!ids?.tournament_template_id || !ids?.season_id) {
+    return [];
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/tournaments/fixtures', {
+    tournament_template_id: ids.tournament_template_id,
+    season_id: ids.season_id
+  });
+
+  return Array.isArray(payload) ? payload : [];
+}
+
+async function findFlashscoreFixture(homeTeam, awayTeam, matchDate) {
+  const fixtures = await fetchFlashscoreTournamentFixtures();
+  if (!fixtures.length) {
+    return null;
+  }
+
+  return findBestFlashscoreMatch(fixtures, homeTeam, awayTeam, matchDate);
+}
+
+async function fetchFlashscoreRawTeamResults(teamId) {
+  const payload = await rapidApiRequest('/api/flashscore/v2/teams/results', {
+    team_id: teamId
+  });
+
+  return dedupeFlashscoreMatches(listFlashscoreMatches(payload))
+    .sort((first, second) => (second?.timestamp || 0) - (first?.timestamp || 0));
+}
+
+function buildFlashscoreHeadToHead(homeTeamId, awayTeamId, homeResults, awayResults, last = 5) {
+  return dedupeFlashscoreMatches([...homeResults, ...awayResults])
+    .filter((match) => {
+      const ids = [match?.home_team?.team_id, match?.away_team?.team_id];
+      return ids.includes(homeTeamId) && ids.includes(awayTeamId);
+    })
+    .sort((first, second) => (second?.timestamp || 0) - (first?.timestamp || 0))
+    .map(mapFlashscoreMatchToHeadToHead)
+    .filter(Boolean)
+    .slice(0, last);
+}
+
 async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate) {
+  const fixture = await findFlashscoreFixture(homeTeam, awayTeam, matchDate);
+  if (fixture?.match_id) {
+    const oddsPayload = await rapidApiRequest('/api/flashscore/v2/matches/odds', {
+      match_id: fixture.match_id
+    });
+
+    const bookmaker = (Array.isArray(oddsPayload) ? oddsPayload : []).find((entry) => Array.isArray(entry?.odds) && entry.odds.length > 0);
+    const market = bookmaker?.odds?.find((entry) => {
+      return entry?.bettingType === 'HOME_DRAW_AWAY' && entry?.bettingScope === 'FULL_TIME' && Array.isArray(entry?.odds) && entry.odds.length >= 3;
+    });
+
+    if (market) {
+      const homeOdd = market.odds.find((entry) => entry?.name === '1' || /home/i.test(String(entry?.name || '')))?.odd;
+      const drawOdd = market.odds.find((entry) => entry?.name === 'X' || /draw/i.test(String(entry?.name || '')))?.odd;
+      const awayOdd = market.odds.find((entry) => entry?.name === '2' || /away/i.test(String(entry?.name || '')))?.odd;
+      const probabilities = normalizeFromDecimalOdds(homeOdd, drawOdd, awayOdd);
+
+      if (probabilities) {
+        return {
+          ...probabilities,
+          note: 'Wahrscheinlichkeiten von FlashScore Match Odds (1X2).'
+        };
+      }
+    }
+  }
+
   if (!isWithinDaysFromNow(matchDate, 7)) {
     return null;
   }
@@ -1031,6 +1197,42 @@ async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate) {
     const headToHead = headToHeadResult.status === 'fulfilled'
       ? headToHeadResult.value
       : [];
+
+    return { homeRecentMatches, awayRecentMatches, headToHead };
+  }
+
+  if (isFlashscoreHost()) {
+    const fixture = await findFlashscoreFixture(homeTeam, awayTeam, matchDate);
+    const homeTeamId = fixture?.home_team?.team_id;
+    const awayTeamId = fixture?.away_team?.team_id;
+
+    if (!homeTeamId || !awayTeamId) {
+      return {
+        homeRecentMatches: [],
+        awayRecentMatches: [],
+        headToHead: []
+      };
+    }
+
+    const [homeResultsResult, awayResultsResult] = await Promise.allSettled([
+      fetchFlashscoreRawTeamResults(homeTeamId),
+      fetchFlashscoreRawTeamResults(awayTeamId)
+    ]);
+
+    const homeResults = homeResultsResult.status === 'fulfilled' ? homeResultsResult.value : [];
+    const awayResults = awayResultsResult.status === 'fulfilled' ? awayResultsResult.value : [];
+
+    const homeRecentMatches = homeResults
+      .map((entry) => mapFlashscoreMatchToRecentMatch(entry, homeTeamId))
+      .filter(Boolean)
+      .slice(0, 5);
+
+    const awayRecentMatches = awayResults
+      .map((entry) => mapFlashscoreMatchToRecentMatch(entry, awayTeamId))
+      .filter(Boolean)
+      .slice(0, 5);
+
+    const headToHead = buildFlashscoreHeadToHead(homeTeamId, awayTeamId, homeResults, awayResults, 5);
 
     return { homeRecentMatches, awayRecentMatches, headToHead };
   }
