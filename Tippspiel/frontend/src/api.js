@@ -57,6 +57,7 @@ export const authAPI = {
 // Matches
 export const matchAPI = {
   getAll: () => apiGet('/matches'),
+  getLive: (ids = []) => apiGet('/matches/live', { params: { ids: ids.join(',') } }),
   getById: (id) => apiGet(`/matches/${id}`),
   getInsights: (id) => apiGet(`/matches/${id}/insights`),
 };

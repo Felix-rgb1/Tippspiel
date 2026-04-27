@@ -498,6 +498,18 @@
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
 }
 
+.status-live {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+.next-live-score {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #b91c1c;
+}
+
 .tip-inputs {
   display: flex;
   gap: 0.65rem;
@@ -1257,4 +1269,13 @@
 :root[data-theme='dark'] .status-finished {
   background: rgba(51, 65, 85, 0.55);
   color: #cbd5e1;
+}
+
+:root[data-theme='dark'] .status-live {
+  background: rgba(127, 29, 29, 0.55);
+  color: #fecaca;
+}
+
+:root[data-theme='dark'] .next-live-score {
+  color: #fca5a5;
 }
