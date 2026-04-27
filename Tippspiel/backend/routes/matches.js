@@ -41,6 +41,9 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/insights', authMiddleware, async (req, res) => {
   try {
     const insights = await getMatchInsights(pool, req.params.id);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json(insights);
   } catch (err) {
     console.error(err);
