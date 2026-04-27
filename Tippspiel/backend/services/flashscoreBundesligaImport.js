@@ -180,9 +180,21 @@ async function importFlashscoreBundesligaMatches(pool, options = {}) {
   });
 
   const rawMatches = toMatchList(fixturesPayload);
+  if (!rawMatches.length) {
+    const error = new Error(`Keine Bundesliga-Spiele von Flashscore erhalten (tournamentUrl=${tournamentUrl}).`);
+    error.statusCode = 502;
+    throw error;
+  }
+
   const normalizedMatches = rawMatches
     .map(toNormalizedMatch)
     .filter(Boolean);
+
+  if (!normalizedMatches.length) {
+    const error = new Error('Flashscore hat Spiele geliefert, aber kein Match hatte ein verwertbares Format (ID/Team/Datum fehlend).');
+    error.statusCode = 502;
+    throw error;
+  }
 
   let createdCount = 0;
   let updatedCount = 0;

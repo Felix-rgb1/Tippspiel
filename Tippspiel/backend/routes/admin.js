@@ -145,7 +145,7 @@ router.post('/matches/import/bundesliga', adminMiddleware, async (req, res) => {
   try {
     const importResult = await importFlashscoreBundesligaMatches(pool);
     res.json({
-      message: `Bundesliga-Import abgeschlossen: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert.`,
+      message: `Bundesliga-Import abgeschlossen: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert, ${importResult.totalFetched} von API erhalten, ${importResult.totalProcessed} verarbeitet.`,
       ...importResult
     });
   } catch (err) {

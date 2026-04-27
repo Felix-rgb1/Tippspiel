@@ -218,7 +218,11 @@ function Admin() {
       setImportingBundesliga(true);
       setError('');
       const response = await adminAPI.importBundesliga();
-      setSuccess(response.data.message || 'Bundesliga-Import abgeschlossen');
+      const data = response.data || {};
+      setSuccess(
+        data.message
+        || `Bundesliga-Import abgeschlossen: ${data.createdCount || 0} neu, ${data.updatedCount || 0} aktualisiert, ${data.totalFetched || 0} von API erhalten.`
+      );
       fetchMatches();
     } catch (err) {
       setError(err.response?.data?.error || 'Bundesliga-Import fehlgeschlagen');

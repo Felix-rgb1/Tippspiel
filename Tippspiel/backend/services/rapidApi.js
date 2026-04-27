@@ -446,6 +446,8 @@ async function fetchFlashscoreTournamentFixtures(tournamentUrl = getConfiguredFl
   }
 
   const payload = await rapidApiRequest('/api/flashscore/v2/tournaments/fixtures', {
+    tournament_id: ids.tournament_id,
+    tournament_stage_id: ids.tournament_stage_id,
     tournament_template_id: ids.tournament_template_id,
     season_id: ids.season_id
   });
