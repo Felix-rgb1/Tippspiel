@@ -516,4 +516,44 @@ async function getMatchInsights(pool, matchId) {
   };
 }
 
-module.exports = { syncMatchesFromFootballData, getMatchInsights };
+async function warmUpApiFootballInsightsCache(pool, options = {}) {
+  const maxMatches = Number.parseInt(options.maxMatches || process.env.APIFOOTBALL_WARMUP_MATCH_LIMIT || '4', 10);
+  const horizonDays = Number.parseInt(options.horizonDays || process.env.APIFOOTBALL_WARMUP_HORIZON_DAYS || '14', 10);
+
+  if (!Number.isFinite(maxMatches) || maxMatches <= 0) {
+    return { warmedMatches: 0, attempted: 0 };
+  }
+
+  const fromDate = new Date();
+  const toDate = new Date(fromDate.getTime() + Math.max(1, horizonDays) * 24 * 60 * 60 * 1000);
+
+  const upcomingMatchesResult = await pool.query(
+    `SELECT id, home_team, away_team, match_date
+     FROM matches
+     WHERE finished = false
+       AND match_date >= $1
+       AND match_date <= $2
+     ORDER BY match_date ASC
+     LIMIT $3`,
+    [fromDate.toISOString(), toDate.toISOString(), maxMatches]
+  );
+
+  let warmedMatches = 0;
+
+  for (const match of upcomingMatchesResult.rows) {
+    try {
+      await fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date);
+      await fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date);
+      warmedMatches += 1;
+    } catch (err) {
+      // Continue with next match if API provider is unavailable or quota is reached.
+    }
+  }
+
+  return {
+    warmedMatches,
+    attempted: upcomingMatchesResult.rows.length
+  };
+}
+
+module.exports = { syncMatchesFromFootballData, getMatchInsights, warmUpApiFootballInsightsCache };

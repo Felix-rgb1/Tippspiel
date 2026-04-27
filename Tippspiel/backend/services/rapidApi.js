@@ -1,7 +1,12 @@
 const fetch = require('node-fetch');
+const pool = require('../db');
 
 const RAPIDAPI_CACHE_TTL_MS = Number.parseInt(process.env.RAPIDAPI_CACHE_TTL_MS || '120000', 10);
+const APIFOOTBALL_DAILY_MAX_REQUESTS = Number.parseInt(process.env.APIFOOTBALL_DAILY_MAX_REQUESTS || '80', 10);
+const APIFOOTBALL_ENFORCE_DAILY_LIMIT = (process.env.APIFOOTBALL_ENFORCE_DAILY_LIMIT || 'true').toLowerCase() !== 'false';
+const APIFOOTBALL_USAGE_PROVIDER_KEY = 'api-football';
 const rapidApiCache = new Map();
+let apiUsageTableReadyPromise = null;
 
 const TEAM_NAME_SEARCH_ALIAS = {
   Deutschland: 'Germany',
@@ -88,6 +93,55 @@ function isSofascoreHost() {
 
 function isApiSportsDirectMode() {
   return getProviderMode() === 'api-football-direct' && Boolean(process.env.APIFOOTBALL_KEY);
+}
+
+function shouldEnforceApiFootballDailyLimit() {
+  return APIFOOTBALL_ENFORCE_DAILY_LIMIT && isApiFootballHost();
+}
+
+async function ensureApiUsageTable() {
+  if (!apiUsageTableReadyPromise) {
+    apiUsageTableReadyPromise = pool.query(
+      `CREATE TABLE IF NOT EXISTS api_request_usage (
+        provider TEXT NOT NULL,
+        usage_date DATE NOT NULL,
+        request_count INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (provider, usage_date)
+      )`
+    ).catch((error) => {
+      apiUsageTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await apiUsageTableReadyPromise;
+}
+
+async function registerApiFootballRequestUsage() {
+  if (!shouldEnforceApiFootballDailyLimit() || !Number.isFinite(APIFOOTBALL_DAILY_MAX_REQUESTS) || APIFOOTBALL_DAILY_MAX_REQUESTS <= 0) {
+    return;
+  }
+
+  await ensureApiUsageTable();
+
+  const usageResult = await pool.query(
+    `INSERT INTO api_request_usage (provider, usage_date, request_count, updated_at)
+     VALUES ($1, CURRENT_DATE, 1, NOW())
+     ON CONFLICT (provider, usage_date)
+     DO UPDATE SET
+       request_count = api_request_usage.request_count + 1,
+       updated_at = NOW()
+     WHERE api_request_usage.request_count < $2
+     RETURNING request_count`,
+    [APIFOOTBALL_USAGE_PROVIDER_KEY, APIFOOTBALL_DAILY_MAX_REQUESTS]
+  );
+
+  if (!usageResult.rows.length) {
+    const err = new Error(`API-FOOTBALL Tageslimit erreicht (${APIFOOTBALL_DAILY_MAX_REQUESTS} Requests/Tag).`);
+    err.statusCode = 429;
+    throw err;
+  }
 }
 
 function normalizeComparableName(value) {
@@ -287,6 +341,8 @@ async function rapidApiRequest(path, queryParams = {}) {
   if (cached && cached.expiresAt > now) {
     return cached.payload;
   }
+
+  await registerApiFootballRequestUsage();
 
   const response = await fetch(url.toString(), {
     method: 'GET',
