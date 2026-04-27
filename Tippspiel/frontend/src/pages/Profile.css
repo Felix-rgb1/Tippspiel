@@ -32,13 +32,26 @@
   padding: 0.75rem;
 }
 
-.stats-card {
+.card.stats-card {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #5b5bd6;
+}
+
+.card.stats-card h2 {
   color: white;
 }
 
-.stats-card h2 {
-  color: white;
+.card.stats-card .stat-item,
+.card.stats-card .activity-label,
+.card.stats-card .activity-block p {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.card.chart-card,
+.card.chart-card h2,
+.card.chart-card p {
+  color: #0f172a;
 }
 
 .stat-item {
@@ -79,6 +92,24 @@
 .activity-fill {
   height: 100%;
   background: #facc15;
+}
+
+:root:not([data-theme='dark']) .card.stats-card {
+  background: linear-gradient(135deg, #4f46e5 0%, #6d28d9 100%);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .card.stats-card {
+  background: linear-gradient(145deg, #1d4ed8 0%, #312e81 100%);
+  color: #e2e8f0;
+  border-color: #334155;
+}
+
+:root[data-theme='dark'] .card.stats-card h2,
+:root[data-theme='dark'] .card.stats-card .stat-item,
+:root[data-theme='dark'] .card.stats-card .activity-label,
+:root[data-theme='dark'] .card.stats-card .activity-block p {
+  color: #e2e8f0;
 }
 
 .activity-block p {
