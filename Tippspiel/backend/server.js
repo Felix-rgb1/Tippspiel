@@ -4,6 +4,7 @@ const cors = require('cors');
 require('./db');
 const pool = require('./db');
 const { warmUpApiFootballInsightsCache } = require('./services/footballData');
+const { ensureBonusFeaturesSchema } = require('./services/bonusFeatures');
 
 const app = express();
 
@@ -53,6 +54,14 @@ app.get('/api/health', (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+
+  ensureBonusFeaturesSchema(pool)
+    .then(() => {
+      console.log('[BONUS] Bonus-Features sind bereit.');
+    })
+    .catch((error) => {
+      console.warn('[BONUS] Bonus-Features konnten nicht initialisiert werden:', error.message);
+    });
 
   const warmupEnabled = (process.env.APIFOOTBALL_WARMUP_ENABLED || 'false').toLowerCase() === 'true';
   if (!warmupEnabled) {
