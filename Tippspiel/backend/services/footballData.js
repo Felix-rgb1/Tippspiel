@@ -516,6 +516,8 @@ async function getMatchInsights(pool, matchId) {
   }
 
   const match = matchResult.rows[0];
+  const providerMode = (process.env.RAPIDAPI_PROVIDER || '').trim().toLowerCase();
+  const isOddsApiProvider = providerMode === 'odds-api' || providerMode === 'oddsapi';
   let source = 'local';
   let normalizedRows;
   let rapidInsightsError = null;
@@ -600,27 +602,33 @@ async function getMatchInsights(pool, matchId) {
   }
 
   const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
+  let externalProbabilitiesApplied = false;
 
   try {
-    if (homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
-      const rapidApiProbabilities = await fetchRapidApiProbabilities(
-        match.home_team,
-        match.away_team,
-        match.match_date
-      );
-      if (rapidApiProbabilities) {
-        probabilities.homeWin = rapidApiProbabilities.homeWin;
-        probabilities.draw = rapidApiProbabilities.draw;
-        probabilities.awayWin = rapidApiProbabilities.awayWin;
-        probabilities.note = rapidApiProbabilities.note;
-      }
+    const rapidApiProbabilities = await fetchRapidApiProbabilities(
+      match.home_team,
+      match.away_team,
+      match.match_date
+    );
+    if (rapidApiProbabilities) {
+      probabilities.homeWin = rapidApiProbabilities.homeWin;
+      probabilities.draw = rapidApiProbabilities.draw;
+      probabilities.awayWin = rapidApiProbabilities.awayWin;
+      probabilities.note = rapidApiProbabilities.note;
+      externalProbabilitiesApplied = true;
     }
   } catch (err) {
     // Keep fallback probabilities if RapidAPI is unavailable or mapping fails.
   }
 
   if (rapidInsightsError?.statusCode === 429 && homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
-    probabilities.note = 'API-FOOTBALL Tageslimit erreicht. Es werden lokale/verfuegbare Daten angezeigt.';
+    probabilities.note = isOddsApiProvider
+      ? 'Odds-API Tageslimit erreicht. Es werden lokale/verfuegbare Daten angezeigt.'
+      : 'API-FOOTBALL Tageslimit erreicht. Es werden lokale/verfuegbare Daten angezeigt.';
+  }
+
+  if (!externalProbabilitiesApplied && isOddsApiProvider && homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
+    probabilities.note = 'Keine passenden Odds fuer dieses Match verfuegbar. Es wird die lokale Schaetzung verwendet.';
   }
 
   return {

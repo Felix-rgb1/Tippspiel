@@ -4,6 +4,7 @@ const pool = require('../db');
 const RAPIDAPI_CACHE_TTL_MS = Number.parseInt(process.env.RAPIDAPI_CACHE_TTL_MS || '120000', 10);
 const APIFOOTBALL_DAILY_MAX_REQUESTS = Number.parseInt(process.env.APIFOOTBALL_DAILY_MAX_REQUESTS || '80', 10);
 const APIFOOTBALL_ENFORCE_DAILY_LIMIT = (process.env.APIFOOTBALL_ENFORCE_DAILY_LIMIT || 'true').toLowerCase() !== 'false';
+const ODDS_API_BASE_URL = process.env.ODDS_API_BASE_URL || 'https://api.odds-api.io/v3';
 const APIFOOTBALL_USAGE_PROVIDER_KEY = 'api-football';
 const rapidApiCache = new Map();
 let apiUsageTableReadyPromise = null;
@@ -72,13 +73,16 @@ const TEAM_NAME_SEARCH_ALIAS = {
 };
 
 function isRapidApiConfigured() {
-  return Boolean((process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_HOST) || isApiSportsDirectMode());
+  return Boolean((process.env.RAPIDAPI_KEY && process.env.RAPIDAPI_HOST) || isApiSportsDirectMode() || isOddsApiMode());
 }
 
 function getProviderMode() {
   const mode = (process.env.RAPIDAPI_PROVIDER || '').trim().toLowerCase();
   if (mode === 'api-football-direct' || mode === 'direct') {
     return 'api-football-direct';
+  }
+  if (mode === 'odds-api' || mode === 'oddsapi') {
+    return 'odds-api';
   }
   return 'rapidapi';
 }
@@ -94,6 +98,10 @@ function isSofascoreHost() {
 
 function isApiSportsDirectMode() {
   return getProviderMode() === 'api-football-direct' && Boolean(process.env.APIFOOTBALL_KEY);
+}
+
+function isOddsApiMode() {
+  return getProviderMode() === 'odds-api' && Boolean(process.env.ODDS_API_KEY);
 }
 
 function shouldEnforceApiFootballDailyLimit() {
@@ -218,6 +226,12 @@ function parseNumeric(value) {
   return null;
 }
 
+function normalizeTeamCandidates(teamName) {
+  return [teamName, TEAM_NAME_SEARCH_ALIAS[teamName]]
+    .filter(Boolean)
+    .map((candidate) => normalizeComparableName(candidate));
+}
+
 function normalizePercent(value) {
   const numeric = parseNumeric(value);
   if (numeric === null) {
@@ -331,6 +345,26 @@ function tryExtractProbabilities(payload) {
     }
   }
 
+  // Shape 5: odds-api.io bookmaker markets
+  if (payload?.bookmakers && typeof payload.bookmakers === 'object') {
+    const bookmakerEntries = Object.values(payload.bookmakers)
+      .filter(Array.isArray)
+      .flat();
+
+    const market = bookmakerEntries.find((entry) => {
+      const marketName = String(entry?.name || '').toUpperCase();
+      return marketName === 'ML' || marketName === '1X2' || marketName === 'MATCH_WINNER';
+    });
+
+    const firstOdds = market?.odds?.[0];
+    if (firstOdds) {
+      const normalized = normalizeFromDecimalOdds(firstOdds.home, firstOdds.draw, firstOdds.away);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -342,11 +376,13 @@ async function rapidApiRequest(path, queryParams = {}) {
   }
 
   const safePath = path.startsWith('/') ? path : `/${path}`;
-  const normalizedPath = isApiSportsDirectMode()
+  const normalizedPath = (isApiSportsDirectMode() || isOddsApiMode())
     ? (safePath.replace(/^\/v3(?=\/|$)/, '') || '/')
     : safePath;
   const baseUrl = isApiSportsDirectMode()
     ? (process.env.APIFOOTBALL_BASE_URL || 'https://v3.football.api-sports.io')
+    : isOddsApiMode()
+      ? ODDS_API_BASE_URL
     : `https://${process.env.RAPIDAPI_HOST}`;
   const url = new URL(`${baseUrl}${normalizedPath}`);
 
@@ -355,6 +391,10 @@ async function rapidApiRequest(path, queryParams = {}) {
       url.searchParams.set(key, String(value));
     }
   });
+
+  if (isOddsApiMode() && !url.searchParams.has('apiKey')) {
+    url.searchParams.set('apiKey', process.env.ODDS_API_KEY);
+  }
 
   const cacheKey = url.toString();
   const cached = rapidApiCache.get(cacheKey);
@@ -375,6 +415,8 @@ async function rapidApiRequest(path, queryParams = {}) {
       ? {
         'x-apisports-key': process.env.APIFOOTBALL_KEY
       }
+      : isOddsApiMode()
+        ? {}
       : {
         'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
         'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
@@ -899,6 +941,61 @@ async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate) {
     return fetchApiFootballProbabilities(homeTeam, awayTeam, matchDate);
   }
 
+  if (isOddsApiMode()) {
+    const sport = process.env.ODDS_API_SPORT || 'football';
+    const bookmakers = process.env.ODDS_API_BOOKMAKERS || 'Bet365';
+    const eventsPath = process.env.ODDS_API_EVENTS_PATH || '/events';
+    const oddsPath = process.env.ODDS_API_ODDS_PATH || '/odds';
+
+    const eventsPayload = await rapidApiRequest(eventsPath, { sport });
+    const events = Array.isArray(eventsPayload)
+      ? eventsPayload
+      : (eventsPayload?.response || []);
+
+    if (!events.length) {
+      return null;
+    }
+
+    const homeCandidates = normalizeTeamCandidates(homeTeam);
+    const awayCandidates = normalizeTeamCandidates(awayTeam);
+    const matchDateTime = matchDate ? new Date(matchDate).getTime() : null;
+
+    const candidates = events
+      .filter((event) => {
+        const eventHome = normalizeComparableName(event?.home);
+        const eventAway = normalizeComparableName(event?.away);
+        const direct = homeCandidates.includes(eventHome) && awayCandidates.includes(eventAway);
+        const swapped = homeCandidates.includes(eventAway) && awayCandidates.includes(eventHome);
+        return direct || swapped;
+      })
+      .map((event) => {
+        const eventTime = new Date(event?.date || 0).getTime();
+        const timeDiff = Number.isFinite(matchDateTime) ? Math.abs(eventTime - matchDateTime) : Number.MAX_SAFE_INTEGER;
+        return { event, timeDiff };
+      })
+      .sort((first, second) => first.timeDiff - second.timeDiff);
+
+    const selectedEvent = candidates[0]?.event;
+    if (!selectedEvent?.id) {
+      return null;
+    }
+
+    const payload = await rapidApiRequest(oddsPath, {
+      eventId: selectedEvent.id,
+      bookmakers
+    });
+
+    const probabilities = tryExtractProbabilities(payload);
+    if (!probabilities) {
+      return null;
+    }
+
+    return {
+      ...probabilities,
+      note: 'Wahrscheinlichkeiten von Odds API.'
+    };
+  }
+
   const path = process.env.RAPIDAPI_ODDS_PATH;
   if (!path) {
     return null;
@@ -927,10 +1024,16 @@ async function testRapidApi(path, queryParams = {}) {
 
   return {
     configured: isRapidApiConfigured(),
-    mode: isApiSportsDirectMode() ? 'api-sports-direct' : `rapidapi:${process.env.RAPIDAPI_HOST || 'unknown-host'}`,
+    mode: isApiSportsDirectMode()
+      ? 'api-sports-direct'
+      : isOddsApiMode()
+        ? 'odds-api-direct'
+        : `rapidapi:${process.env.RAPIDAPI_HOST || 'unknown-host'}`,
     host: process.env.RAPIDAPI_HOST,
     baseUrl: isApiSportsDirectMode()
       ? (process.env.APIFOOTBALL_BASE_URL || 'https://v3.football.api-sports.io')
+      : isOddsApiMode()
+        ? ODDS_API_BASE_URL
       : `https://${process.env.RAPIDAPI_HOST}`,
     path,
     extractedProbabilities: probabilities,

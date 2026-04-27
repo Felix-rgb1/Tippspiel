@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ override: true });
 const { Pool } = require('pg');
 
 const jwtSecret = process.env.JWT_SECRET;
