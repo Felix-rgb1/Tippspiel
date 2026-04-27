@@ -113,6 +113,10 @@ function isSofascoreHost() {
   return (process.env.RAPIDAPI_HOST || '').toLowerCase().includes('sofascore');
 }
 
+function isFlashscoreHost() {
+  return (process.env.RAPIDAPI_HOST || '').toLowerCase().includes('flashscore');
+}
+
 function isApiSportsDirectMode() {
   return getProviderMode() === 'api-football-direct' && Boolean(process.env.APIFOOTBALL_KEY);
 }
@@ -218,6 +222,16 @@ function toDateOnly(matchDate) {
   return date.toISOString().slice(0, 10);
 }
 
+function isWithinDaysFromNow(matchDate, days) {
+  const date = new Date(matchDate);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const diffMs = Math.abs(date.getTime() - Date.now());
+  return diffMs <= days * 24 * 60 * 60 * 1000;
+}
+
 function getApiFootballSeasonCandidates(matchDate) {
   const referenceDate = matchDate ? new Date(matchDate) : new Date();
   const referenceYear = Number.isNaN(referenceDate.getTime())
@@ -286,6 +300,77 @@ function isLikelyTeamMatch(teamData, eventTeamName) {
   }
 
   return 0;
+}
+
+function findBestFlashscoreMatch(tournaments, homeTeam, awayTeam, matchDate) {
+  const homeMatchingData = buildTeamMatchingData(homeTeam);
+  const awayMatchingData = buildTeamMatchingData(awayTeam);
+  const matchDateTime = matchDate ? new Date(matchDate).getTime() : null;
+
+  const candidates = (Array.isArray(tournaments) ? tournaments : [])
+    .flatMap((tournament) => Array.isArray(tournament?.matches) ? tournament.matches : [])
+    .map((match) => {
+      const directHomeScore = isLikelyTeamMatch(homeMatchingData, match?.home_team?.name);
+      const directAwayScore = isLikelyTeamMatch(awayMatchingData, match?.away_team?.name);
+      const swappedHomeScore = isLikelyTeamMatch(homeMatchingData, match?.away_team?.name);
+      const swappedAwayScore = isLikelyTeamMatch(awayMatchingData, match?.home_team?.name);
+
+      const directScore = directHomeScore + directAwayScore;
+      const swappedScore = swappedHomeScore + swappedAwayScore;
+      const score = Math.max(directScore, swappedScore);
+
+      if (score < 2) {
+        return null;
+      }
+
+      const eventTime = typeof match?.timestamp === 'number' ? match.timestamp * 1000 : Number.NaN;
+      const timeDiff = Number.isFinite(matchDateTime) && Number.isFinite(eventTime)
+        ? Math.abs(eventTime - matchDateTime)
+        : Number.MAX_SAFE_INTEGER;
+
+      return { match, score, timeDiff };
+    })
+    .filter(Boolean)
+    .sort((first, second) => {
+      if (second.score !== first.score) {
+        return second.score - first.score;
+      }
+      return first.timeDiff - second.timeDiff;
+    });
+
+  return candidates[0]?.match || null;
+}
+
+async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate) {
+  if (!isWithinDaysFromNow(matchDate, 7)) {
+    return null;
+  }
+
+  const dateOnly = toDateOnly(matchDate);
+  if (!dateOnly) {
+    return null;
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/matches/list-by-date', {
+    sport_id: 1,
+    date: dateOnly,
+    timezone: process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin'
+  });
+
+  const match = findBestFlashscoreMatch(payload, homeTeam, awayTeam, matchDate);
+  if (!match?.odds) {
+    return null;
+  }
+
+  const probabilities = normalizeFromDecimalOdds(match.odds['1'], match.odds.X, match.odds['2']);
+  if (!probabilities) {
+    return null;
+  }
+
+  return {
+    ...probabilities,
+    note: 'Wahrscheinlichkeiten von FlashScore Odds (1X2).'
+  };
 }
 
 function normalizePercent(value) {
@@ -995,6 +1080,10 @@ async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate) {
 async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate) {
   if (isApiFootballHost()) {
     return fetchApiFootballProbabilities(homeTeam, awayTeam, matchDate);
+  }
+
+  if (isFlashscoreHost()) {
+    return fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate);
   }
 
   if (isOddsApiMode()) {
