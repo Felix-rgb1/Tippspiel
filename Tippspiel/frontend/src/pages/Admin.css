@@ -37,8 +37,9 @@
 
 .admin-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .bonus-admin-grid {

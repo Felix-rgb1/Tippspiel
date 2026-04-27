@@ -5,6 +5,7 @@ const { adminMiddleware } = require('../middleware/auth');
 const { syncMatchesFromFootballData } = require('../services/footballData');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 const { testRapidApi, isRapidApiConfigured } = require('../services/rapidApi');
+const { importFlashscoreBundesligaMatches } = require('../services/flashscoreBundesligaImport');
 
 const router = express.Router();
 
@@ -137,6 +138,19 @@ router.post('/matches/sync', adminMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Synchronisierung fehlgeschlagen' });
+  }
+});
+
+router.post('/matches/import/bundesliga', adminMiddleware, async (req, res) => {
+  try {
+    const importResult = await importFlashscoreBundesligaMatches(pool);
+    res.json({
+      message: `Bundesliga-Import abgeschlossen: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert.`,
+      ...importResult
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Bundesliga-Import fehlgeschlagen' });
   }
 });
 

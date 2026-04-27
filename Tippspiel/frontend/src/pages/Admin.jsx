@@ -21,6 +21,7 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [importingBundesliga, setImportingBundesliga] = useState(false);
   const [exportingTips, setExportingTips] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -212,6 +213,20 @@ function Admin() {
     }
   };
 
+  const handleImportBundesliga = async () => {
+    try {
+      setImportingBundesliga(true);
+      setError('');
+      const response = await adminAPI.importBundesliga();
+      setSuccess(response.data.message || 'Bundesliga-Import abgeschlossen');
+      fetchMatches();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Bundesliga-Import fehlgeschlagen');
+    } finally {
+      setImportingBundesliga(false);
+    }
+  };
+
   const extractApiErrorMessage = async (err, fallbackMessage) => {
     const responseData = err?.response?.data;
 
@@ -395,6 +410,14 @@ function Admin() {
               disabled={syncing}
             >
               {syncing ? '⏳ Synchronisiert...' : '🔄 Spiele synchronisieren'}
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleImportBundesliga}
+              disabled={importingBundesliga}
+            >
+              {importingBundesliga ? '⏳ Import läuft...' : '🏆 Bundesliga von Flashscore importieren'}
             </button>
             <button
               type="button"

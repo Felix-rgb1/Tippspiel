@@ -416,8 +416,10 @@ function getConfiguredFlashscoreTournamentUrl() {
   return process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
 }
 
-async function fetchFlashscoreTournamentIds() {
-  if (process.env.FLASHSCORE_TOURNAMENT_ID && process.env.FLASHSCORE_TOURNAMENT_STAGE_ID && process.env.FLASHSCORE_TOURNAMENT_TEMPLATE_ID && process.env.FLASHSCORE_SEASON_ID) {
+async function fetchFlashscoreTournamentIds(tournamentUrl = getConfiguredFlashscoreTournamentUrl(), options = {}) {
+  const useConfiguredIds = options.useConfiguredIds !== false;
+
+  if (useConfiguredIds && process.env.FLASHSCORE_TOURNAMENT_ID && process.env.FLASHSCORE_TOURNAMENT_STAGE_ID && process.env.FLASHSCORE_TOURNAMENT_TEMPLATE_ID && process.env.FLASHSCORE_SEASON_ID) {
     return {
       tournament_id: process.env.FLASHSCORE_TOURNAMENT_ID,
       tournament_stage_id: process.env.FLASHSCORE_TOURNAMENT_STAGE_ID,
@@ -427,7 +429,7 @@ async function fetchFlashscoreTournamentIds() {
   }
 
   const payload = await rapidApiRequest('/api/flashscore/v2/tournaments/ids', {
-    tournament_url: getConfiguredFlashscoreTournamentUrl()
+    tournament_url: tournamentUrl
   });
 
   if (!payload?.tournament_id || !payload?.tournament_template_id || !payload?.season_id) {
@@ -437,8 +439,8 @@ async function fetchFlashscoreTournamentIds() {
   return payload;
 }
 
-async function fetchFlashscoreTournamentFixtures() {
-  const ids = await fetchFlashscoreTournamentIds();
+async function fetchFlashscoreTournamentFixtures(tournamentUrl = getConfiguredFlashscoreTournamentUrl(), options = {}) {
+  const ids = await fetchFlashscoreTournamentIds(tournamentUrl, options);
   if (!ids?.tournament_template_id || !ids?.season_id) {
     return [];
   }
@@ -1404,5 +1406,6 @@ module.exports = {
   isRapidApiConfigured,
   fetchRapidApiProbabilities,
   fetchRapidApiMatchInsights,
+  fetchFlashscoreTournamentFixtures,
   testRapidApi
 };
