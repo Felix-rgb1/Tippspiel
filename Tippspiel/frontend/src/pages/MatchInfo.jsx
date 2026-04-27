@@ -118,16 +118,7 @@ function MatchInfo() {
           </p>
         </div>
 
-        <div className="match-hero-meta">
-          <div className="match-meta-pill">
-            <span>Datenbasis</span>
-            <strong>{sourceLabel}</strong>
-          </div>
-          <div className="match-meta-pill match-meta-pill-accent">
-            <span>Insight-Status</span>
-            <strong>{insights.headToHead.length > 0 ? 'Voll befuellt' : 'Live berechnet'}</strong>
-          </div>
-        </div>
+
       </section>
 
       <div className="match-info-actions">

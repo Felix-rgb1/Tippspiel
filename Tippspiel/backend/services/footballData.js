@@ -552,13 +552,54 @@ async function getMatchInsights(pool, matchId) {
   let normalizedRows;
   let rapidInsightsError = null;
 
-  try {
-    const externalMatches = await fetchCompetitionMatches();
-    normalizedRows = toNormalizedRowsFromFootballData(externalMatches);
-    source = 'football-data';
-  } catch (err) {
-    normalizedRows = await fetchLocalFinishedMatches(pool, match.home_team, match.away_team);
-  }
+  // 1. Load local data (schnell) + Cache-First + external APIs in parallel
+  const localDataPromise = (async () => {
+    try {
+      const externalMatches = await fetchCompetitionMatches();
+      const rows = toNormalizedRowsFromFootballData(externalMatches);
+      return { rows, source: 'football-data' };
+    } catch (err) {
+      const rows = await fetchLocalFinishedMatches(pool, match.home_team, match.away_team);
+      return { rows, source: 'local' };
+    }
+  })();
+
+  // 2. Cache-First: try DB cache immediately (schnell)
+  const cachedPromise = loadCachedRapidInsights(pool, match.home_team, match.away_team)
+    .catch(() => null);
+
+  // 3. External API (mit Timeout): nur wenn Cache fehlschlägt
+  const externalInsightsPromise = (async () => {
+    try {
+      return await Promise.race([
+        fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('RapidAPI timeout')), 5000)
+        )
+      ]);
+    } catch (err) {
+      return null;
+    }
+  })();
+
+  // 4. Probabilities (parallel mit anderen)
+  const probabilitiesPromise = (async () => {
+    try {
+      return await Promise.race([
+        fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Probabilities timeout')), 3000)
+        )
+      ]);
+    } catch (err) {
+      return null;
+    }
+  })();
+
+  // Warte auf lokale Daten zuerst
+  const localData = await localDataPromise;
+  normalizedRows = localData.rows;
+  source = localData.source;
 
   const homeRecentMatches = buildRecentMatches(normalizedRows, match.home_team, 5);
   const awayRecentMatches = buildRecentMatches(normalizedRows, match.away_team, 5);
@@ -577,84 +618,57 @@ async function getMatchInsights(pool, matchId) {
       score: `${row.home_goals}:${row.away_goals}`
     }));
 
-  try {
-    if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
-      const rapidInsights = await fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date);
+  // Falls lokale Daten unvollständig: Cache + External parallel
+  if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
+    const cachedInsights = await cachedPromise;
 
-      if (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0) {
-        await saveCachedRapidInsights(pool, match.home_team, match.away_team, rapidInsights);
+    if (cachedInsights) {
+      if (homeRecentMatches.length === 0 && cachedInsights.homeRecentMatches.length > 0) {
+        homeRecentMatches.push(...cachedInsights.homeRecentMatches);
       }
-
-      if (homeRecentMatches.length === 0 && rapidInsights.homeRecentMatches.length > 0) {
-        homeRecentMatches.push(...rapidInsights.homeRecentMatches);
+      if (awayRecentMatches.length === 0 && cachedInsights.awayRecentMatches.length > 0) {
+        awayRecentMatches.push(...cachedInsights.awayRecentMatches);
       }
-
-      if (awayRecentMatches.length === 0 && rapidInsights.awayRecentMatches.length > 0) {
-        awayRecentMatches.push(...rapidInsights.awayRecentMatches);
+      if (headToHead.length === 0 && cachedInsights.headToHead.length > 0) {
+        headToHead.push(...cachedInsights.headToHead);
       }
-
-      if (headToHead.length === 0 && rapidInsights.headToHead.length > 0) {
-        headToHead.push(...rapidInsights.headToHead);
-      }
-
-      if (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0) {
+      if (cachedInsights.homeRecentMatches.length > 0 || cachedInsights.awayRecentMatches.length > 0 || cachedInsights.headToHead.length > 0) {
         source = 'rapidapi';
       }
-    }
-  } catch (err) {
-    rapidInsightsError = err;
-  }
+    } else {
+      // Nur wenn Cache miss: rufe externe API auf
+      const rapidInsights = await externalInsightsPromise;
+      if (rapidInsights) {
+        rapidInsightsError = null;
+        await saveCachedRapidInsights(pool, match.home_team, match.away_team, rapidInsights).catch(() => {});
 
-  try {
-    if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
-      const cachedInsights = await loadCachedRapidInsights(pool, match.home_team, match.away_team);
-
-      if (cachedInsights) {
-        if (homeRecentMatches.length === 0 && cachedInsights.homeRecentMatches.length > 0) {
-          homeRecentMatches.push(...cachedInsights.homeRecentMatches);
+        if (homeRecentMatches.length === 0 && rapidInsights.homeRecentMatches.length > 0) {
+          homeRecentMatches.push(...rapidInsights.homeRecentMatches);
         }
-
-        if (awayRecentMatches.length === 0 && cachedInsights.awayRecentMatches.length > 0) {
-          awayRecentMatches.push(...cachedInsights.awayRecentMatches);
+        if (awayRecentMatches.length === 0 && rapidInsights.awayRecentMatches.length > 0) {
+          awayRecentMatches.push(...rapidInsights.awayRecentMatches);
         }
-
-        if (headToHead.length === 0 && cachedInsights.headToHead.length > 0) {
-          headToHead.push(...cachedInsights.headToHead);
+        if (headToHead.length === 0 && rapidInsights.headToHead.length > 0) {
+          headToHead.push(...rapidInsights.headToHead);
         }
-
-        if (cachedInsights.homeRecentMatches.length > 0 || cachedInsights.awayRecentMatches.length > 0 || cachedInsights.headToHead.length > 0) {
+        if (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0) {
           source = 'rapidapi';
         }
       }
     }
-  } catch (err) {
-    // Keep existing data when DB cache is unavailable.
   }
 
   const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
   let externalProbabilitiesApplied = false;
 
-  try {
-    const rapidApiProbabilities = await fetchRapidApiProbabilities(
-      match.home_team,
-      match.away_team,
-      match.match_date
-    );
-    if (rapidApiProbabilities) {
-      probabilities.homeWin = rapidApiProbabilities.homeWin;
-      probabilities.draw = rapidApiProbabilities.draw;
-      probabilities.awayWin = rapidApiProbabilities.awayWin;
-      probabilities.note = rapidApiProbabilities.note;
-      externalProbabilitiesApplied = true;
-    }
-  } catch (err) {
-    // Keep fallback probabilities if RapidAPI is unavailable or mapping fails.
-  }
-
-  if (rapidInsightsError?.statusCode === 429 && homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
-    probabilities.note = isOddsApiProvider
-      ? 'Odds-API Tageslimit erreicht. Es werden lokale/verfuegbare Daten angezeigt.'
-      : 'API-FOOTBALL Tageslimit erreicht. Es werden lokale/verfuegbare Daten angezeigt.';
+  // Probabilities parallel, aber nicht blockierend
+  const externalProbs = await probabilitiesPromise;
+  if (externalProbs) {
+    probabilities.homeWin = externalProbs.homeWin;
+    probabilities.draw = externalProbs.draw;
+    probabilities.awayWin = externalProbs.awayWin;
+    probabilities.note = externalProbs.note;
+    externalProbabilitiesApplied = true;
   }
 
   if (!externalProbabilitiesApplied && isOddsApiProvider && homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
