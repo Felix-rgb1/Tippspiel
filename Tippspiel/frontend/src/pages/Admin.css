@@ -297,6 +297,42 @@
   border-radius: 0.5rem;
 }
 
+.user-edit-form {
+  width: 100%;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.user-edit-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.user-edit-row label {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.self-protection-hint {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.user-edit-row input,
+.user-edit-row select {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 0.375rem;
+  font-family: inherit;
+}
+
+.user-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
 .user-item > div {
   flex: 1;
 }
@@ -363,6 +399,10 @@
   }
 
   .user-item button {
+    width: 100%;
+  }
+
+  .user-actions {
     width: 100%;
   }
 }

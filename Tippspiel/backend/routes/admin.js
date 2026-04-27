@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const pool = require('../db');
 const ExcelJS = require('exceljs');
 const { adminMiddleware } = require('../middleware/auth');
@@ -342,10 +343,107 @@ router.get('/users', adminMiddleware, async (req, res) => {
   }
 });
 
+// Update user profile data (admin only)
+router.put('/users/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, email, role } = req.body;
+    const currentAdminId = String(req.user?.id || '');
+    const targetUserId = String(id);
+
+    const usernameNormalized = String(username || '').trim();
+    const emailNormalized = String(email || '').trim().toLowerCase();
+    const roleNormalized = String(role || '').trim().toLowerCase();
+
+    if (!usernameNormalized || !emailNormalized || !roleNormalized) {
+      return res.status(400).json({ error: 'Benutzername, E-Mail und Rolle sind erforderlich' });
+    }
+
+    if (!['user', 'admin'].includes(roleNormalized)) {
+      return res.status(400).json({ error: 'Ungültige Rolle' });
+    }
+
+    if (currentAdminId && currentAdminId === targetUserId && roleNormalized !== 'admin') {
+      return res.status(400).json({ error: 'Du kannst dir die Admin-Rolle nicht selbst entziehen' });
+    }
+
+    const duplicateResult = await pool.query(
+      `SELECT id
+       FROM users
+       WHERE (username = $1 OR email = $2)
+         AND id <> $3
+       LIMIT 1`,
+      [usernameNormalized, emailNormalized, id]
+    );
+
+    if (duplicateResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Benutzername oder E-Mail ist bereits vergeben' });
+    }
+
+    const result = await pool.query(
+      `UPDATE users
+       SET username = $1,
+           email = $2,
+           role = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING id, username, email, role, created_at`,
+      [usernameNormalized, emailNormalized, roleNormalized, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Reset user password (admin only)
+router.post('/users/:id/reset-password', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'Neues Passwort muss mindestens 6 Zeichen haben' });
+    }
+
+    const hashedPassword = await bcrypt.hash(String(newPassword), 10);
+
+    const result = await pool.query(
+      `UPDATE users
+       SET password = $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id`,
+      [hashedPassword, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ message: 'Passwort wurde zurückgesetzt' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
 // Delete user (admin only)
 router.delete('/users/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const currentAdminId = String(req.user?.id || '');
+    const targetUserId = String(id);
+
+    if (currentAdminId && currentAdminId === targetUserId) {
+      return res.status(400).json({ error: 'Du kannst deinen eigenen Account nicht löschen' });
+    }
 
     // Delete related tips first (foreign key constraint)
     await pool.query('DELETE FROM tips WHERE user_id = $1', [id]);

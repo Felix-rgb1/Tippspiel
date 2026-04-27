@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { adminAPI, matchAPI, tipAPI } from '../api';
 import { getMatchThemeStyle } from '../utils/teamTheme';
+import { useAuth } from '../context/AuthContext';
 import './Admin.css';
 
 function Admin() {
+  const { user: currentUser } = useAuth();
   const roundOptions = [
     '1. Spieltag',
     '2. Spieltag',
@@ -26,6 +28,9 @@ function Admin() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [savingUser, setSavingUser] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [savingBonusResult, setSavingBonusResult] = useState(false);
 
   // Quick edit form
@@ -52,6 +57,13 @@ function Admin() {
     runnerUpTeam: '',
     championPoints: 5,
     runnerUpPoints: 3
+  });
+
+  const [userEditForm, setUserEditForm] = useState({
+    username: '',
+    email: '',
+    role: 'user',
+    newPassword: ''
   });
 
 
@@ -188,6 +200,11 @@ function Admin() {
   };
 
   const handleDeleteUser = async (userId) => {
+    if (String(currentUser?.id) === String(userId)) {
+      setError('Du kannst deinen eigenen Account nicht löschen');
+      return;
+    }
+
     if (!window.confirm('Benutzer wirklich löschen?')) return;
 
     try {
@@ -196,6 +213,78 @@ function Admin() {
       fetchUsers();
     } catch (err) {
       setError('Fehler beim Löschen');
+    }
+  };
+
+  const startEditUser = (user) => {
+    setEditingUserId(user.id);
+    setUserEditForm({
+      username: user.username || '',
+      email: user.email || '',
+      role: user.role || 'user',
+      newPassword: ''
+    });
+    setError('');
+  };
+
+  const cancelEditUser = () => {
+    setEditingUserId(null);
+    setUserEditForm({
+      username: '',
+      email: '',
+      role: 'user',
+      newPassword: ''
+    });
+  };
+
+  const handleSaveUser = async (userId) => {
+    if (!userEditForm.username || !userEditForm.email) {
+      setError('Benutzername und E-Mail sind erforderlich');
+      return;
+    }
+
+    if (String(currentUser?.id) === String(userId) && userEditForm.role !== 'admin') {
+      setError('Du kannst dir die Admin-Rolle nicht selbst entziehen');
+      return;
+    }
+
+    try {
+      setSavingUser(true);
+      setError('');
+      await adminAPI.updateUser(
+        userId,
+        userEditForm.username,
+        userEditForm.email,
+        userEditForm.role
+      );
+      setSuccess('Benutzer aktualisiert');
+      setTimeout(() => setSuccess(''), 2500);
+      await fetchUsers();
+      cancelEditUser();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Fehler beim Aktualisieren des Benutzers');
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
+  const handleResetUserPassword = async (userId) => {
+    if (!userEditForm.newPassword || userEditForm.newPassword.length < 6) {
+      setError('Neues Passwort muss mindestens 6 Zeichen haben');
+      return;
+    }
+
+    try {
+      setResettingPassword(true);
+      setError('');
+      await adminAPI.resetUserPassword(userId, userEditForm.newPassword);
+      setSuccess('Passwort zurückgesetzt');
+      setTimeout(() => setSuccess(''), 2500);
+      setUserEditForm((prev) => ({ ...prev, newPassword: '' }));
+    } catch (err) {
+      setError(err.response?.data?.error || 'Fehler beim Zurücksetzen des Passworts');
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -669,17 +758,99 @@ function Admin() {
               <div className="users-list">
                 {users.map(user => (
                   <div key={user.id} className="user-item">
-                    <div>
-                      <strong>{user.username}</strong>
-                      <div className="user-info">{user.email}</div>
-                      <div className="user-role">{user.role === 'admin' ? '👑 Admin' : 'Spieler'}</div>
-                    </div>
-                    <button
-                      className="btn-danger"
-                      onClick={() => handleDeleteUser(user.id)}
-                    >
-                      Löschen
-                    </button>
+                    {editingUserId === user.id ? (
+                      <div className="user-edit-form">
+                        <div className="user-edit-row">
+                          <label>Benutzername</label>
+                          <input
+                            type="text"
+                            value={userEditForm.username}
+                            onChange={(e) => setUserEditForm((prev) => ({ ...prev, username: e.target.value }))}
+                          />
+                        </div>
+                        <div className="user-edit-row">
+                          <label>E-Mail</label>
+                          <input
+                            type="email"
+                            value={userEditForm.email}
+                            onChange={(e) => setUserEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                          />
+                        </div>
+                        <div className="user-edit-row">
+                          <label>Rolle</label>
+                          <select
+                            value={userEditForm.role}
+                            onChange={(e) => setUserEditForm((prev) => ({ ...prev, role: e.target.value }))}
+                            disabled={String(currentUser?.id) === String(user.id)}
+                          >
+                            <option value="user">Spieler</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          {String(currentUser?.id) === String(user.id) && (
+                            <small className="self-protection-hint">Eigener Account muss Admin bleiben.</small>
+                          )}
+                        </div>
+                        <div className="user-edit-row">
+                          <label>Neues Passwort (Reset)</label>
+                          <input
+                            type="password"
+                            value={userEditForm.newPassword}
+                            onChange={(e) => setUserEditForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                            placeholder="Mindestens 6 Zeichen"
+                          />
+                        </div>
+                        <div className="user-actions">
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={() => handleSaveUser(user.id)}
+                            disabled={savingUser}
+                          >
+                            {savingUser ? 'Speichert...' : 'Speichern'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={() => handleResetUserPassword(user.id)}
+                            disabled={resettingPassword}
+                          >
+                            {resettingPassword ? 'Setzt zurück...' : 'Passwort zurücksetzen'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={cancelEditUser}
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <strong>{user.username}</strong>
+                          <div className="user-info">{user.email}</div>
+                          <div className="user-role">{user.role === 'admin' ? '👑 Admin' : 'Spieler'}</div>
+                        </div>
+                        <div className="user-actions">
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={() => startEditUser(user)}
+                          >
+                            Bearbeiten
+                          </button>
+                          <button
+                            className="btn-danger"
+                            onClick={() => handleDeleteUser(user.id)}
+                            disabled={String(currentUser?.id) === String(user.id)}
+                            title={String(currentUser?.id) === String(user.id) ? 'Eigener Account kann nicht gelöscht werden' : ''}
+                          >
+                            Löschen
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
