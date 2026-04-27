@@ -383,7 +383,54 @@ function calculateFormScore(recentMatches) {
   }, 0);
 }
 
-function calculateWinProbabilities(homeRecentMatches, awayRecentMatches) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function calculateFormMetrics(recentMatches) {
+  if (!recentMatches.length) {
+    return {
+      normalizedPoints: 0.5,
+      normalizedGoalDiff: 0,
+      normalizedScoring: 0,
+      sampleSize: 0
+    };
+  }
+
+  const total = recentMatches.length;
+  const weighted = recentMatches.reduce((acc, match, index) => {
+    const recencyWeight = total - index;
+    const points = match.outcome === 'S' ? 3 : (match.outcome === 'U' ? 1 : 0);
+    const goalDiff = (Number(match.ownGoals) || 0) - (Number(match.opponentGoals) || 0);
+    const goalsFor = Number(match.ownGoals) || 0;
+
+    return {
+      points: acc.points + points * recencyWeight,
+      goalDiff: acc.goalDiff + goalDiff * recencyWeight,
+      goalsFor: acc.goalsFor + goalsFor * recencyWeight,
+      weightSum: acc.weightSum + recencyWeight
+    };
+  }, { points: 0, goalDiff: 0, goalsFor: 0, weightSum: 0 });
+
+  const maxPoints = weighted.weightSum * 3;
+  const normalizedPoints = maxPoints > 0 ? weighted.points / maxPoints : 0.5;
+  const avgWeightedGoalDiff = weighted.weightSum > 0 ? weighted.goalDiff / weighted.weightSum : 0;
+  const avgWeightedGoalsFor = weighted.weightSum > 0 ? weighted.goalsFor / weighted.weightSum : 0;
+
+  return {
+    normalizedPoints: clamp(normalizedPoints, 0, 1),
+    normalizedGoalDiff: clamp(avgWeightedGoalDiff / 2.5, -1, 1),
+    normalizedScoring: clamp(avgWeightedGoalsFor / 3, 0, 1),
+    sampleSize: total
+  };
+}
+
+function isNeutralVenueMatch(match) {
+  const source = String(match?.external_source || '').toLowerCase();
+  return source === 'football-data';
+}
+
+function calculateWinProbabilities(homeRecentMatches, awayRecentMatches, options = {}) {
   if (!homeRecentMatches.length && !awayRecentMatches.length) {
     return {
       homeWin: 33,
@@ -393,25 +440,50 @@ function calculateWinProbabilities(homeRecentMatches, awayRecentMatches) {
     };
   }
 
-  const homeFormScore = calculateFormScore(homeRecentMatches);
-  const awayFormScore = calculateFormScore(awayRecentMatches);
-  const homeStrength = homeFormScore + 2.2; // leichter Heimvorteil
-  const awayStrength = awayFormScore + 1.8;
-  const strengthDiff = Math.abs(homeStrength - awayStrength);
-  const drawProbability = Math.max(0.18, 0.28 - Math.min(0.12, strengthDiff * 0.012));
-  const remainingProbability = 1 - drawProbability;
-  const homeWinProbability = remainingProbability * (homeStrength / (homeStrength + awayStrength));
-  const awayWinProbability = remainingProbability * (awayStrength / (homeStrength + awayStrength));
+  const homeMetrics = calculateFormMetrics(homeRecentMatches);
+  const awayMetrics = calculateFormMetrics(awayRecentMatches);
+
+  const homeStrength = (
+    0.65 * homeMetrics.normalizedPoints
+    + 0.2 * ((homeMetrics.normalizedGoalDiff + 1) / 2)
+    + 0.15 * homeMetrics.normalizedScoring
+  );
+  const awayStrength = (
+    0.65 * awayMetrics.normalizedPoints
+    + 0.2 * ((awayMetrics.normalizedGoalDiff + 1) / 2)
+    + 0.15 * awayMetrics.normalizedScoring
+  );
+
+  const neutralVenue = options.neutralVenue === true;
+  const homeAdvantage = neutralVenue ? 0 : 0.045;
+  const rawDiff = (homeStrength + homeAdvantage) - awayStrength;
+  const boundedDiff = clamp(rawDiff, -0.35, 0.35);
+
+  const avgCombinedScoring = (homeMetrics.normalizedScoring + awayMetrics.normalizedScoring) / 2;
+  const drawBase = 0.27;
+  const drawFromDiff = Math.abs(boundedDiff) * 0.35;
+  const drawFromScoring = avgCombinedScoring * 0.06;
+  const drawProbability = clamp(drawBase - drawFromDiff - drawFromScoring, 0.16, 0.32);
+
+  const remainder = 1 - drawProbability;
+  const homeShare = clamp(0.5 + boundedDiff * 1.35, 0.12, 0.88);
+  const homeWinProbability = remainder * homeShare;
+  const awayWinProbability = remainder * (1 - homeShare);
 
   const homeWin = Math.round(homeWinProbability * 100);
   const draw = Math.round(drawProbability * 100);
-  const awayWin = Math.max(0, 100 - homeWin - draw);
+  const awayWin = Math.max(0, Math.round(awayWinProbability * 100));
+
+  const sum = homeWin + draw + awayWin;
+  const normalizedAway = Math.max(0, awayWin + (100 - sum));
 
   return {
     homeWin,
     draw,
-    awayWin,
-    note: 'Schätzung auf Basis der letzten Spiele und Heimvorteil.'
+    awayWin: normalizedAway,
+    note: neutralVenue
+      ? 'Schätzung auf Basis der letzten Spiele (neutraler Spielort).'
+      : 'Schätzung auf Basis der letzten Spiele und Heimvorteil.'
   };
 }
 
@@ -602,7 +674,7 @@ async function getMatchInsights(pool, matchId) {
       return await Promise.race([
         fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date, rapidApiOptions),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Probabilities timeout')), 3000)
+          setTimeout(() => reject(new Error('Probabilities timeout')), 6000)
         )
       ]);
     } catch (err) {
@@ -672,7 +744,9 @@ async function getMatchInsights(pool, matchId) {
     }
   }
 
-  const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
+  const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches, {
+    neutralVenue: isNeutralVenueMatch(match)
+  });
   let externalProbabilitiesApplied = false;
 
   // Probabilities parallel, aber nicht blockierend
@@ -686,7 +760,11 @@ async function getMatchInsights(pool, matchId) {
   }
 
   if (!externalProbabilitiesApplied && isOddsApiProvider && homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
-    probabilities.note = 'Keine passenden Odds fuer dieses Match verfuegbar. Es wird die lokale Schaetzung verwendet.';
+    probabilities.note = 'Keine passenden Odds fuer dieses Match verfuegbar. Es wird die lokale Schaetzung als Fallback verwendet.';
+  }
+
+  if (!externalProbabilitiesApplied && !isOddsApiProvider) {
+    probabilities.note = `${probabilities.note} (Fallback ohne verfuegbare Marktquoten)`;
   }
 
   return {

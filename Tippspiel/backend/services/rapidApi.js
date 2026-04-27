@@ -494,9 +494,16 @@ async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate, optio
       match_id: fixture.match_id
     });
 
-    const bookmaker = (Array.isArray(oddsPayload) ? oddsPayload : []).find((entry) => Array.isArray(entry?.odds) && entry.odds.length > 0);
-    const market = bookmaker?.odds?.find((entry) => {
-      return entry?.bettingType === 'HOME_DRAW_AWAY' && entry?.bettingScope === 'FULL_TIME' && Array.isArray(entry?.odds) && entry.odds.length >= 3;
+    const bookmakers = Array.isArray(oddsPayload) ? oddsPayload : [];
+    const allMarkets = bookmakers
+      .flatMap((entry) => Array.isArray(entry?.odds) ? entry.odds : [])
+      .filter((entry) => Array.isArray(entry?.odds) && entry.odds.length >= 3);
+
+    const market = allMarkets.find((entry) => {
+      return entry?.bettingType === 'HOME_DRAW_AWAY' && entry?.bettingScope === 'FULL_TIME';
+    }) || allMarkets.find((entry) => {
+      const names = entry.odds.map((odd) => String(odd?.name || '').trim().toUpperCase());
+      return names.includes('1') && names.includes('X') && names.includes('2');
     });
 
     if (market) {
@@ -512,10 +519,6 @@ async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate, optio
         };
       }
     }
-  }
-
-  if (!isWithinDaysFromNow(matchDate, 7)) {
-    return null;
   }
 
   const dateOnly = toDateOnly(matchDate);
