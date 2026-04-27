@@ -4,6 +4,7 @@ const { fetchRapidApiProbabilities, fetchRapidApiMatchInsights } = require('./ra
 const API_BASE_URL = process.env.FOOTBALL_DATA_API_URL || 'https://api.football-data.org/v4';
 const COMPETITION_CODE = process.env.FOOTBALL_DATA_COMPETITION_CODE || 'WC';
 const SEASON = process.env.FOOTBALL_DATA_SEASON;
+const APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS = Number.parseInt(process.env.APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS || '24', 10);
 
 const COUNTRY_NAME_DE_BY_TLA = {
   ARG: 'Argentinien',
@@ -415,6 +416,93 @@ function toNormalizedRowsFromFootballData(matches) {
     .filter(Boolean);
 }
 
+async function ensureInsightsCacheTable(pool) {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS api_match_insights_cache (
+      provider TEXT NOT NULL,
+      home_team TEXT NOT NULL,
+      away_team TEXT NOT NULL,
+      home_recent_matches JSONB NOT NULL DEFAULT '[]'::jsonb,
+      away_recent_matches JSONB NOT NULL DEFAULT '[]'::jsonb,
+      head_to_head JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (provider, home_team, away_team)
+    )`
+  );
+}
+
+async function loadCachedRapidInsights(pool, homeTeam, awayTeam) {
+  await ensureInsightsCacheTable(pool);
+
+  const cacheResult = await pool.query(
+    `SELECT home_recent_matches, away_recent_matches, head_to_head
+     FROM api_match_insights_cache
+     WHERE provider = 'api-football'
+       AND home_team = $1
+       AND away_team = $2
+       AND expires_at > NOW()
+     LIMIT 1`,
+    [homeTeam, awayTeam]
+  );
+
+  if (!cacheResult.rows.length) {
+    return null;
+  }
+
+  const row = cacheResult.rows[0];
+  return {
+    homeRecentMatches: Array.isArray(row.home_recent_matches) ? row.home_recent_matches : [],
+    awayRecentMatches: Array.isArray(row.away_recent_matches) ? row.away_recent_matches : [],
+    headToHead: Array.isArray(row.head_to_head) ? row.head_to_head : []
+  };
+}
+
+async function saveCachedRapidInsights(pool, homeTeam, awayTeam, insights) {
+  await ensureInsightsCacheTable(pool);
+
+  const ttlHours = Number.isFinite(APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS) && APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS > 0
+    ? APIFOOTBALL_INSIGHTS_CACHE_TTL_HOURS
+    : 24;
+
+  await pool.query(
+    `INSERT INTO api_match_insights_cache (
+      provider,
+      home_team,
+      away_team,
+      home_recent_matches,
+      away_recent_matches,
+      head_to_head,
+      updated_at,
+      expires_at
+    ) VALUES (
+      'api-football',
+      $1,
+      $2,
+      $3::jsonb,
+      $4::jsonb,
+      $5::jsonb,
+      NOW(),
+      NOW() + ($6 || ' hours')::interval
+    )
+    ON CONFLICT (provider, home_team, away_team)
+    DO UPDATE SET
+      home_recent_matches = EXCLUDED.home_recent_matches,
+      away_recent_matches = EXCLUDED.away_recent_matches,
+      head_to_head = EXCLUDED.head_to_head,
+      updated_at = NOW(),
+      expires_at = EXCLUDED.expires_at`,
+    [
+      homeTeam,
+      awayTeam,
+      JSON.stringify(insights.homeRecentMatches || []),
+      JSON.stringify(insights.awayRecentMatches || []),
+      JSON.stringify(insights.headToHead || []),
+      String(ttlHours)
+    ]
+  );
+}
+
 async function getMatchInsights(pool, matchId) {
   const matchResult = await pool.query(
     'SELECT id, home_team, away_team, match_date, round FROM matches WHERE id = $1',
@@ -430,6 +518,7 @@ async function getMatchInsights(pool, matchId) {
   const match = matchResult.rows[0];
   let source = 'local';
   let normalizedRows;
+  let rapidInsightsError = null;
 
   try {
     const externalMatches = await fetchCompetitionMatches();
@@ -460,6 +549,10 @@ async function getMatchInsights(pool, matchId) {
     if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
       const rapidInsights = await fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date);
 
+      if (rapidInsights.homeRecentMatches.length > 0 || rapidInsights.awayRecentMatches.length > 0 || rapidInsights.headToHead.length > 0) {
+        await saveCachedRapidInsights(pool, match.home_team, match.away_team, rapidInsights);
+      }
+
       if (homeRecentMatches.length === 0 && rapidInsights.homeRecentMatches.length > 0) {
         homeRecentMatches.push(...rapidInsights.homeRecentMatches);
       }
@@ -477,7 +570,33 @@ async function getMatchInsights(pool, matchId) {
       }
     }
   } catch (err) {
-    // Keep existing data when RapidAPI fallback is unavailable.
+    rapidInsightsError = err;
+  }
+
+  try {
+    if (homeRecentMatches.length === 0 || awayRecentMatches.length === 0 || headToHead.length === 0) {
+      const cachedInsights = await loadCachedRapidInsights(pool, match.home_team, match.away_team);
+
+      if (cachedInsights) {
+        if (homeRecentMatches.length === 0 && cachedInsights.homeRecentMatches.length > 0) {
+          homeRecentMatches.push(...cachedInsights.homeRecentMatches);
+        }
+
+        if (awayRecentMatches.length === 0 && cachedInsights.awayRecentMatches.length > 0) {
+          awayRecentMatches.push(...cachedInsights.awayRecentMatches);
+        }
+
+        if (headToHead.length === 0 && cachedInsights.headToHead.length > 0) {
+          headToHead.push(...cachedInsights.headToHead);
+        }
+
+        if (cachedInsights.homeRecentMatches.length > 0 || cachedInsights.awayRecentMatches.length > 0 || cachedInsights.headToHead.length > 0) {
+          source = 'rapidapi';
+        }
+      }
+    }
+  } catch (err) {
+    // Keep existing data when DB cache is unavailable.
   }
 
   const probabilities = calculateWinProbabilities(homeRecentMatches, awayRecentMatches);
@@ -498,6 +617,10 @@ async function getMatchInsights(pool, matchId) {
     }
   } catch (err) {
     // Keep fallback probabilities if RapidAPI is unavailable or mapping fails.
+  }
+
+  if (rapidInsightsError?.statusCode === 429 && homeRecentMatches.length === 0 && awayRecentMatches.length === 0) {
+    probabilities.note = 'API-FOOTBALL Tageslimit erreicht. Es werden lokale/verfuegbare Daten angezeigt.';
   }
 
   return {

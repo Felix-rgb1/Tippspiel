@@ -7,6 +7,7 @@ const APIFOOTBALL_ENFORCE_DAILY_LIMIT = (process.env.APIFOOTBALL_ENFORCE_DAILY_L
 const APIFOOTBALL_USAGE_PROVIDER_KEY = 'api-football';
 const rapidApiCache = new Map();
 let apiUsageTableReadyPromise = null;
+let providerDailyLimitBlockedUntil = null;
 
 const TEAM_NAME_SEARCH_ALIAS = {
   Deutschland: 'Germany',
@@ -97,6 +98,26 @@ function isApiSportsDirectMode() {
 
 function shouldEnforceApiFootballDailyLimit() {
   return APIFOOTBALL_ENFORCE_DAILY_LIMIT && isApiFootballHost();
+}
+
+function getNextUtcDayStart(now = Date.now()) {
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return next;
+}
+
+function shouldShortCircuitOnProviderLimit(now = Date.now()) {
+  return providerDailyLimitBlockedUntil instanceof Date && providerDailyLimitBlockedUntil.getTime() > now;
+}
+
+function markProviderDailyLimitReached(now = Date.now()) {
+  providerDailyLimitBlockedUntil = getNextUtcDayStart(now);
+}
+
+function buildProviderDailyLimitError() {
+  const err = new Error('API-FOOTBALL Provider-Tageslimit erreicht.');
+  err.statusCode = 429;
+  return err;
 }
 
 async function ensureApiUsageTable() {
@@ -342,6 +363,10 @@ async function rapidApiRequest(path, queryParams = {}) {
     return cached.payload;
   }
 
+  if (shouldShortCircuitOnProviderLimit(now) && isApiFootballHost()) {
+    throw buildProviderDailyLimitError();
+  }
+
   await registerApiFootballRequestUsage();
 
   const response = await fetch(url.toString(), {
@@ -359,6 +384,17 @@ async function rapidApiRequest(path, queryParams = {}) {
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
   const payload = isJson ? await response.json() : await response.text();
+
+  if (isJson && isApiFootballHost()) {
+    const providerErrors = payload?.errors;
+    const providerErrorText = typeof providerErrors?.requests === 'string'
+      ? providerErrors.requests
+      : '';
+    if (providerErrorText.toLowerCase().includes('request limit for the day')) {
+      markProviderDailyLimitReached(now);
+      throw buildProviderDailyLimitError();
+    }
+  }
 
   if (!response.ok) {
     if (response.status === 429 && cached?.payload) {
