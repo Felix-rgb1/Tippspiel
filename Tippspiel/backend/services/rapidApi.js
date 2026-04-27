@@ -455,8 +455,10 @@ async function fetchFlashscoreTournamentFixtures(tournamentUrl = getConfiguredFl
   return Array.isArray(payload) ? payload : [];
 }
 
-async function findFlashscoreFixture(homeTeam, awayTeam, matchDate) {
-  const fixtures = await fetchFlashscoreTournamentFixtures();
+async function findFlashscoreFixture(homeTeam, awayTeam, matchDate, options = {}) {
+  const fixtures = await fetchFlashscoreTournamentFixtures(options.tournamentUrl, {
+    useConfiguredIds: options.useConfiguredIds
+  });
   if (!fixtures.length) {
     return null;
   }
@@ -485,8 +487,8 @@ function buildFlashscoreHeadToHead(homeTeamId, awayTeamId, homeResults, awayResu
     .slice(0, last);
 }
 
-async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate) {
-  const fixture = await findFlashscoreFixture(homeTeam, awayTeam, matchDate);
+async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate, options = {}) {
+  const fixture = await findFlashscoreFixture(homeTeam, awayTeam, matchDate, options);
   if (fixture?.match_id) {
     const oddsPayload = await rapidApiRequest('/api/flashscore/v2/matches/odds', {
       match_id: fixture.match_id
@@ -1179,7 +1181,7 @@ async function fetchApiFootballHeadToHeadByTeamIds(homeTeamId, awayTeamId, last 
     .slice(0, last);
 }
 
-async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate) {
+async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate, options = {}) {
   if (isApiFootballHost()) {
     const [homeTeamId, awayTeamId] = await Promise.all([
       findApiFootballTeamId(homeTeam),
@@ -1206,7 +1208,7 @@ async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate) {
   }
 
   if (isFlashscoreHost()) {
-    const fixture = await findFlashscoreFixture(homeTeam, awayTeam, matchDate);
+    const fixture = await findFlashscoreFixture(homeTeam, awayTeam, matchDate, options);
     const homeTeamId = fixture?.home_team?.team_id;
     const awayTeamId = fixture?.away_team?.team_id;
 
@@ -1283,13 +1285,13 @@ async function fetchRapidApiMatchInsights(homeTeam, awayTeam, matchDate) {
   };
 }
 
-async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate) {
+async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate, options = {}) {
   if (isApiFootballHost()) {
     return fetchApiFootballProbabilities(homeTeam, awayTeam, matchDate);
   }
 
   if (isFlashscoreHost()) {
-    return fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate);
+    return fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate, options);
   }
 
   if (isOddsApiMode()) {

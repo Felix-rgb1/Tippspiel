@@ -171,6 +171,19 @@ function createConfigError(message) {
   return error;
 }
 
+function getRapidApiOptionsForMatch(match) {
+  const externalSource = String(match?.external_source || '').toLowerCase();
+
+  if (externalSource === 'flashscore-bundesliga') {
+    return {
+      tournamentUrl: process.env.FLASHSCORE_BUNDESLIGA_TOURNAMENT_URL || '/football/germany/bundesliga/',
+      useConfiguredIds: false
+    };
+  }
+
+  return {};
+}
+
 function getRoundLabel(match) {
   const stageMap = {
     LAST_16: 'Achtelfinale',
@@ -535,7 +548,7 @@ async function saveCachedRapidInsights(pool, homeTeam, awayTeam, insights) {
 
 async function getMatchInsights(pool, matchId) {
   const matchResult = await pool.query(
-    'SELECT id, home_team, away_team, match_date, round FROM matches WHERE id = $1',
+    'SELECT id, home_team, away_team, match_date, round, external_source FROM matches WHERE id = $1',
     [matchId]
   );
 
@@ -548,6 +561,7 @@ async function getMatchInsights(pool, matchId) {
   const match = matchResult.rows[0];
   const providerMode = (process.env.RAPIDAPI_PROVIDER || '').trim().toLowerCase();
   const isOddsApiProvider = providerMode === 'odds-api' || providerMode === 'oddsapi';
+  const rapidApiOptions = getRapidApiOptionsForMatch(match);
   let source = 'local';
   let normalizedRows;
   let rapidInsightsError = null;
@@ -572,7 +586,7 @@ async function getMatchInsights(pool, matchId) {
   const externalInsightsPromise = (async () => {
     try {
       return await Promise.race([
-        fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date),
+        fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date, rapidApiOptions),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('RapidAPI timeout')), 5000)
         )
@@ -586,7 +600,7 @@ async function getMatchInsights(pool, matchId) {
   const probabilitiesPromise = (async () => {
     try {
       return await Promise.race([
-        fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date),
+        fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date, rapidApiOptions),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Probabilities timeout')), 3000)
         )
@@ -703,7 +717,7 @@ async function warmUpApiFootballInsightsCache(pool, options = {}) {
   const toDate = new Date(fromDate.getTime() + Math.max(1, horizonDays) * 24 * 60 * 60 * 1000);
 
   const upcomingMatchesResult = await pool.query(
-    `SELECT id, home_team, away_team, match_date
+    `SELECT id, home_team, away_team, match_date, external_source
      FROM matches
      WHERE finished = false
        AND match_date >= $1
@@ -717,8 +731,9 @@ async function warmUpApiFootballInsightsCache(pool, options = {}) {
 
   for (const match of upcomingMatchesResult.rows) {
     try {
-      await fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date);
-      await fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date);
+      const rapidApiOptions = getRapidApiOptionsForMatch(match);
+      await fetchRapidApiMatchInsights(match.home_team, match.away_team, match.match_date, rapidApiOptions);
+      await fetchRapidApiProbabilities(match.home_team, match.away_team, match.match_date, rapidApiOptions);
       warmedMatches += 1;
     } catch (err) {
       // Continue with next match if API provider is unavailable or quota is reached.
