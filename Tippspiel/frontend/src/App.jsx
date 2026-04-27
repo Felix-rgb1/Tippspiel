@@ -96,6 +96,7 @@ function App() {
                 <Admin />
               </AdminRoute>
             } />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </BrowserRouter>
