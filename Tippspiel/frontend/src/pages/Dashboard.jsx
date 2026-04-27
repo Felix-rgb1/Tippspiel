@@ -177,6 +177,7 @@ function Dashboard() {
   const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
   const [tips, setTips] = useState({});
+  const [savedTips, setSavedTips] = useState({});
   const [visibleTipsByMatch, setVisibleTipsByMatch] = useState({});
   const [expandedTipsMatches, setExpandedTipsMatches] = useState({});
   const [nextTipSavedByMatch, setNextTipSavedByMatch] = useState({});
@@ -228,6 +229,7 @@ function Dashboard() {
         };
       });
       setTips(tipsMap);
+      setSavedTips(tipsMap);
 
       const groupedVisibleTips = {};
       visibleTipsResponse.data.forEach((tip) => {
@@ -313,6 +315,15 @@ function Dashboard() {
       const homeGoals = tip.home_goals ?? 0;
       const awayGoals = tip.away_goals ?? 0;
       await tipAPI.submit(matchId, homeGoals, awayGoals);
+
+      setSavedTips((prev) => ({
+        ...prev,
+        [matchId]: {
+          home_goals: homeGoals,
+          away_goals: awayGoals
+        }
+      }));
+
       setSuccess('Tipp abgegeben!');
 
       setNextTipSavedByMatch((prev) => ({ ...prev, [matchId]: true }));
@@ -324,6 +335,35 @@ function Dashboard() {
     } catch (err) {
       setError(err.response?.data?.error || 'Fehler beim Abgeben des Tipps');
     }
+  };
+
+  const getTipSaveState = (matchId) => {
+    const current = tips[matchId];
+    const persisted = savedTips[matchId];
+    const hasSavedTip = Boolean(persisted);
+
+    if (!current && !persisted) {
+      return {
+        hasSavedTip: false,
+        isDirty: true,
+        buttonLabel: 'Tipp speichern'
+      };
+    }
+
+    const currentHome = Number(current?.home_goals ?? persisted?.home_goals ?? 0);
+    const currentAway = Number(current?.away_goals ?? persisted?.away_goals ?? 0);
+    const savedHome = Number(persisted?.home_goals ?? 0);
+    const savedAway = Number(persisted?.away_goals ?? 0);
+
+    const isDirty = !hasSavedTip || currentHome !== savedHome || currentAway !== savedAway;
+
+    return {
+      hasSavedTip,
+      isDirty,
+      buttonLabel: !hasSavedTip
+        ? 'Tipp speichern'
+        : (isDirty ? 'Aenderungen speichern' : 'Tipp gespeichert')
+    };
   };
 
   const isDeadlinePassed = (matchDate) => {
@@ -404,7 +444,7 @@ function Dashboard() {
 
   const finishedCount = matches.filter((m) => m.finished).length;
   const openCount = matches.length - finishedCount;
-  const submittedTipsCount = Object.keys(tips).length;
+  const submittedTipsCount = Object.keys(savedTips).length;
   const upcomingMatches = matches
     .filter((match) => !match.finished)
     .slice()
@@ -461,6 +501,7 @@ function Dashboard() {
             {upcomingMatches.map((match) => {
               const status = getMatchStatus(match);
               const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
+              const tipSaveState = getTipSaveState(match.id);
               const deadlinePasssed = isDeadlinePassed(match.match_date);
               const savedInline = Boolean(nextTipSavedByMatch[match.id]);
               const homeTeamDisplay = getTeamDisplay(match.home_team);
@@ -500,7 +541,9 @@ function Dashboard() {
                   <span className={`match-status-badge ${status.className}`}>{status.label}</span>
                   {!match.finished && (
                     <div className="next-match-tip-row">
-                      <div className="next-tip-inputs">
+                      <div className="next-tip-grid">
+                        <div className="next-tip-team-block">
+                          <span className="next-tip-team-label">{homeTeamDisplay.label}</span>
                           <div className="tip-stepper">
                             <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', -1)} disabled={deadlinePasssed} aria-label="Weniger">−</button>
                             <input
@@ -515,7 +558,12 @@ function Dashboard() {
                             />
                             <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', 1)} disabled={deadlinePasssed} aria-label="Mehr">+</button>
                           </div>
-                          <span className="tip-colon">:</span>
+                        </div>
+
+                        <span className="next-tip-separator">:</span>
+
+                        <div className="next-tip-team-block">
+                          <span className="next-tip-team-label">{awayTeamDisplay.label}</span>
                           <div className="tip-stepper">
                             <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', -1)} disabled={deadlinePasssed} aria-label="Weniger">−</button>
                             <input
@@ -529,7 +577,10 @@ function Dashboard() {
                             />
                             <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', 1)} disabled={deadlinePasssed} aria-label="Mehr">+</button>
                           </div>
+                        </div>
                       </div>
+
+                      <div className="next-tip-actions">
                       {deadlinePasssed ? (
                         <div className="next-tip-locked">Deadline verpasst</div>
                       ) : (
@@ -538,12 +589,14 @@ function Dashboard() {
                             type="button"
                             className={`btn-primary next-tip-submit${savedInline ? ' tip-submit-saved' : ''}`}
                             onClick={() => handleSubmitTip(match.id, 'next')}
+                            disabled={!tipSaveState.isDirty}
                           >
-                            {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
+                            {tipSaveState.buttonLabel}
                           </button>
                           {savedInline && <span className="next-tip-saved">Tipp gespeichert</span>}
                         </>
                       )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -630,6 +683,7 @@ function Dashboard() {
       <div className="matches-grid">
         {visibleMatches.map(match => {
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
+          const tipSaveState = getTipSaveState(match.id);
           const deadlinePasssed = isDeadlinePassed(match.match_date);
           const status = getMatchStatus(match);
           const homeTeamDisplay = getTeamDisplay(match.home_team);
@@ -732,8 +786,9 @@ function Dashboard() {
                       <button
                         className={`btn-primary${savedInline ? ' tip-submit-saved' : ''}`}
                         onClick={() => handleSubmitTip(match.id)}
+                        disabled={!tipSaveState.isDirty}
                       >
-                        {tips[match.id] ? 'Tipp bearbeiten' : 'Tipp abgeben'}
+                        {tipSaveState.buttonLabel}
                       </button>
                       {savedInline && <span className="tip-saved-chip">✓ Gespeichert</span>}
                     </div>

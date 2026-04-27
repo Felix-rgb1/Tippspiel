@@ -208,24 +208,43 @@
 }
 
 .next-match-tip-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
   gap: 0.75rem;
   margin-top: 0.4rem;
 }
 
-.next-tip-inputs {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+.next-tip-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 0.6rem;
 }
 
-.next-tip-inputs input {
-  width: 44px;
-  text-align: center;
-  font-size: 0.95rem;
-  padding: 0.3rem;
+.next-tip-team-block {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.next-tip-team-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.next-tip-separator {
+  align-self: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.next-tip-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.55rem;
 }
 
 .next-tip-submit {
@@ -602,13 +621,13 @@
 }
 
 /* smaller stepper inside next-match panel */
-.next-tip-inputs .tip-stepper-btn {
+.next-tip-grid .tip-stepper-btn {
   width: 34px;
   height: 38px;
   font-size: 1.1rem;
 }
 
-.next-tip-inputs .tip-stepper input {
+.next-tip-grid .tip-stepper input {
   width: 40px;
   height: 38px;
   font-size: 1rem;
@@ -926,8 +945,18 @@
     gap: 0.25rem;
   }
 
-  .next-match-tip-row {
+  .next-tip-grid {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .next-tip-separator {
+    display: none;
+  }
+
+  .next-tip-actions {
     flex-wrap: wrap;
+    justify-content: stretch;
   }
 
   .next-tip-submit {
@@ -1087,6 +1116,14 @@
 
 :root[data-theme='dark'] .next-match-meta {
   color: #93c5fd;
+}
+
+:root[data-theme='dark'] .next-tip-team-label {
+  color: #93c5fd;
+}
+
+:root[data-theme='dark'] .next-tip-separator {
+  color: #bfdbfe;
 }
 
 :root[data-theme='dark'] .next-tip-locked {
