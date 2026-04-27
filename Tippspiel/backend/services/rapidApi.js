@@ -62,6 +62,7 @@ const TEAM_NAME_SEARCH_ALIAS = {
   Schweiz: 'Switzerland',
   Slowakei: 'Slovakia',
   Schweden: 'Sweden',
+  Tschechien: 'Czech Republic',
   Tuerkei: 'Turkey',
   Tunesien: 'Tunisia',
   Ukraine: 'Ukraine',
@@ -69,7 +70,23 @@ const TEAM_NAME_SEARCH_ALIAS = {
   USA: 'United States',
   Venezuela: 'Venezuela',
   Wales: 'Wales',
+  'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
+  'Cape Verde Islands': 'Cape Verde',
   'Costa Rica': 'Costa Rica'
+};
+
+const TEAM_NAME_CANONICAL_MAP = {
+  bosniaandherzegovina: 'bosniaherzegovina',
+  bosniahercegovina: 'bosniaherzegovina',
+  bosniaherzegovina: 'bosniaherzegovina',
+  capeverde: 'capeverdeislands',
+  capeverdeislands: 'capeverdeislands',
+  czechia: 'czechrepublic',
+  czechrepublic: 'czechrepublic',
+  curacao: 'curacao',
+  iriran: 'iran',
+  unitedstates: 'unitedstates',
+  usa: 'unitedstates'
 };
 
 function isRapidApiConfigured() {
@@ -226,10 +243,49 @@ function parseNumeric(value) {
   return null;
 }
 
+function toCanonicalTeamName(value) {
+  const normalized = normalizeComparableName(value);
+  return TEAM_NAME_CANONICAL_MAP[normalized] || normalized;
+}
+
 function normalizeTeamCandidates(teamName) {
   return [teamName, TEAM_NAME_SEARCH_ALIAS[teamName]]
     .filter(Boolean)
-    .map((candidate) => normalizeComparableName(candidate));
+    .map((candidate) => toCanonicalTeamName(candidate));
+}
+
+function toLooseComparableTeamName(value) {
+  return normalizeComparableName(value)
+    .replace(/(women|ladies|u23|u21|u20|u19|u18)$/g, '')
+    .replace(/(fc|sc|cf|afc)$/g, '');
+}
+
+function buildTeamMatchingData(teamName) {
+  const baseCandidates = [teamName, TEAM_NAME_SEARCH_ALIAS[teamName]].filter(Boolean);
+  const canonical = new Set(baseCandidates.map((name) => toCanonicalTeamName(name)));
+  const loose = new Set(baseCandidates.map((name) => toLooseComparableTeamName(name)));
+
+  return { canonical, loose };
+}
+
+function isLikelyTeamMatch(teamData, eventTeamName) {
+  const eventCanonical = toCanonicalTeamName(eventTeamName);
+  if (teamData.canonical.has(eventCanonical)) {
+    return 2;
+  }
+
+  const eventLoose = toLooseComparableTeamName(eventTeamName);
+  for (const candidate of teamData.loose) {
+    if (candidate === eventLoose) {
+      return 2;
+    }
+
+    if (candidate.length >= 6 && eventLoose.length >= 6 && (candidate.includes(eventLoose) || eventLoose.includes(candidate))) {
+      return 1;
+    }
+  }
+
+  return 0;
 }
 
 function normalizePercent(value) {
@@ -956,24 +1012,36 @@ async function fetchRapidApiProbabilities(homeTeam, awayTeam, matchDate) {
       return null;
     }
 
-    const homeCandidates = normalizeTeamCandidates(homeTeam);
-    const awayCandidates = normalizeTeamCandidates(awayTeam);
+    const homeMatchingData = buildTeamMatchingData(homeTeam);
+    const awayMatchingData = buildTeamMatchingData(awayTeam);
     const matchDateTime = matchDate ? new Date(matchDate).getTime() : null;
 
     const candidates = events
-      .filter((event) => {
-        const eventHome = normalizeComparableName(event?.home);
-        const eventAway = normalizeComparableName(event?.away);
-        const direct = homeCandidates.includes(eventHome) && awayCandidates.includes(eventAway);
-        const swapped = homeCandidates.includes(eventAway) && awayCandidates.includes(eventHome);
-        return direct || swapped;
-      })
       .map((event) => {
+        const directHomeScore = isLikelyTeamMatch(homeMatchingData, event?.home);
+        const directAwayScore = isLikelyTeamMatch(awayMatchingData, event?.away);
+        const swappedHomeScore = isLikelyTeamMatch(homeMatchingData, event?.away);
+        const swappedAwayScore = isLikelyTeamMatch(awayMatchingData, event?.home);
+
+        const directScore = directHomeScore + directAwayScore;
+        const swappedScore = swappedHomeScore + swappedAwayScore;
+        const score = Math.max(directScore, swappedScore);
+
+        if (score < 2) {
+          return null;
+        }
+
         const eventTime = new Date(event?.date || 0).getTime();
         const timeDiff = Number.isFinite(matchDateTime) ? Math.abs(eventTime - matchDateTime) : Number.MAX_SAFE_INTEGER;
-        return { event, timeDiff };
+        return { event, timeDiff, score };
       })
-      .sort((first, second) => first.timeDiff - second.timeDiff);
+      .filter(Boolean)
+      .sort((first, second) => {
+        if (second.score !== first.score) {
+          return second.score - first.score;
+        }
+        return first.timeDiff - second.timeDiff;
+      });
 
     const selectedEvent = candidates[0]?.event;
     if (!selectedEvent?.id) {
