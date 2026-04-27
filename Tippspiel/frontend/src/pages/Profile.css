@@ -48,12 +48,6 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
-.card.chart-card,
-.card.chart-card h2,
-.card.chart-card p {
-  color: #0f172a;
-}
-
 .stat-item {
   display: flex;
   justify-content: space-between;
@@ -99,6 +93,14 @@
   color: #ffffff;
 }
 
+:root:not([data-theme='dark']) .card.chart-card,
+:root:not([data-theme='dark']) .card.chart-card h2,
+:root:not([data-theme='dark']) .card.chart-card p,
+:root:not([data-theme='dark']) .card.chart-card .round-points-item,
+:root:not([data-theme='dark']) .card.chart-card .round-points-item strong {
+  color: #0f172a;
+}
+
 :root[data-theme='dark'] .card.stats-card {
   background: linear-gradient(145deg, #1d4ed8 0%, #312e81 100%);
   color: #e2e8f0;
@@ -110,6 +112,22 @@
 :root[data-theme='dark'] .card.stats-card .activity-label,
 :root[data-theme='dark'] .card.stats-card .activity-block p {
   color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .card.chart-card,
+:root[data-theme='dark'] .card.chart-card h2,
+:root[data-theme='dark'] .card.chart-card p {
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .card.chart-card .round-points-item {
+  background: #0b1220;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .card.chart-card .round-points-item strong {
+  color: #bfdbfe;
 }
 
 .activity-block p {
