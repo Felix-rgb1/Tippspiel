@@ -4,23 +4,56 @@ const DEFAULT_TOURNAMENT_URL = '/football/germany/bundesliga/';
 const EXTERNAL_SOURCE = 'flashscore-bundesliga';
 
 function toMatchList(payload) {
-  if (!Array.isArray(payload)) {
-    return [];
+  const collected = [];
+  const visited = new Set();
+
+  function walk(value) {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    if (visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => walk(entry));
+      return;
+    }
+
+    const hasTeams = Boolean(
+      (value.home_team || value.homeTeam || value.home || value.team_home || value.home_name)
+      && (value.away_team || value.awayTeam || value.away || value.team_away || value.away_name)
+    );
+    const hasParticipants = Array.isArray(value.participants) && value.participants.length >= 2;
+    const hasId = value.match_id || value.id || value.event_id || value.eventId;
+
+    if (hasId && (hasTeams || hasParticipants)) {
+      collected.push(value);
+    }
+
+    Object.values(value).forEach((child) => walk(child));
   }
 
-  if (payload.some((entry) => Array.isArray(entry?.matches))) {
-    return payload.flatMap((entry) => (Array.isArray(entry?.matches) ? entry.matches : []));
-  }
-
-  return payload;
+  walk(payload);
+  return collected;
 }
 
 function toTimestampDate(value) {
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return null;
   }
 
-  return new Date(value * 1000).toISOString();
+  const milliseconds = value > 10_000_000_000 ? value : value * 1000;
+  return new Date(milliseconds).toISOString();
 }
 
 function parseGoals(value) {
@@ -30,6 +63,85 @@ function parseGoals(value) {
 
   const numeric = Number.parseInt(String(value), 10);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function toDeterministicBigintString(value) {
+  const input = String(value || '').trim();
+  if (!input) {
+    return null;
+  }
+
+  let hash = 1469598103934665603n;
+  const prime = 1099511628211n;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= BigInt(input.charCodeAt(index));
+    hash *= prime;
+  }
+
+  const positive63Bit = hash & 0x7fffffffffffffffn;
+  return positive63Bit.toString();
+}
+
+function toExternalId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (/^\d+$/.test(raw)) {
+    return raw;
+  }
+
+  return toDeterministicBigintString(raw);
+}
+
+function pickTeamName(match, side) {
+  const teamObjectCandidates = side === 'home'
+    ? [match?.home_team, match?.homeTeam, match?.team_home]
+    : [match?.away_team, match?.awayTeam, match?.team_away];
+
+  const directNameCandidates = side === 'home'
+    ? [match?.home, match?.home_name, match?.homeName]
+    : [match?.away, match?.away_name, match?.awayName];
+
+  for (const candidate of teamObjectCandidates) {
+    const name = String(candidate?.name || candidate?.team_name || candidate?.shortName || '').trim();
+    if (name) {
+      return name;
+    }
+  }
+
+  for (const candidate of directNameCandidates) {
+    const name = String(candidate || '').trim();
+    if (name) {
+      return name;
+    }
+  }
+
+  const participants = Array.isArray(match?.participants) ? match.participants : [];
+  const normalizedSide = side.toLowerCase();
+  const byRole = participants.find((entry) => {
+    const role = String(entry?.homeAway || entry?.role || entry?.position || '').toLowerCase();
+    return role.includes(normalizedSide);
+  });
+
+  if (byRole) {
+    const name = String(byRole?.name || byRole?.team_name || '').trim();
+    if (name) {
+      return name;
+    }
+  }
+
+  if (participants.length >= 2) {
+    const fallback = side === 'home' ? participants[0] : participants[1];
+    const name = String(fallback?.name || fallback?.team_name || '').trim();
+    if (name) {
+      return name;
+    }
+  }
+
+  return '';
 }
 
 function hasFinishedStatus(match) {
@@ -69,26 +181,44 @@ function toRoundLabel(match) {
 }
 
 function toNormalizedMatch(match) {
-  const externalIdRaw = match?.match_id;
-  const externalId = externalIdRaw !== undefined && externalIdRaw !== null
-    ? String(externalIdRaw).trim()
-    : null;
+  const externalId = toExternalId(
+    match?.match_id
+    || match?.id
+    || match?.event_id
+    || match?.eventId
+  );
 
-  if (!externalId || !/^\d+$/.test(externalId)) {
+  if (!externalId) {
     return null;
   }
 
-  const homeTeam = String(match?.home_team?.name || '').trim();
-  const awayTeam = String(match?.away_team?.name || '').trim();
-  const matchDate = toTimestampDate(match?.timestamp);
+  const homeTeam = pickTeamName(match, 'home');
+  const awayTeam = pickTeamName(match, 'away');
+  const matchDate = toTimestampDate(
+    match?.timestamp
+    || match?.start_timestamp
+    || match?.startTime
+    || match?.start_date
+    || match?.date
+  );
 
   if (!homeTeam || !awayTeam || !matchDate) {
     return null;
   }
 
   const finished = hasFinishedStatus(match);
-  const homeGoals = parseGoals(match?.scores?.home);
-  const awayGoals = parseGoals(match?.scores?.away);
+  const homeGoals = parseGoals(
+    match?.scores?.home
+    ?? match?.home_score
+    ?? match?.homeScore
+    ?? match?.result?.home
+  );
+  const awayGoals = parseGoals(
+    match?.scores?.away
+    ?? match?.away_score
+    ?? match?.awayScore
+    ?? match?.result?.away
+  );
 
   return {
     homeTeam,
@@ -191,7 +321,8 @@ async function importFlashscoreBundesligaMatches(pool, options = {}) {
     .filter(Boolean);
 
   if (!normalizedMatches.length) {
-    const error = new Error('Flashscore hat Spiele geliefert, aber kein Match hatte ein verwertbares Format (ID/Team/Datum fehlend).');
+    const sample = rawMatches.slice(0, 3).map((entry) => Object.keys(entry || {}));
+    const error = new Error(`Flashscore hat Spiele geliefert, aber kein Match hatte ein verwertbares Format (ID/Team/Datum fehlend). Beispiel-Keys: ${JSON.stringify(sample)}`);
     error.statusCode = 502;
     throw error;
   }
