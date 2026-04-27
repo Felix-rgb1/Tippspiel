@@ -477,3 +477,105 @@
     font-size: 0.86rem;
   }
 }
+
+:root[data-theme='dark'] .leaderboard-table {
+  background: linear-gradient(180deg, #0f172a 0%, #111c31 100%);
+  border: 1px solid #23324a;
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.46);
+}
+
+:root[data-theme='dark'] .tie-breaker-box {
+  background: rgba(30, 64, 175, 0.2);
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+:root[data-theme='dark'] .tie-breaker-box h3 {
+  color: #c7d2fe;
+}
+
+:root[data-theme='dark'] .tie-breaker-box p {
+  color: #bfdbfe;
+}
+
+:root[data-theme='dark'] .podium-card {
+  border-color: #334155;
+  background: linear-gradient(160deg, #111827 0%, #1f2937 100%);
+}
+
+:root[data-theme='dark'] .podium-1 {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(160deg, #2b2211 0%, #3a2f17 100%);
+}
+
+:root[data-theme='dark'] .podium-2 {
+  border-color: rgba(148, 163, 184, 0.55);
+  background: linear-gradient(160deg, #1e293b 0%, #273449 100%);
+}
+
+:root[data-theme='dark'] .podium-3 {
+  border-color: rgba(251, 146, 60, 0.55);
+  background: linear-gradient(160deg, #302217 0%, #3b2a1d 100%);
+}
+
+:root[data-theme='dark'] .podium-rank {
+  color: #cbd5e1;
+}
+
+:root[data-theme='dark'] .podium-name {
+  color: #f8fafc;
+}
+
+:root[data-theme='dark'] .podium-points {
+  color: #93c5fd;
+}
+
+:root[data-theme='dark'] .my-rank-box {
+  background: rgba(30, 64, 175, 0.2);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #dbeafe;
+}
+
+:root[data-theme='dark'] .table-header {
+  background: #0b1324;
+  border-bottom-color: #334155;
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .table-row {
+  color: #e2e8f0;
+  border-bottom-color: #253044;
+  background: transparent;
+}
+
+:root[data-theme='dark'] .table-row:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+:root[data-theme='dark'] .own-row {
+  background: rgba(14, 116, 144, 0.2);
+  border-left-color: #38bdf8;
+}
+
+:root[data-theme='dark'] .own-pill {
+  background: #0b1324;
+  color: #f8fafc;
+}
+
+:root[data-theme='dark'] .table-empty {
+  color: #94a3b8;
+}
+
+:root[data-theme='dark'] .compare-hint {
+  color: #93c5fd;
+  opacity: 0.75;
+}
+
+:root[data-theme='dark'] .matchday-header h2 {
+  color: #e2e8f0;
+}
+
+:root[data-theme='dark'] .matchday-header select {
+  background: #0b1220;
+  color: #e2e8f0;
+  border-color: #334155;
+}

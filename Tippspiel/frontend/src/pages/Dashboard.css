@@ -279,6 +279,20 @@
   color: var(--primary);
 }
 
+:root:not([data-theme='dark']) .dashboard-stats .stat-card {
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  border-color: #dbe3ee;
+  color: #0f172a;
+}
+
+:root:not([data-theme='dark']) .dashboard-stats .stat-card .label {
+  color: #334155;
+}
+
+:root:not([data-theme='dark']) .dashboard-stats .stat-card .value {
+  color: #0b1220;
+}
+
 .round-btn {
   padding: 0.45rem 1rem;
   border: 1px solid #334155;
