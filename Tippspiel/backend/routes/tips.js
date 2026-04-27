@@ -126,15 +126,12 @@ router.get('/bonus/me', authMiddleware, async (req, res) => {
 
     const firstMatchResult = await pool.query('SELECT MIN(match_date) AS first_match_date FROM matches');
     const firstMatchDate = firstMatchResult.rows[0]?.first_match_date;
-    const deadline = firstMatchDate
-      ? new Date(new Date(firstMatchDate).getTime() - 60 * 60 * 1000)
-      : null;
-
-    const locked = deadline ? new Date() > deadline : false;
+    // Bonusfrage locked after first match starts (not 1 hour before)
+    const locked = firstMatchDate ? new Date() > new Date(firstMatchDate) : false;
 
     res.json({
       bonusTip: bonusResult.rows[0] || null,
-      deadline: deadline ? deadline.toISOString() : null,
+      deadline: firstMatchDate ? new Date(firstMatchDate).toISOString() : null,
       locked
     });
   } catch (err) {
@@ -173,11 +170,10 @@ router.post('/bonus', authMiddleware, async (req, res) => {
 
     const firstMatchResult = await pool.query('SELECT MIN(match_date) AS first_match_date FROM matches');
     const firstMatchDate = firstMatchResult.rows[0]?.first_match_date;
-    const deadline = firstMatchDate
-      ? new Date(new Date(firstMatchDate).getTime() - 60 * 60 * 1000)
-      : null;
+    // Bonusfrage locked after first match starts (not 1 hour before)
+    const locked = firstMatchDate ? new Date() > new Date(firstMatchDate) : false;
 
-    if (deadline && new Date() > deadline) {
+    if (locked) {
       return res.status(400).json({ error: 'Deadline für Bonusfragen ist abgelaufen' });
     }
 
