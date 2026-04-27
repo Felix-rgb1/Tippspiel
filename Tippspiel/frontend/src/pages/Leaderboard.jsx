@@ -109,6 +109,7 @@ function Leaderboard() {
 
 
   const topThree = leaderboard.slice(0, 3);
+  const lastPlaceEntry = leaderboard.length > 0 ? leaderboard[leaderboard.length - 1] : null;
   const ownRankIndex = leaderboard.findIndex((entry) => String(entry.id) === String(user?.id));
   const ownRankEntry = ownRankIndex >= 0 ? leaderboard[ownRankIndex] : null;
 
@@ -159,6 +160,13 @@ function Leaderboard() {
         </div>
       )}
 
+      {lastPlaceEntry && leaderboard.length > 1 && (
+        <div className="last-place-box">
+          <span className="last-place-icon" aria-hidden="true">🏮</span>
+          Rote Laterne: <strong>{lastPlaceEntry.username}</strong> · {lastPlaceEntry.total_points || 0} Punkte
+        </div>
+      )}
+
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="leaderboard-table">
@@ -172,6 +180,7 @@ function Leaderboard() {
 
         {leaderboard.map((entry, index) => {
           const isOwnRow = String(entry.id) === String(user?.id);
+          const isLastRow = index === leaderboard.length - 1;
           const overallRank = index + 1;
           const matchdayRank = matchdayRankMap[String(entry.id)];
           let trendEl = null;
@@ -184,7 +193,7 @@ function Leaderboard() {
           return (
           <div
             key={entry.id}
-            className={`table-row${isOwnRow ? ' own-row' : ' row-clickable'}`}
+            className={`table-row${isOwnRow ? ' own-row' : ' row-clickable'}${isLastRow ? ' last-row' : ''}`}
             onClick={isOwnRow ? undefined : () => openCompare(entry)}
             title={isOwnRow ? undefined : `Direktvergleich mit ${entry.username}`}
           >
@@ -197,6 +206,7 @@ function Leaderboard() {
             </div>
             <div className="col-name">
               {entry.username}
+              {isLastRow && <span className="last-lantern" title="Rote Laterne" aria-label="Rote Laterne">🏮</span>}
               {isOwnRow && <span className="own-pill">Du</span>}
               {!isOwnRow && <span className="compare-hint">⚔️</span>}
             </div>

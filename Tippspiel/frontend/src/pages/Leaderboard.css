@@ -324,6 +324,22 @@
   animation-delay: 0.08s;
 }
 
+.last-place-box {
+  margin-bottom: 0.95rem;
+  border-radius: 0.6rem;
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.92rem;
+  animation: board-fade-in 0.42s ease both;
+  animation-delay: 0.12s;
+}
+
+.last-place-icon {
+  margin-right: 0.45rem;
+}
+
 .table-header {
   display: grid;
   grid-template-columns: 60px 1fr 100px 90px 100px;
@@ -375,6 +391,23 @@
 .own-row {
   background: #ecfeff;
   border-left: 3px solid #0ea5e9;
+}
+
+.last-row {
+  background: #fff7ed;
+  border-left: 3px solid #f97316;
+}
+
+.last-lantern {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #7c2d12;
+  color: #fff7ed;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.12rem 0.4rem;
 }
 
 .own-pill {
@@ -535,6 +568,12 @@
   color: #dbeafe;
 }
 
+:root[data-theme='dark'] .last-place-box {
+  background: rgba(159, 18, 57, 0.2);
+  border-color: rgba(251, 113, 133, 0.45);
+  color: #fecdd3;
+}
+
 :root[data-theme='dark'] .table-header {
   background: #0b1324;
   border-bottom-color: #334155;
@@ -554,6 +593,16 @@
 :root[data-theme='dark'] .own-row {
   background: rgba(14, 116, 144, 0.2);
   border-left-color: #38bdf8;
+}
+
+:root[data-theme='dark'] .last-row {
+  background: rgba(194, 65, 12, 0.2);
+  border-left-color: #fb923c;
+}
+
+:root[data-theme='dark'] .last-lantern {
+  background: #451a03;
+  color: #fed7aa;
 }
 
 :root[data-theme='dark'] .own-pill {
