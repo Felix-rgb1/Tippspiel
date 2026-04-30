@@ -225,6 +225,67 @@ router.get('/matchday', async (req, res) => {
   }
 });
 
+// Get winner of the last fully finished matchday round
+router.get('/last-winner', async (req, res) => {
+  try {
+    // Find the most recently completed round (latest match_date among finished matches)
+    const lastRoundResult = await pool.query(`
+      SELECT round
+      FROM matches
+      WHERE finished = true AND round IS NOT NULL
+      GROUP BY round
+      ORDER BY MAX(match_date) DESC
+      LIMIT 1
+    `);
+
+    if (!lastRoundResult.rows.length) {
+      return res.json({ winner: null, round: null });
+    }
+
+    const lastRound = lastRoundResult.rows[0].round;
+
+    const winnerResult = await pool.query(`
+      WITH round_scored_tips AS (
+        SELECT
+          t.user_id,
+          CASE
+            WHEN t.home_goals = m.home_goals AND t.away_goals = m.away_goals THEN 3
+            WHEN (t.home_goals > t.away_goals AND m.home_goals > m.away_goals) OR
+                 (t.home_goals < t.away_goals AND m.home_goals < m.away_goals) OR
+                 (t.home_goals = t.away_goals AND m.home_goals = m.away_goals) THEN 1
+            ELSE 0
+          END AS points,
+          CASE
+            WHEN t.home_goals = m.home_goals AND t.away_goals = m.away_goals THEN 1
+            ELSE 0
+          END AS exact_hit
+        FROM tips t
+        JOIN matches m ON m.id = t.match_id
+        WHERE m.finished = true
+          AND m.round = $1
+          AND m.home_goals IS NOT NULL
+          AND m.away_goals IS NOT NULL
+      )
+      SELECT
+        u.id,
+        u.username,
+        COALESCE(SUM(rst.points), 0) AS round_points,
+        COALESCE(SUM(rst.exact_hit), 0) AS exact_matches
+      FROM users u
+      LEFT JOIN round_scored_tips rst ON rst.user_id = u.id
+      GROUP BY u.id, u.username
+      ORDER BY round_points DESC, exact_matches DESC, u.username ASC
+      LIMIT 1
+    `, [lastRound]);
+
+    const winner = winnerResult.rows[0] || null;
+    res.json({ winner, round: lastRound });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch last winner' });
+  }
+});
+
 // Get user stats
 router.get('/user/:userId', async (req, res) => {
   try {

@@ -835,6 +835,72 @@
   font-size: 1.05rem;
 }
 
+/* Spieltag-Sieger Banner */
+.matchday-winner-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%, #1d4ed8 100%);
+  border: 1px solid #3b82f6;
+  border-radius: 12px;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.25rem;
+  color: #fff;
+  animation: surface-in 0.4s ease both;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.3);
+}
+
+.matchday-winner-trophy {
+  font-size: 2rem;
+  line-height: 1;
+  animation: float-up 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.matchday-winner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.matchday-winner-round {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.matchday-winner-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.matchday-winner-points {
+  font-size: 0.85rem;
+  color: #bfdbfe;
+}
+
+.matchday-winner-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #93c5fd;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+
 /* Countdown badge */
 .countdown-badge {
   display: inline-flex;
@@ -1248,6 +1314,12 @@
   background: linear-gradient(135deg, #7c2d12 0%, #9a3412 100%);
   border-color: #ea580c;
   color: #fed7aa;
+}
+
+:root[data-theme='dark'] .matchday-winner-banner {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+  border-color: #2563eb;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.2);
 }
 
 :root[data-theme='dark'] .countdown-badge {

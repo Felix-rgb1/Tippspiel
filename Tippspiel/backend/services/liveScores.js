@@ -1,10 +1,11 @@
 const { fetchFlashscoreTournamentFixtures } = require('./rapidApi');
 
-const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '60000', 10);
-const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '240000', 10);
+const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '90000', 10);
+const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '300000', 10);
 const LIVE_MATCH_TIME_TOLERANCE_MS = Number.parseInt(process.env.LIVE_MATCH_TIME_TOLERANCE_MS || '43200000', 10);
 
 const flashscoreCacheByTournament = new Map();
+const flashscoreInFlightByTournament = new Map();
 
 function normalizeName(value) {
   return String(value || '')
@@ -150,20 +151,36 @@ async function getTournamentFixturesCached(rapidOptions) {
     return cached;
   }
 
-  const fixturesPayload = await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
-    useConfiguredIds: rapidOptions.useConfiguredIds
-  });
+  const inFlight = flashscoreInFlightByTournament.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
 
-  const fixtures = toMatchEntries(fixturesPayload);
-  const data = {
-    fixtures,
-    fetchedAt: new Date(now).toISOString(),
-    expiresAt: now + LIVE_CACHE_COLD_MS,
-    hadLiveMatch: false
-  };
+  const fetchPromise = (async () => {
+    const fetchStartedAt = Date.now();
+    const fixturesPayload = await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
+      useConfiguredIds: rapidOptions.useConfiguredIds
+    });
 
-  flashscoreCacheByTournament.set(cacheKey, data);
-  return data;
+    const fixtures = toMatchEntries(fixturesPayload);
+    const data = {
+      fixtures,
+      fetchedAt: new Date(fetchStartedAt).toISOString(),
+      expiresAt: fetchStartedAt + LIVE_CACHE_COLD_MS,
+      hadLiveMatch: false
+    };
+
+    flashscoreCacheByTournament.set(cacheKey, data);
+    return data;
+  })();
+
+  flashscoreInFlightByTournament.set(cacheKey, fetchPromise);
+
+  try {
+    return await fetchPromise;
+  } finally {
+    flashscoreInFlightByTournament.delete(cacheKey);
+  }
 }
 
 function patchCacheLiveness(rapidOptions, hadLiveMatch) {

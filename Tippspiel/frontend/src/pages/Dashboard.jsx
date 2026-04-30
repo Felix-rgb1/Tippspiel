@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { matchAPI, tipAPI } from '../api';
+import { matchAPI, tipAPI, leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getMatchThemeStyle } from '../utils/teamTheme';
 import BallLoader from '../components/BallLoader';
@@ -192,6 +192,7 @@ function Dashboard() {
   const [savingBonus, setSavingBonus] = useState(false);
   const [now, setNow] = useState(new Date());
   const [liveUpdatesByMatch, setLiveUpdatesByMatch] = useState({});
+  const [lastWinner, setLastWinner] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -225,7 +226,21 @@ function Dashboard() {
     let stopped = false;
     let timer = null;
 
+    const isPageVisible = () => (typeof document === 'undefined' ? true : document.visibilityState === 'visible');
+
+    const scheduleNextPoll = (delayMs) => {
+      if (stopped) {
+        return;
+      }
+      timer = setTimeout(runPoll, delayMs);
+    };
+
     const runPoll = async () => {
+      if (!isPageVisible()) {
+        scheduleNextPoll(180000);
+        return;
+      }
+
       try {
         const response = await matchAPI.getLive(candidateIds);
         const payload = response?.data || {};
@@ -239,15 +254,10 @@ function Dashboard() {
         }
 
         const nextPollInMs = Number(payload.nextPollInMs) || 180000;
-        const delay = Math.max(15000, Math.min(300000, nextPollInMs));
-
-        if (!stopped) {
-          timer = setTimeout(runPoll, delay);
-        }
+        const delay = Math.max(30000, Math.min(300000, nextPollInMs));
+        scheduleNextPoll(delay);
       } catch (err) {
-        if (!stopped) {
-          timer = setTimeout(runPoll, 120000);
-        }
+        scheduleNextPoll(180000);
       }
     };
 
@@ -264,9 +274,10 @@ function Dashboard() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const [matchesResult, bonusResult] = await Promise.allSettled([
+      const [matchesResult, bonusResult, lastWinnerResult] = await Promise.allSettled([
         matchAPI.getAll(),
-        tipAPI.getBonusTip()
+        tipAPI.getBonusTip(),
+        leaderboardAPI.getLastWinner()
       ]);
 
       if (matchesResult.status !== 'fulfilled') {
@@ -311,6 +322,10 @@ function Dashboard() {
         setBonusLocked(true);
         setBonusDeadline(null);
         setBonusTip({ champion_team: '', runner_up_team: '' });
+      }
+
+      if (lastWinnerResult.status === 'fulfilled' && lastWinnerResult.value?.data?.winner) {
+        setLastWinner(lastWinnerResult.value.data);
       }
     } catch (err) {
       setError('Fehler beim Laden der Spiele');
@@ -533,6 +548,18 @@ function Dashboard() {
       {missingTipsCount > 0 && (
         <div className="missing-tips-banner">
           ⚠️ Du hast noch <strong>{missingTipsCount}</strong> {missingTipsCount === 1 ? 'Spiel' : 'Spiele'} ohne Tipp!
+        </div>
+      )}
+
+      {lastWinner && (
+        <div className="matchday-winner-banner">
+          <span className="matchday-winner-trophy">🏆</span>
+          <div className="matchday-winner-text">
+            <span className="matchday-winner-round">{lastWinner.round}</span>
+            <span className="matchday-winner-name">{lastWinner.winner.username}</span>
+            <span className="matchday-winner-points">{lastWinner.winner.round_points} Punkte</span>
+          </div>
+          <span className="matchday-winner-label">Spieltag-Sieger</span>
         </div>
       )}
 
