@@ -822,14 +822,21 @@ async function syncWMResults(pool) {
   }
 
   if (!rawMatches.length) {
-    const err = new Error(lastError?.message || `Keine WM-Ergebnisse von Flashscore erhalten (URLs: ${urlsToTry.join(', ')})`);
     if (isRateLimitError(lastError)) {
-      err.message = 'RapidAPI Rate-Limit erreicht. Bitte in 1-2 Minuten erneut versuchen.';
+      const err = new Error('RapidAPI Rate-Limit erreicht. Bitte in 1-2 Minuten erneut versuchen.');
       err.statusCode = 429;
-    } else {
-      err.statusCode = lastError?.statusCode || 502;
+      throw err;
     }
-    throw err;
+
+    return {
+      tournamentUrl: usedUrl,
+      externalSource: WM_EXTERNAL_SOURCE,
+      totalFetched: 0,
+      finishedFromApi: 0,
+      createdCount: 0,
+      updatedCount: 0,
+      emptyReason: 'no-results-yet'
+    };
   }
 
   const finishedMatches = rawMatches

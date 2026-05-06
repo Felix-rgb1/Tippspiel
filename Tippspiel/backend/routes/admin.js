@@ -179,8 +179,11 @@ router.post('/matches/sync-results/bundesliga', adminMiddleware, async (req, res
 router.post('/matches/sync-results/wm', adminMiddleware, async (req, res) => {
   try {
     const syncResult = await syncWMResults(pool);
+    const noResultsYet = Number(syncResult.finishedFromApi || 0) === 0;
     res.json({
-      message: `WM-Ergebnisse aktualisiert: ${syncResult.updatedCount} aktualisiert, ${syncResult.createdCount} neu angelegt (${syncResult.finishedFromApi} abgeschlossene Spiele von API erhalten).`,
+      message: noResultsYet
+        ? 'Aktuell sind bei Flashscore noch keine abgeschlossenen WM-Spiele vorhanden.'
+        : `WM-Ergebnisse aktualisiert: ${syncResult.updatedCount} aktualisiert, ${syncResult.createdCount} neu angelegt (${syncResult.finishedFromApi} abgeschlossene Spiele von API erhalten).`,
       ...syncResult
     });
   } catch (err) {
