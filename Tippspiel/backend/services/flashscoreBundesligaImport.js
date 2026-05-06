@@ -16,6 +16,47 @@ function normalizeName(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+const TEAM_NAME_CANONICAL_MAP = {
+  sudkorea: 'southkorea',
+  suedkorea: 'southkorea',
+  southkorea: 'southkorea',
+  czechia: 'czechrepublic',
+  czechrepublic: 'czechrepublic',
+  tschechien: 'czechrepublic',
+  bosniaherzegovina: 'bosniaherzegovina',
+  bosniaandherzegovina: 'bosniaherzegovina',
+  bosnienherzegowina: 'bosniaherzegovina',
+  bosnienhercegowina: 'bosniaherzegovina',
+  bosnienherz: 'bosniaherzegovina',
+  switzerland: 'switzerland',
+  schweiz: 'switzerland',
+  mexico: 'mexico',
+  mexiko: 'mexico',
+  southafrica: 'southafrica',
+  suedafrika: 'southafrica',
+  qatar: 'qatar',
+  katar: 'qatar',
+  usa: 'unitedstates',
+  unitedstates: 'unitedstates',
+  vereinigtestaaten: 'unitedstates'
+};
+
+function canonicalizeTeamName(value) {
+  const normalized = normalizeName(value);
+  return TEAM_NAME_CANONICAL_MAP[normalized] || normalized;
+}
+
+function teamNamesMatch(a, b) {
+  const left = canonicalizeTeamName(a);
+  const right = canonicalizeTeamName(b);
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return left === right || left.includes(right) || right.includes(left);
+}
+
 function toMatchList(payload) {
   const collected = [];
   const visited = new Set();
@@ -208,8 +249,8 @@ async function findSpecificExistingRound(pool, normalizedMatch) {
   );
 
   const sameMatchCandidates = nearbyCandidates.rows.filter((row) => {
-    const sameHome = normalizeName(row.home_team) === normalizeName(normalizedMatch.homeTeam);
-    const sameAway = normalizeName(row.away_team) === normalizeName(normalizedMatch.awayTeam);
+    const sameHome = teamNamesMatch(row.home_team, normalizedMatch.homeTeam);
+    const sameAway = teamNamesMatch(row.away_team, normalizedMatch.awayTeam);
     return sameHome && sameAway;
   });
 
@@ -521,18 +562,12 @@ async function syncBundesligaResults(pool, options = {}) {
 
     // Fallback: fuzzy match by team names + date (±24 h)
     if (!dbMatch) {
-      const homeNorm = normalizeName(apiMatch.homeTeam);
-      const awayNorm = normalizeName(apiMatch.awayTeam);
       const apiTs = new Date(apiMatch.matchDate).getTime();
 
       dbMatch = dbMatches.find((m) => {
-        const dbHome = normalizeName(m.home_team);
-        const dbAway = normalizeName(m.away_team);
         const dbTs = new Date(m.match_date).getTime();
-        const nameMatch = (
-          (dbHome === homeNorm || dbHome.includes(homeNorm) || homeNorm.includes(dbHome)) &&
-          (dbAway === awayNorm || dbAway.includes(awayNorm) || awayNorm.includes(dbAway))
-        );
+        const nameMatch = teamNamesMatch(m.home_team, apiMatch.homeTeam)
+          && teamNamesMatch(m.away_team, apiMatch.awayTeam);
         return nameMatch && Math.abs(apiTs - dbTs) <= 24 * 60 * 60 * 1000;
       });
     }
