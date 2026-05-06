@@ -527,28 +527,49 @@ async function importFlashscoreWMMatches(pool, options = {}) {
     throw error;
   }
 
-  const tournamentUrl = options.tournamentUrl
-    || process.env.FLASHSCORE_TOURNAMENT_URL
-    || DEFAULT_WM_TOURNAMENT_URL;
+  const requestedTournamentUrl = options.tournamentUrl || process.env.FLASHSCORE_TOURNAMENT_URL;
+  const candidateTournamentUrls = [
+    requestedTournamentUrl,
+    '/football/world/world-cup/',
+    '/football/world/world-cup-2026/'
+  ].filter((value, index, array) => value && array.indexOf(value) === index);
 
   const defaultRound = options.defaultRound || null;
+  let tournamentUrl = requestedTournamentUrl || DEFAULT_WM_TOURNAMENT_URL;
+  let allRaw = [];
+  let lastError = null;
 
-  // useConfiguredIds: false -> Stage-ID wird immer dynamisch von der API geholt.
-  // Damit werden auch Achtelfinale, Viertelfinale etc. importiert sobald sie
-  // von Flashscore als aktive Stage zurueckgegeben werden.
-  const [fixturesPayload, resultsPayload] = await Promise.all([
-    fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false }),
-    fetchFlashscoreTournamentResults(tournamentUrl, { useConfiguredIds: false })
-  ]);
+  for (const candidateTournamentUrl of candidateTournamentUrls) {
+    try {
+      // useConfiguredIds: false -> Stage-ID wird immer dynamisch von der API geholt.
+      // Damit werden auch Achtelfinale, Viertelfinale etc. importiert sobald sie
+      // von Flashscore als aktive Stage zurueckgegeben werden.
+      const [fixturesPayload, resultsPayload] = await Promise.all([
+        fetchFlashscoreTournamentFixtures(candidateTournamentUrl, { useConfiguredIds: false }),
+        fetchFlashscoreTournamentResults(candidateTournamentUrl, { useConfiguredIds: false })
+      ]);
 
-  const allRaw = [
-    ...toMatchList(fixturesPayload),
-    ...toMatchList(resultsPayload)
-  ];
+      const combinedRaw = [
+        ...toMatchList(fixturesPayload),
+        ...toMatchList(resultsPayload)
+      ];
+
+      if (combinedRaw.length > 0) {
+        tournamentUrl = candidateTournamentUrl;
+        allRaw = combinedRaw;
+        break;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
 
   if (!allRaw.length) {
-    const error = new Error(`Keine WM-Spiele von Flashscore erhalten (tournamentUrl=${tournamentUrl}). Bitte FLASHSCORE_TOURNAMENT_URL und Tournament-IDs in den Umgebungsvariablen prüfen.`);
-    error.statusCode = 502;
+    const error = new Error(
+      lastError?.message
+      || `Keine WM-Spiele von Flashscore erhalten. Gepruefte tournamentUrl-Werte: ${candidateTournamentUrls.join(', ')}`
+    );
+    error.statusCode = lastError?.statusCode || 502;
     throw error;
   }
 
