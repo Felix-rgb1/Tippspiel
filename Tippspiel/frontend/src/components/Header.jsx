@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Header.css';
 
@@ -20,11 +20,13 @@ function Header({ isDarkMode, onToggleTheme }) {
         <div className="header-actions">
           {user && (
             <nav className="nav">
-              <Link to="/">Dashboard</Link>
-              <Link to="/leaderboard">Rangliste</Link>
-              <Link to="/rules">Regeln</Link>
-              {user.role === 'admin' && <Link to="/admin">Admin</Link>}
-              <Link to="/profile">Profil</Link>
+              <NavLink to="/" className={({ isActive }) => (isActive ? 'is-active' : '')}>Dashboard</NavLink>
+              <NavLink to="/leaderboard" className={({ isActive }) => (isActive ? 'is-active' : '')}>Rangliste</NavLink>
+              <NavLink to="/rules" className={({ isActive }) => (isActive ? 'is-active' : '')}>Regeln</NavLink>
+              {user.role === 'admin' && (
+                <NavLink to="/admin" className={({ isActive }) => (isActive ? 'is-active' : '')}>Admin</NavLink>
+              )}
+              <NavLink to="/profile" className={({ isActive }) => (isActive ? 'is-active' : '')}>Profil</NavLink>
               <button onClick={handleLogout} className="btn-primary">Abmelden</button>
             </nav>
           )}
