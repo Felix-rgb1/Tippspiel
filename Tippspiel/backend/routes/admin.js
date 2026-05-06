@@ -128,11 +128,15 @@ router.get('/tips/export', adminMiddleware, async (req, res) => {
   }
 });
 
-router.post('/matches/sync', adminMiddleware, async (req, res) => {
+router.post('/matches/import/wm', adminMiddleware, async (req, res) => {
   try {
     const importResult = await importFlashscoreWMMatches(pool);
+    const roundStats = importResult.detailsRoundStats || {};
+    const roundInfo = roundStats.resolvedCount > 0
+      ? ` (${roundStats.resolvedCount} Spielrunden per Details-API ermittelt)`
+      : '';
     res.json({
-      message: `WM-Spiele importiert: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert (${importResult.totalProcessed} verarbeitet, ${importResult.totalFetched} von API erhalten).`,
+      message: `WM-Import abgeschlossen: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert, ${importResult.totalFetched} von API erhalten.${roundInfo}`,
       ...importResult
     });
   } catch (err) {

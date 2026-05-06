@@ -239,29 +239,6 @@ function isGenericRoundLabel(value) {
   return !normalized || normalized === 'wm' || normalized === 'bundesliga';
 }
 
-async function findSpecificExistingRound(pool, normalizedMatch) {
-  const nearbyCandidates = await pool.query(
-    `SELECT id, home_team, away_team, match_date, round, external_source, external_id
-     FROM matches
-     WHERE ABS(EXTRACT(EPOCH FROM (match_date - $1::timestamp))) <= 86400
-     ORDER BY created_at ASC`,
-    [normalizedMatch.matchDate]
-  );
-
-  const sameMatchCandidates = nearbyCandidates.rows.filter((row) => {
-    const sameHome = teamNamesMatch(row.home_team, normalizedMatch.homeTeam);
-    const sameAway = teamNamesMatch(row.away_team, normalizedMatch.awayTeam);
-    return sameHome && sameAway;
-  });
-
-  const specificRoundCandidate = sameMatchCandidates.find((row) => !isGenericRoundLabel(row.round));
-
-  return {
-    sameMatchCandidates,
-    specificRound: specificRoundCandidate?.round || null
-  };
-}
-
 function toNormalizedMatch(match, fallbackRound = null) {
   const sourceMatchId = String(
     match?.match_id
@@ -314,94 +291,6 @@ function toNormalizedMatch(match, fallbackRound = null) {
     awayGoals: finished ? awayGoals : null,
     externalId,
     sourceMatchId
-  };
-}
-
-function mapTournamentNameToRound(tournamentName) {
-  const normalized = String(tournamentName || '').trim().toLowerCase();
-  if (!normalized) return null;
-
-  const roundMatch = normalized.match(/\bround\s*(\d+)\b/);
-  if (roundMatch) {
-    const roundNumber = Number.parseInt(roundMatch[1], 10);
-    if (Number.isFinite(roundNumber) && roundNumber >= 1 && roundNumber <= 3) {
-      return `${roundNumber}. Spieltag`;
-    }
-  }
-
-  if (normalized.includes('round of 16') || normalized.includes('last 16')) {
-    return 'Achtelfinale';
-  }
-  if (normalized.includes('quarter-final')) {
-    return 'Viertelfinale';
-  }
-  if (normalized.includes('semi-final')) {
-    return 'Halbfinale';
-  }
-  if (normalized.includes('3rd place') || normalized.includes('third place')) {
-    return 'Spiel um Platz 3';
-  }
-  if (normalized.endsWith('final') || normalized.includes(' final')) {
-    return 'Finale';
-  }
-
-  return null;
-}
-
-async function enrichWmRoundsFromDetails(matches) {
-  const maxRequestsRaw = Number.parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '12', 10);
-  const maxRequests = Number.isFinite(maxRequestsRaw) && maxRequestsRaw > 0 ? maxRequestsRaw : 60;
-  const delayMsRaw = Number.parseInt(process.env.FLASHSCORE_WM_DETAILS_DELAY_MS || '1100', 10);
-  const delayMs = Number.isFinite(delayMsRaw) && delayMsRaw >= 0 ? delayMsRaw : 1100;
-
-  const genericRoundMatches = matches.filter((match) => isGenericRoundLabel(match.round) && match.sourceMatchId);
-  const bySourceMatchId = new Map();
-
-  for (const match of genericRoundMatches) {
-    if (!bySourceMatchId.has(match.sourceMatchId)) {
-      bySourceMatchId.set(match.sourceMatchId, []);
-    }
-    bySourceMatchId.get(match.sourceMatchId).push(match);
-  }
-
-  const targetMatchIds = Array.from(bySourceMatchId.keys()).slice(0, maxRequests);
-  let resolvedCount = 0;
-  let rateLimited = false;
-
-  for (let index = 0; index < targetMatchIds.length; index += 1) {
-    const sourceMatchId = targetMatchIds[index];
-
-    if (index > 0 && delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-
-    try {
-      const details = await fetchFlashscoreMatchDetails(sourceMatchId);
-      const roundLabel = mapTournamentNameToRound(details?.tournament?.name);
-      if (!roundLabel) {
-        continue;
-      }
-
-      const linkedMatches = bySourceMatchId.get(sourceMatchId) || [];
-      linkedMatches.forEach((match) => {
-        match.round = roundLabel;
-        resolvedCount += 1;
-      });
-    } catch (error) {
-      const msg = String(error?.message || '');
-      if (error?.statusCode === 429 || msg.includes('429')) {
-        rateLimited = true;
-        break;
-      }
-      // Detail endpoint is best effort only.
-    }
-  }
-
-  return {
-    requested: targetMatchIds.length,
-    resolvedCount,
-    remainingGeneric: matches.filter((match) => isGenericRoundLabel(match.round)).length,
-    rateLimited
   };
 }
 
@@ -614,226 +503,223 @@ async function syncBundesligaResults(pool, options = {}) {
 }
 
 const WM_EXTERNAL_SOURCE = 'flashscore-wm';
-const DEFAULT_WM_TOURNAMENT_URL = '/football/world/world-cup-2026/';
+const WM_FALLBACK_TOURNAMENT_URLS = [
+  '/football/world/world-cup/',
+  '/football/world/world-cup-2026/'
+];
 
-async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
+// Extracts a WM match from a raw Flashscore API object.
+// Returns null if any required field is missing.
+function extractWMMatch(raw) {
+  const matchId = String(
+    raw?.match_id || raw?.id || raw?.event_id || raw?.eventId || ''
+  ).trim();
+  if (!matchId) return null;
+
+  const homeTeam = pickTeamName(raw, 'home');
+  const awayTeam = pickTeamName(raw, 'away');
+  if (!homeTeam || !awayTeam) return null;
+
+  const matchDate = toTimestampDate(
+    raw?.timestamp || raw?.start_timestamp || raw?.startTime || raw?.start_date || raw?.date
+  );
+  if (!matchDate) return null;
+
+  const externalId = toExternalId(matchId);
+  if (!externalId) return null;
+
+  const finished = hasFinishedStatus(raw);
+  const homeGoals = finished
+    ? parseGoals(raw?.scores?.home ?? raw?.home_score ?? raw?.homeScore ?? raw?.result?.home)
+    : null;
+  const awayGoals = finished
+    ? parseGoals(raw?.scores?.away ?? raw?.away_score ?? raw?.awayScore ?? raw?.result?.away)
+    : null;
+
+  return {
+    matchId,
+    externalId,
+    homeTeam,
+    awayTeam,
+    matchDate,
+    homeGoals,
+    awayGoals,
+    finished,
+    round: null
+  };
+}
+
+// Maps a Flashscore tournament name like "World Cup - Round 1" to a German label.
+function mapWMRoundName(tournamentName) {
+  const s = String(tournamentName || '').toLowerCase().trim();
+  if (!s) return null;
+
+  const roundNum = s.match(/\bround\s*(\d+)\b/);
+  if (roundNum) {
+    const n = parseInt(roundNum[1], 10);
+    if (n >= 1 && n <= 3) return `${n}. Spieltag`;
+  }
+
+  if (s.includes('round of 16') || s.includes('last 16')) return 'Achtelfinale';
+  if (s.includes('quarter-final') || s.includes('quarterfinal')) return 'Viertelfinale';
+  if (s.includes('semi-final') || s.includes('semifinal')) return 'Halbfinale';
+  if (s.includes('3rd place') || s.includes('third place')) return 'Spiel um Platz 3';
+  if (s.endsWith('final') || s.includes(' final')) return 'Finale';
+
+  return null;
+}
+
+// Fetches fixtures + results for a tournament URL, deduplicates by match_id.
+async function fetchAllWMRawMatches(tournamentUrl) {
+  const [fixturesResult, resultsResult] = await Promise.allSettled([
+    fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false }),
+    fetchFlashscoreTournamentResults(tournamentUrl, { useConfiguredIds: false })
+  ]);
+
+  const fixturesPayload = fixturesResult.status === 'fulfilled' ? fixturesResult.value : [];
+  const resultsPayload = resultsResult.status === 'fulfilled' ? resultsResult.value : [];
+
+  const seen = new Set();
+  const combined = [];
+  for (const raw of [...toMatchList(fixturesPayload), ...toMatchList(resultsPayload)]) {
+    const id = String(raw?.match_id || raw?.id || raw?.event_id || '').trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      combined.push(raw);
+    }
+  }
+  return combined;
+}
+
+// Calls the match details endpoint for each match without a round label.
+// Rate-limited via FLASHSCORE_WM_DETAILS_DELAY_MS (default 1200ms).
+async function enrichWMRoundsViaDetails(matches) {
+  const maxRequests = Math.max(1, parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '80', 10) || 80);
+  const delayMs = Math.max(0, parseInt(process.env.FLASHSCORE_WM_DETAILS_DELAY_MS || '1200', 10) || 1200);
+
+  const needsRound = matches.filter((m) => !m.round).slice(0, maxRequests);
+  let resolved = 0;
+
+  for (let i = 0; i < needsRound.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      const details = await fetchFlashscoreMatchDetails(needsRound[i].matchId);
+      const label = mapWMRoundName(details?.tournament?.name);
+      if (label) {
+        needsRound[i].round = label;
+        resolved++;
+      }
+    } catch (err) {
+      if (err?.statusCode === 429 || String(err?.message || '').includes('429')) break;
+      // best-effort: continue on other errors
+    }
+  }
+
+  return { requested: needsRound.length, resolved };
+}
+
+// Upserts a single WM match into the DB.
+// Preserves an existing specific round label if the new round is null.
+async function upsertWMMatch(pool, match) {
   const existing = await pool.query(
     'SELECT id, round FROM matches WHERE external_source = $1 AND external_id = $2',
-    [externalSource, normalizedMatch.externalId]
+    [WM_EXTERNAL_SOURCE, match.externalId]
   );
 
-  const resolvedExistingRound = isGenericRoundLabel(normalizedMatch.round)
-    ? ((existing.rows[0]?.round && !isGenericRoundLabel(existing.rows[0].round)) ? existing.rows[0].round : normalizedMatch.round)
-    : normalizedMatch.round;
+  const round = match.round || existing.rows[0]?.round || null;
 
   if (existing.rows.length > 0) {
     await pool.query(
       `UPDATE matches
-       SET home_team = $1,
-           away_team = $2,
-           match_date = $3,
-           round = $4,
-           home_goals = $5,
-           away_goals = $6,
-           finished = $7,
-           updated_at = NOW()
+         SET home_team = $1, away_team = $2, match_date = $3, round = $4,
+             home_goals = $5, away_goals = $6, finished = $7, updated_at = NOW()
        WHERE external_source = $8 AND external_id = $9`,
       [
-        normalizedMatch.homeTeam,
-        normalizedMatch.awayTeam,
-        normalizedMatch.matchDate,
-        resolvedExistingRound,
-        normalizedMatch.homeGoals,
-        normalizedMatch.awayGoals,
-        normalizedMatch.finished,
-        externalSource,
-        normalizedMatch.externalId
+        match.homeTeam, match.awayTeam, match.matchDate, round,
+        match.homeGoals, match.awayGoals, match.finished,
+        WM_EXTERNAL_SOURCE, match.externalId
       ]
     );
-    return 'updated';
-  }
-
-  const { sameMatchCandidates, specificRound } = await findSpecificExistingRound(pool, normalizedMatch);
-  const resolvedRound = isGenericRoundLabel(normalizedMatch.round)
-    ? (specificRound || normalizedMatch.round)
-    : normalizedMatch.round;
-
-  if (sameMatchCandidates.length > 0) {
-    const targetMatch = sameMatchCandidates.find((row) => row.external_source !== externalSource) || sameMatchCandidates[0];
-
-    await pool.query(
-      `UPDATE matches
-       SET home_team = $1,
-           away_team = $2,
-           match_date = $3,
-           round = $4,
-           home_goals = $5,
-           away_goals = $6,
-           finished = $7,
-           external_source = $8,
-           external_id = $9,
-           updated_at = NOW()
-       WHERE id = $10`,
-      [
-        normalizedMatch.homeTeam,
-        normalizedMatch.awayTeam,
-        normalizedMatch.matchDate,
-        resolvedRound,
-        normalizedMatch.homeGoals,
-        normalizedMatch.awayGoals,
-        normalizedMatch.finished,
-        externalSource,
-        normalizedMatch.externalId,
-        targetMatch.id
-      ]
-    );
-
-    const duplicateIds = sameMatchCandidates
-      .map((row) => row.id)
-      .filter((id) => id !== targetMatch.id);
-
-    for (const duplicateId of duplicateIds) {
-      await pool.query(
-        `INSERT INTO tips (user_id, match_id, home_goals, away_goals, created_at, updated_at)
-         SELECT user_id, $2, home_goals, away_goals, created_at, updated_at
-         FROM tips
-         WHERE match_id = $1
-         ON CONFLICT (user_id, match_id) DO NOTHING`,
-        [duplicateId, targetMatch.id]
-      );
-
-      await pool.query('DELETE FROM tips WHERE match_id = $1', [duplicateId]);
-      await pool.query('DELETE FROM matches WHERE id = $1', [duplicateId]);
-    }
-
     return 'updated';
   }
 
   await pool.query(
-    `INSERT INTO matches (
-      home_team, away_team, match_date, round,
-      home_goals, away_goals, finished, external_source, external_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    `INSERT INTO matches
+       (home_team, away_team, match_date, round, home_goals, away_goals, finished, external_source, external_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
-      normalizedMatch.homeTeam,
-      normalizedMatch.awayTeam,
-      normalizedMatch.matchDate,
-      resolvedRound,
-      normalizedMatch.homeGoals,
-      normalizedMatch.awayGoals,
-      normalizedMatch.finished,
-      externalSource,
-      normalizedMatch.externalId
+      match.homeTeam, match.awayTeam, match.matchDate, round,
+      match.homeGoals, match.awayGoals, match.finished,
+      WM_EXTERNAL_SOURCE, match.externalId
     ]
   );
   return 'created';
 }
 
-function toNormalizedMatchWithRound(match, defaultRound) {
-  const normalized = toNormalizedMatch(match, defaultRound);
-  if (!normalized) return null;
-  return normalized;
-}
-
-async function importFlashscoreWMMatches(pool, options = {}) {
+async function importFlashscoreWMMatches(pool) {
   if (!isRapidApiConfigured()) {
-    const error = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
-    error.statusCode = 400;
-    throw error;
+    const err = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
+    err.statusCode = 400;
+    throw err;
   }
 
-  const requestedTournamentUrl = options.tournamentUrl || process.env.FLASHSCORE_TOURNAMENT_URL;
-  const candidateTournamentUrls = [
-    requestedTournamentUrl,
-    '/football/world/world-cup/',
-    '/football/world/world-cup-2026/'
-  ].filter((value, index, array) => value && array.indexOf(value) === index);
+  const configuredUrl = process.env.FLASHSCORE_TOURNAMENT_URL;
+  const urlsToTry = [configuredUrl, ...WM_FALLBACK_TOURNAMENT_URLS]
+    .filter((u, i, arr) => u && arr.indexOf(u) === i);
 
-  const defaultRound = options.defaultRound || 'WM';
-  let tournamentUrl = requestedTournamentUrl || DEFAULT_WM_TOURNAMENT_URL;
-  let allRaw = [];
+  let rawMatches = [];
+  let usedUrl = urlsToTry[0];
   let lastError = null;
 
-  for (const candidateTournamentUrl of candidateTournamentUrls) {
+  for (const url of urlsToTry) {
     try {
-      // useConfiguredIds: false -> Stage-ID wird immer dynamisch von der API geholt.
-      // Damit werden auch Achtelfinale, Viertelfinale etc. importiert sobald sie
-      // von Flashscore als aktive Stage zurueckgegeben werden.
-      const fixturesPayload = await fetchFlashscoreTournamentFixtures(candidateTournamentUrl, { useConfiguredIds: false });
-      let resultsPayload = [];
-
-      try {
-        resultsPayload = await fetchFlashscoreTournamentResults(candidateTournamentUrl, { useConfiguredIds: false });
-      } catch (resultsError) {
-        const msg = String(resultsError?.message || '');
-        if (!(resultsError?.statusCode === 429 || msg.includes('429'))) {
-          throw resultsError;
-        }
-      }
-
-      const combinedRaw = [
-        ...toMatchList(fixturesPayload),
-        ...toMatchList(resultsPayload)
-      ];
-
-      if (combinedRaw.length > 0) {
-        tournamentUrl = candidateTournamentUrl;
-        allRaw = combinedRaw;
+      const fetched = await fetchAllWMRawMatches(url);
+      if (fetched.length > 0) {
+        rawMatches = fetched;
+        usedUrl = url;
         break;
       }
-    } catch (error) {
-      lastError = error;
+    } catch (err) {
+      lastError = err;
     }
   }
 
-  if (!allRaw.length) {
-    const error = new Error(
-      lastError?.message
-      || `Keine WM-Spiele von Flashscore erhalten. Gepruefte tournamentUrl-Werte: ${candidateTournamentUrls.join(', ')}`
+  if (!rawMatches.length) {
+    const err = new Error(
+      lastError?.message || `Keine WM-Spiele von Flashscore erhalten (URLs: ${urlsToTry.join(', ')})`
     );
-    error.statusCode = lastError?.statusCode || 502;
-    throw error;
+    err.statusCode = lastError?.statusCode || 502;
+    throw err;
   }
 
-  // Deduplicate by externalId
-  const seen = new Set();
-  const normalizedMatches = allRaw
-    .map((m) => toNormalizedMatchWithRound(m, defaultRound))
-    .filter(Boolean)
-    .filter((m) => {
-      if (seen.has(m.externalId)) return false;
-      seen.add(m.externalId);
-      return true;
-    });
-
-  if (!normalizedMatches.length) {
-    const error = new Error('Flashscore hat Spiele geliefert, aber kein Match hatte ein verwertbares Format.');
-    error.statusCode = 502;
-    throw error;
+  const matches = rawMatches.map(extractWMMatch).filter(Boolean);
+  if (!matches.length) {
+    const sampleKeys = rawMatches.slice(0, 2).map((r) => Object.keys(r || {}));
+    const err = new Error(
+      `API lieferte ${rawMatches.length} Eintraege, aber keiner hatte verwertbares Format. Beispiel-Keys: ${JSON.stringify(sampleKeys)}`
+    );
+    err.statusCode = 502;
+    throw err;
   }
 
-  const detailsRoundStats = await enrichWmRoundsFromDetails(normalizedMatches);
+  const roundStats = await enrichWMRoundsViaDetails(matches);
 
   let createdCount = 0;
   let updatedCount = 0;
-
-  for (const match of normalizedMatches) {
-    const action = await upsertMatchWithSource(pool, match, WM_EXTERNAL_SOURCE);
-    if (action === 'created') {
-      createdCount += 1;
-    } else {
-      updatedCount += 1;
-    }
+  for (const match of matches) {
+    const action = await upsertWMMatch(pool, match);
+    if (action === 'created') createdCount++;
+    else updatedCount++;
   }
 
   return {
-    tournamentUrl,
+    tournamentUrl: usedUrl,
     externalSource: WM_EXTERNAL_SOURCE,
-    totalFetched: allRaw.length,
-    totalProcessed: normalizedMatches.length,
+    totalFetched: rawMatches.length,
+    totalProcessed: matches.length,
     createdCount,
     updatedCount,
-    detailsRoundStats
+    detailsRoundStats: roundStats
   };
 }
 

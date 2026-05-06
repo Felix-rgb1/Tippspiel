@@ -116,7 +116,7 @@ export const adminAPI = {
       round,
       reset_result: resetResult
     }),
-  syncMatches: () => apiPost('/admin/matches/sync', {}),
+  importWMMatches: () => apiPost('/admin/matches/import/wm', {}),
   importBundesliga: () => apiPost('/admin/matches/import/bundesliga', {}),
   syncBundesligaResults: () => apiPost('/admin/matches/sync-results/bundesliga', {}),
   updateMatchResult: (matchId, homeGoals, awayGoals) =>

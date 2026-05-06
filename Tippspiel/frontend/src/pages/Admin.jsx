@@ -22,7 +22,7 @@ function Admin() {
   const [matches, setMatches] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [importingWM, setImportingWM] = useState(false);
   const [importingBundesliga, setImportingBundesliga] = useState(false);
   const [syncingBundesligaResults, setSyncingBundesligaResults] = useState(false);
   const [exportingTips, setExportingTips] = useState(false);
@@ -289,17 +289,22 @@ function Admin() {
     }
   };
 
-  const handleSyncMatches = async () => {
+  const handleImportWMMatches = async () => {
     try {
-      setSyncing(true);
+      setImportingWM(true);
       setError('');
-      const response = await adminAPI.syncMatches();
-      setSuccess(response.data.message || 'Synchronisierung abgeschlossen');
+      const response = await adminAPI.importWMMatches();
+      const data = response.data || {};
+      setSuccess(
+        data.message
+        || `WM-Import abgeschlossen: ${data.createdCount || 0} neu, ${data.updatedCount || 0} aktualisiert.`
+      );
+      setTimeout(() => setSuccess(''), 8000);
       fetchMatches();
     } catch (err) {
       setError(err.response?.data?.error || 'WM-Import fehlgeschlagen');
     } finally {
-      setSyncing(false);
+      setImportingWM(false);
     }
   };
 
@@ -516,13 +521,13 @@ function Admin() {
       {activeTab === 'matches' && (
         <div className="admin-section">
           <div className="admin-actions">
-            <button 
-              type="button" 
-              className="btn-primary" 
-              onClick={handleSyncMatches} 
-              disabled={syncing}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleImportWMMatches}
+              disabled={importingWM}
             >
-              {syncing ? '⏳ Import läuft...' : '🌍 WM-Spiele von Flashscore importieren'}
+              {importingWM ? '⏳ WM-Import läuft (~90s)...' : '🌍 WM-Spiele importieren'}
             </button>
             <button
               type="button"
