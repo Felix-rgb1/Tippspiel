@@ -345,7 +345,8 @@
 .match-card {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border-radius: 1rem;
-  border: 2px solid #e2e8f0;
+  border: 2px solid;
+  border-color: #e2e8f0;
   padding: 1.75rem;
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1236,8 +1237,8 @@
 }
 
 :root[data-theme='dark'] .match-card {
-  background: linear-gradient(165deg, #0f172a 0%, #111c31 100%) !important;
-  border-color: #334155 !important;
+  background: linear-gradient(165deg, #0f172a 0%, #111c31 100%);
+  border-color: #334155;
   box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
 }
 
