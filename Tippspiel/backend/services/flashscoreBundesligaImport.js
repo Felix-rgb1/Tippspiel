@@ -188,6 +188,11 @@ function toRoundLabel(match, fallbackRound = null) {
   return fallbackRound;
 }
 
+function isGenericRoundLabel(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return !normalized || normalized === 'wm' || normalized === 'bundesliga';
+}
+
 function toNormalizedMatch(match, fallbackRound = null) {
   const externalId = toExternalId(
     match?.match_id
@@ -491,7 +496,7 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
   }
 
   const nearbyCandidates = await pool.query(
-    `SELECT id, home_team, away_team, match_date, external_source, external_id
+    `SELECT id, home_team, away_team, match_date, round, external_source, external_id
      FROM matches
      WHERE ABS(EXTRACT(EPOCH FROM (match_date - $1::timestamp))) <= 86400
      ORDER BY created_at ASC`,
@@ -506,6 +511,9 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
 
   if (sameMatchCandidates.length > 0) {
     const targetMatch = sameMatchCandidates.find((row) => row.external_source !== externalSource) || sameMatchCandidates[0];
+    const resolvedRound = isGenericRoundLabel(normalizedMatch.round)
+      ? (targetMatch.round || normalizedMatch.round)
+      : normalizedMatch.round;
 
     await pool.query(
       `UPDATE matches
@@ -524,7 +532,7 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
         normalizedMatch.homeTeam,
         normalizedMatch.awayTeam,
         normalizedMatch.matchDate,
-        normalizedMatch.round,
+        resolvedRound,
         normalizedMatch.homeGoals,
         normalizedMatch.awayGoals,
         normalizedMatch.finished,
