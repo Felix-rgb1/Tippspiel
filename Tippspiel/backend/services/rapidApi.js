@@ -1414,5 +1414,22 @@ module.exports = {
   fetchRapidApiProbabilities,
   fetchRapidApiMatchInsights,
   fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreTournamentResults,
   testRapidApi
 };
+
+async function fetchFlashscoreTournamentResults(tournamentUrl = getConfiguredFlashscoreTournamentUrl(), options = {}) {
+  const ids = await fetchFlashscoreTournamentIds(tournamentUrl, options);
+  if (!ids?.tournament_template_id || !ids?.season_id) {
+    return [];
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/tournaments/results', {
+    tournament_id: ids.tournament_id,
+    tournament_stage_id: ids.tournament_stage_id,
+    tournament_template_id: ids.tournament_template_id,
+    season_id: ids.season_id
+  });
+
+  return Array.isArray(payload) ? payload : [];
+}

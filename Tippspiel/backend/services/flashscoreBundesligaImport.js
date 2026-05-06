@@ -1,4 +1,4 @@
-const { fetchFlashscoreTournamentFixtures, isRapidApiConfigured } = require('./rapidApi');
+const { fetchFlashscoreTournamentFixtures, fetchFlashscoreTournamentResults, isRapidApiConfigured } = require('./rapidApi');
 
 const DEFAULT_TOURNAMENT_URL = '/football/germany/bundesliga/';
 const EXTERNAL_SOURCE = 'flashscore-bundesliga';
@@ -368,7 +368,8 @@ async function syncBundesligaResults(pool, options = {}) {
     || process.env.FLASHSCORE_BUNDESLIGA_TOURNAMENT_URL
     || DEFAULT_TOURNAMENT_URL;
 
-  const fixturesPayload = await fetchFlashscoreTournamentFixtures(tournamentUrl, {
+  // Use the results endpoint – it returns already-played matches with scores
+  const fixturesPayload = await fetchFlashscoreTournamentResults(tournamentUrl, {
     useConfiguredIds: false
   });
 
