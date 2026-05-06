@@ -367,6 +367,68 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function hexToRgb(hex) {
+  const normalized = hex.replace('#', '');
+  const full = normalized.length === 3
+    ? normalized.split('').map((char) => char + char).join('')
+    : normalized;
+
+  return {
+    r: parseInt(full.slice(0, 2), 16),
+    g: parseInt(full.slice(2, 4), 16),
+    b: parseInt(full.slice(4, 6), 16)
+  };
+}
+
+function rgbToHex(r, g, b) {
+  const toHex = (value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function mixHex(colorA, colorB, ratio) {
+  const a = hexToRgb(colorA);
+  const b = hexToRgb(colorB);
+
+  return rgbToHex(
+    a.r + (b.r - a.r) * ratio,
+    a.g + (b.g - a.g) * ratio,
+    a.b + (b.b - a.b) * ratio
+  );
+}
+
+function relativeLuminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const normalize = (channel) => {
+    const s = channel / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+
+  const R = normalize(r);
+  const G = normalize(g);
+  const B = normalize(b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+function normalizeColorForCard(hex) {
+  const lum = relativeLuminance(hex);
+
+  if (lum > 0.72) {
+    // Bright colors like yellow/white need stronger darkening on light cards.
+    return mixHex(hex, '#0f172a', 0.52);
+  }
+
+  if (lum > 0.58) {
+    return mixHex(hex, '#0f172a', 0.34);
+  }
+
+  if (lum < 0.16) {
+    // Very dark colors should be slightly lifted for visible gradients.
+    return mixHex(hex, '#ffffff', 0.16);
+  }
+
+  return hex;
+}
+
 function getTeamColor(teamName) {
   const germanTeamName = getGermanTeamName(teamName);
   const directColor = TEAM_COLORS[germanTeamName];
@@ -380,12 +442,13 @@ function getTeamColor(teamName) {
 }
 
 export function getMatchThemeStyle(homeTeam, awayTeam) {
-  const homeColor = getTeamColor(homeTeam);
-  const awayColor = getTeamColor(awayTeam);
+  const homeColor = normalizeColorForCard(getTeamColor(homeTeam));
+  const awayColor = normalizeColorForCard(getTeamColor(awayTeam));
 
   return {
-    background: `linear-gradient(135deg, ${hexToRgba(homeColor, 0.18)} 0%, ${hexToRgba(homeColor, 0.08)} 40%, ${hexToRgba(awayColor, 0.08)} 60%, ${hexToRgba(awayColor, 0.18)} 100%)`,
+    background: `linear-gradient(112deg, ${hexToRgba(homeColor, 0.36)} 0%, ${hexToRgba(homeColor, 0.16)} 46%, ${hexToRgba(awayColor, 0.16)} 54%, ${hexToRgba(awayColor, 0.36)} 100%), linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)`,
     borderColor: homeColor,
-    borderWidth: '2px'
+    borderWidth: '2px',
+    boxShadow: `inset 0 0 0 1px ${hexToRgba(homeColor, 0.22)}, 0 12px 30px ${hexToRgba(awayColor, 0.16)}`
   };
 }
