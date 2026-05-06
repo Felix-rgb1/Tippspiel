@@ -105,6 +105,7 @@ export const adminAPI = {
     }),
   syncMatches: () => apiPost('/admin/matches/sync', {}),
   importBundesliga: () => apiPost('/admin/matches/import/bundesliga', {}),
+  syncBundesligaResults: () => apiPost('/admin/matches/sync-results/bundesliga', {}),
   updateMatchResult: (matchId, homeGoals, awayGoals) =>
     apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),
   getUsers: () => apiGet('/admin/users'),

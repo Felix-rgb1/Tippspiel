@@ -6,7 +6,7 @@ const { adminMiddleware } = require('../middleware/auth');
 const { syncMatchesFromFootballData } = require('../services/footballData');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 const { testRapidApi, isRapidApiConfigured } = require('../services/rapidApi');
-const { importFlashscoreBundesligaMatches } = require('../services/flashscoreBundesligaImport');
+const { importFlashscoreBundesligaMatches, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
 
 const router = express.Router();
 
@@ -152,6 +152,19 @@ router.post('/matches/import/bundesliga', adminMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Bundesliga-Import fehlgeschlagen' });
+  }
+});
+
+router.post('/matches/sync-results/bundesliga', adminMiddleware, async (req, res) => {
+  try {
+    const syncResult = await syncBundesligaResults(pool);
+    res.json({
+      message: `Bundesliga-Ergebnisse aktualisiert: ${syncResult.updatedCount} Spiele eingetragen, ${syncResult.skippedCount} nicht zugeordnet (${syncResult.finishedFromApi} abgeschlossene Spiele von API erhalten).`,
+      ...syncResult
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Ergebnis-Synchronisierung fehlgeschlagen' });
   }
 });
 

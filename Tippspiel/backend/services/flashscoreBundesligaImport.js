@@ -349,6 +349,103 @@ async function importFlashscoreBundesligaMatches(pool, options = {}) {
   };
 }
 
+async function syncBundesligaResults(pool, options = {}) {
+  if (!isRapidApiConfigured()) {
+    const error = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const tournamentUrl = options.tournamentUrl
+    || process.env.FLASHSCORE_BUNDESLIGA_TOURNAMENT_URL
+    || DEFAULT_TOURNAMENT_URL;
+
+  const fixturesPayload = await fetchFlashscoreTournamentFixtures(tournamentUrl, {
+    useConfiguredIds: false
+  });
+
+  const rawMatches = toMatchList(fixturesPayload);
+
+  if (!rawMatches.length) {
+    return { updatedCount: 0, skippedCount: 0, totalFetched: 0, finishedFromApi: 0, tournamentUrl };
+  }
+
+  const finishedApiMatches = rawMatches
+    .map(toNormalizedMatch)
+    .filter(Boolean)
+    .filter((m) => m.finished && m.homeGoals !== null && m.awayGoals !== null);
+
+  if (!finishedApiMatches.length) {
+    return { updatedCount: 0, skippedCount: 0, totalFetched: rawMatches.length, finishedFromApi: 0, tournamentUrl };
+  }
+
+  // Load all unfinished DB matches to update
+  const dbResult = await pool.query(
+    `SELECT id, home_team, away_team, match_date, external_source, external_id
+     FROM matches
+     WHERE finished = false OR finished IS NULL
+     ORDER BY match_date ASC`
+  );
+  const dbMatches = dbResult.rows;
+
+  let updatedCount = 0;
+  let skippedCount = 0;
+
+  for (const apiMatch of finishedApiMatches) {
+    let dbMatch = null;
+
+    // First: exact match by external_id
+    if (apiMatch.externalId) {
+      dbMatch = dbMatches.find(
+        (m) => m.external_source === EXTERNAL_SOURCE && m.external_id === apiMatch.externalId
+      );
+    }
+
+    // Fallback: fuzzy match by team names + date (±24 h)
+    if (!dbMatch) {
+      const homeNorm = normalizeName(apiMatch.homeTeam);
+      const awayNorm = normalizeName(apiMatch.awayTeam);
+      const apiTs = new Date(apiMatch.matchDate).getTime();
+
+      dbMatch = dbMatches.find((m) => {
+        const dbHome = normalizeName(m.home_team);
+        const dbAway = normalizeName(m.away_team);
+        const dbTs = new Date(m.match_date).getTime();
+        const nameMatch = (
+          (dbHome === homeNorm || dbHome.includes(homeNorm) || homeNorm.includes(dbHome)) &&
+          (dbAway === awayNorm || dbAway.includes(awayNorm) || awayNorm.includes(dbAway))
+        );
+        return nameMatch && Math.abs(apiTs - dbTs) <= 24 * 60 * 60 * 1000;
+      });
+    }
+
+    if (!dbMatch) {
+      skippedCount += 1;
+      continue;
+    }
+
+    await pool.query(
+      `UPDATE matches
+       SET home_goals = $1,
+           away_goals = $2,
+           finished = true,
+           updated_at = NOW()
+       WHERE id = $3`,
+      [apiMatch.homeGoals, apiMatch.awayGoals, dbMatch.id]
+    );
+    updatedCount += 1;
+  }
+
+  return {
+    tournamentUrl,
+    totalFetched: rawMatches.length,
+    finishedFromApi: finishedApiMatches.length,
+    updatedCount,
+    skippedCount
+  };
+}
+
 module.exports = {
-  importFlashscoreBundesligaMatches
+  importFlashscoreBundesligaMatches,
+  syncBundesligaResults
 };
