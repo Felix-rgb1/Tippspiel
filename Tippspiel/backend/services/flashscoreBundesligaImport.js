@@ -522,6 +522,11 @@ function normalizeTournamentUrl(value) {
   return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
+function isRateLimitError(error) {
+  const message = String(error?.message || '');
+  return error?.statusCode === 429 || message.includes('429');
+}
+
 // Extracts a WM match from a raw Flashscore API object.
 // Returns null if any required field is missing.
 function extractWMMatch(raw) {
@@ -585,21 +590,51 @@ function mapWMRoundName(tournamentName) {
 
 // Fetches fixtures + results for a tournament URL, deduplicates by match_id.
 async function fetchAllWMRawMatches(tournamentUrl) {
-  const [fixturesResult, resultsResult] = await Promise.allSettled([
-    fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false }),
-    fetchFlashscoreTournamentResults(tournamentUrl, { useConfiguredIds: false })
-  ]);
+  const endpointDelayMsRaw = Number.parseInt(process.env.FLASHSCORE_IMPORT_ENDPOINT_DELAY_MS || '900', 10);
+  const endpointDelayMs = Number.isFinite(endpointDelayMsRaw) && endpointDelayMsRaw >= 0 ? endpointDelayMsRaw : 900;
 
-  if (fixturesResult.status === 'rejected' && resultsResult.status === 'rejected') {
-    const msgA = String(fixturesResult.reason?.message || 'fixtures-call failed');
-    const msgB = String(resultsResult.reason?.message || 'results-call failed');
-    const err = new Error(`Flashscore-Aufrufe fehlgeschlagen fuer ${tournamentUrl}: ${msgA} | ${msgB}`);
-    err.statusCode = fixturesResult.reason?.statusCode || resultsResult.reason?.statusCode || 502;
-    throw err;
+  let fixturesPayload = [];
+  let resultsPayload = [];
+  let fixturesRateLimited = false;
+  let resultsRateLimited = false;
+  let fixturesError = null;
+  let resultsError = null;
+
+  try {
+    fixturesPayload = await fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false });
+  } catch (error) {
+    fixturesError = error;
+    if (isRateLimitError(error)) {
+      fixturesRateLimited = true;
+      fixturesPayload = [];
+    } else {
+      throw error;
+    }
   }
 
-  const fixturesPayload = fixturesResult.status === 'fulfilled' ? fixturesResult.value : [];
-  const resultsPayload = resultsResult.status === 'fulfilled' ? resultsResult.value : [];
+  if (endpointDelayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, endpointDelayMs));
+  }
+
+  try {
+    resultsPayload = await fetchFlashscoreTournamentResults(tournamentUrl, { useConfiguredIds: false });
+  } catch (error) {
+    resultsError = error;
+    if (isRateLimitError(error)) {
+      resultsRateLimited = true;
+      resultsPayload = [];
+    } else {
+      throw error;
+    }
+  }
+
+  if (fixturesRateLimited && resultsRateLimited) {
+    const msgA = String(fixturesError?.message || 'fixtures-call rate-limited');
+    const msgB = String(resultsError?.message || 'results-call rate-limited');
+    const err = new Error(`Flashscore-Aufrufe fehlgeschlagen fuer ${tournamentUrl}: ${msgA} | ${msgB}`);
+    err.statusCode = 429;
+    throw err;
+  }
 
   const seen = new Set();
   const combined = [];
@@ -703,14 +738,22 @@ async function importFlashscoreWMMatches(pool) {
       }
     } catch (err) {
       lastError = err;
+
+      // Give RapidAPI a short cool-down before trying the next tournament URL.
+      if (isRateLimitError(err)) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      }
     }
   }
 
   if (!rawMatches.length) {
-    const err = new Error(
-      lastError?.message || `Keine WM-Spiele von Flashscore erhalten (URLs: ${urlsToTry.join(', ')})`
-    );
-    err.statusCode = lastError?.statusCode || 502;
+    const err = new Error(lastError?.message || `Keine WM-Spiele von Flashscore erhalten (URLs: ${urlsToTry.join(', ')})`);
+    if (isRateLimitError(lastError)) {
+      err.message = 'RapidAPI Rate-Limit erreicht. Bitte in 1-2 Minuten erneut versuchen.';
+      err.statusCode = 429;
+    } else {
+      err.statusCode = lastError?.statusCode || 502;
+    }
     throw err;
   }
 
