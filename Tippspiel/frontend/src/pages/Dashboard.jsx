@@ -490,7 +490,8 @@ function Dashboard() {
   };
 
   const openMatchInfo = (matchId) => {
-    navigate(`/match/${matchId}`);
+    const match = matches.find((m) => m.id === matchId);
+    navigate(`/match/${matchId}`, { state: { match: match || null } });
   };
 
   const allTeams = Array.from(

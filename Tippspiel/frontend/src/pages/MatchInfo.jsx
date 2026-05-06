@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { matchAPI } from '../api';
 import './MatchInfo.css';
 
@@ -32,9 +32,12 @@ function outcomeClass(outcome) {
 function MatchInfo() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { state: locationState } = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [insights, setInsights] = useState(null);
+  // Pre-fill basic match data passed via navigation state for instant display
+  const matchPreview = locationState?.match || null;
 
   useEffect(() => {
     const fetchInsights = async () => {
@@ -84,6 +87,18 @@ function MatchInfo() {
   if (loading) {
     return (
       <div className="container match-info-page">
+        {matchPreview && (
+          <section className="match-hero card">
+            <div className="match-hero-copy">
+              <div className="match-hero-kicker">Match Intelligence</div>
+              <h1>{matchPreview.home_team} vs {matchPreview.away_team}</h1>
+              <p className="match-hero-subtitle">
+                {formatDate(matchPreview.match_date)}
+                {matchPreview.round ? ` · ${matchPreview.round}` : ''}
+              </p>
+            </div>
+          </section>
+        )}
         <div className="card">
           <p>Lade Match-Infos...</p>
         </div>
