@@ -1,6 +1,7 @@
 // Team name normalization (same as in Dashboard.jsx)
 const TEAM_NAME_DE_MAP = {
   argentina: 'Argentinien',
+  australia: 'Australien',
   australien: 'Australien',
   austria: 'Österreich',
   aegypten: 'Ägypten',
@@ -235,13 +236,14 @@ const TEAM_COLORS = {
   Belgien: '#ffc400',
   Bolivien: '#ce1126',
   Bosnien: '#1d3557',
+  'Bosnien-Herzegowina': '#1d3557',
   Brasilien: '#009c3b',
   'Costa Rica': '#002d62',
   Chile: '#0039a6',
   China: '#ef3340',
   Curaçao: '#2a5599',
   Dänemark: '#c60c30',
-  Demokratische: '#ce1126',
+  'Demokratische Republik Kongo': '#ce1126',
   Deutschland: '#000000',
   Ecuador: '#ffc400',
   Elfenbeinküste: '#f47920',
@@ -322,6 +324,8 @@ const TEAM_COLORS = {
   Slowakei: '#0b4f8c',
   Slowenien: '#002395',
   Spanien: '#c60c30',
+  Südafrika: '#007a4d',
+  Südkorea: '#cd2e3a',
   Sudan: '#000000',
   Surinam: '#007a5e',
   Syrien: '#ce1126',
@@ -330,13 +334,14 @@ const TEAM_COLORS = {
   Tansania: '#239f46',
   Thailand: '#ce1126',
   Togo: '#007a5e',
-  'Trinidad und': '#ce1126',
+  'Trinidad und Tobago': '#ce1126',
+  Tschechien: '#d7141a',
   Tunesien: '#ce1126',
   Türkei: '#c60c30',
   Turkmenistan: '#239f46',
   Uganda: '#000000',
   Ukraine: '#ffcc00',
-  'Vereinigte Arabische': '#000000',
+  'Vereinigte Arabische Emirate': '#000000',
   'Vereinigtes Königreich': '#012169',
   'Vereinigte Staaten': '#3c3b6b',
   Uruguay: '#38bdf8',
@@ -364,7 +369,14 @@ function hexToRgba(hex, alpha) {
 
 function getTeamColor(teamName) {
   const germanTeamName = getGermanTeamName(teamName);
-  return TEAM_COLORS[germanTeamName] || '#334155';
+  const directColor = TEAM_COLORS[germanTeamName];
+  if (directColor) {
+    return directColor;
+  }
+
+  const normalizedGerman = normalizeTeamName(germanTeamName);
+  const normalizedEntry = Object.entries(TEAM_COLORS).find(([key]) => normalizeTeamName(key) === normalizedGerman);
+  return normalizedEntry?.[1] || '#334155';
 }
 
 export function getMatchThemeStyle(homeTeam, awayTeam) {

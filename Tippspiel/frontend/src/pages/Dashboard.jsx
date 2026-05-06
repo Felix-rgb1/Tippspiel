@@ -11,6 +11,8 @@ const TEAM_ISO_MAP = {
   argentinien: 'AR',
   algeria: 'DZ',
   aegypten: 'EG',
+  agypten: 'EG',
+  egypt: 'EG',
   algerien: 'DZ',
   australien: 'AU',
   australia: 'AU',
@@ -27,8 +29,10 @@ const TEAM_ISO_MAP = {
   brasilien: 'BR',
   brazil: 'BR',
   canada: 'CA',
+  'cape verde': 'CV',
   'cape verde islands': 'CV',
   'cabo verde': 'CV',
+  kapverden: 'CV',
   kanada: 'CA',
   chile: 'CL',
   china: 'CN',
@@ -333,6 +337,16 @@ const TEAM_NAME_DE_MAP = {
   zimbabwe: 'Simbabwe'
 };
 
+const TEAM_NAME_SHORT_MAP = {
+  'bosnien herzegowina': 'Bosnien-Herz.',
+  'vereinigte staaten': 'USA',
+  'vereinigtes konigreich': 'UK',
+  'vereinigte arabische emirate': 'VAE',
+  'demokratische republik kongo': 'DR Kongo',
+  'trinidad und tobago': 'Trinidad/Tob.',
+  'saudi arabien': 'Saudi-Arab.'
+};
+
 function normalizeTeamName(teamName) {
   return (teamName || '')
     .normalize('NFD')
@@ -350,12 +364,15 @@ function getTeamDisplay(teamName) {
   const normalized = normalizeTeamName(teamName);
   const isoCode = TEAM_ISO_MAP[normalized];
   const germanLabel = TEAM_NAME_DE_MAP[normalized];
+  const fullLabel = germanLabel || String(teamName || '').trim();
+  const shortLabel = TEAM_NAME_SHORT_MAP[normalizeTeamName(fullLabel)];
 
-  const label = germanLabel || String(teamName || '').trim();
+  const label = shortLabel || fullLabel;
 
   return {
     isoCode,
-    label
+    label,
+    fullLabel
   };
 }
 
@@ -368,7 +385,7 @@ function TeamFlag({ teamDisplay }) {
     <img
       className="team-flag-img"
       src={getFlagImageUrl(teamDisplay.isoCode)}
-      alt={`Flagge ${teamDisplay.label}`}
+      alt={`Flagge ${teamDisplay.fullLabel || teamDisplay.label}`}
       loading="lazy"
       width="20"
       height="14"
