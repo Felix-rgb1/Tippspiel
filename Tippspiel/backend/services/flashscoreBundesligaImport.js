@@ -172,7 +172,7 @@ function hasFinishedStatus(match) {
   return home !== null && away !== null;
 }
 
-function toRoundLabel(match) {
+function toRoundLabel(match, fallbackRound = null) {
   const candidates = [
     match?.round_name,
     match?.round,
@@ -185,10 +185,10 @@ function toRoundLabel(match) {
     return String(candidates[0]);
   }
 
-  return 'Bundesliga';
+  return fallbackRound;
 }
 
-function toNormalizedMatch(match) {
+function toNormalizedMatch(match, fallbackRound = null) {
   const externalId = toExternalId(
     match?.match_id
     || match?.id
@@ -232,7 +232,7 @@ function toNormalizedMatch(match) {
     homeTeam,
     awayTeam,
     matchDate,
-    round: toRoundLabel(match),
+    round: toRoundLabel(match, fallbackRound),
     finished,
     homeGoals: finished ? homeGoals : null,
     awayGoals: finished ? awayGoals : null,
@@ -325,7 +325,7 @@ async function importFlashscoreBundesligaMatches(pool, options = {}) {
   }
 
   const normalizedMatches = rawMatches
-    .map(toNormalizedMatch)
+    .map((match) => toNormalizedMatch(match, 'Bundesliga'))
     .filter(Boolean);
 
   if (!normalizedMatches.length) {
@@ -380,7 +380,7 @@ async function syncBundesligaResults(pool, options = {}) {
   }
 
   const finishedApiMatches = rawMatches
-    .map(toNormalizedMatch)
+    .map((match) => toNormalizedMatch(match, 'Bundesliga'))
     .filter(Boolean)
     .filter((m) => m.finished && m.homeGoals !== null && m.awayGoals !== null);
 
@@ -490,6 +490,71 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
     return 'updated';
   }
 
+  const nearbyCandidates = await pool.query(
+    `SELECT id, home_team, away_team, match_date, external_source, external_id
+     FROM matches
+     WHERE ABS(EXTRACT(EPOCH FROM (match_date - $1::timestamp))) <= 86400
+     ORDER BY created_at ASC`,
+    [normalizedMatch.matchDate]
+  );
+
+  const sameMatchCandidates = nearbyCandidates.rows.filter((row) => {
+    const sameHome = normalizeName(row.home_team) === normalizeName(normalizedMatch.homeTeam);
+    const sameAway = normalizeName(row.away_team) === normalizeName(normalizedMatch.awayTeam);
+    return sameHome && sameAway;
+  });
+
+  if (sameMatchCandidates.length > 0) {
+    const targetMatch = sameMatchCandidates.find((row) => row.external_source !== externalSource) || sameMatchCandidates[0];
+
+    await pool.query(
+      `UPDATE matches
+       SET home_team = $1,
+           away_team = $2,
+           match_date = $3,
+           round = $4,
+           home_goals = $5,
+           away_goals = $6,
+           finished = $7,
+           external_source = $8,
+           external_id = $9,
+           updated_at = NOW()
+       WHERE id = $10`,
+      [
+        normalizedMatch.homeTeam,
+        normalizedMatch.awayTeam,
+        normalizedMatch.matchDate,
+        normalizedMatch.round,
+        normalizedMatch.homeGoals,
+        normalizedMatch.awayGoals,
+        normalizedMatch.finished,
+        externalSource,
+        normalizedMatch.externalId,
+        targetMatch.id
+      ]
+    );
+
+    const duplicateIds = sameMatchCandidates
+      .map((row) => row.id)
+      .filter((id) => id !== targetMatch.id);
+
+    for (const duplicateId of duplicateIds) {
+      await pool.query(
+        `INSERT INTO tips (user_id, match_id, home_goals, away_goals, created_at, updated_at)
+         SELECT user_id, $2, home_goals, away_goals, created_at, updated_at
+         FROM tips
+         WHERE match_id = $1
+         ON CONFLICT (user_id, match_id) DO NOTHING`,
+        [duplicateId, targetMatch.id]
+      );
+
+      await pool.query('DELETE FROM tips WHERE match_id = $1', [duplicateId]);
+      await pool.query('DELETE FROM matches WHERE id = $1', [duplicateId]);
+    }
+
+    return 'updated';
+  }
+
   await pool.query(
     `INSERT INTO matches (
       home_team, away_team, match_date, round,
@@ -511,12 +576,8 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
 }
 
 function toNormalizedMatchWithRound(match, defaultRound) {
-  const normalized = toNormalizedMatch(match);
+  const normalized = toNormalizedMatch(match, defaultRound);
   if (!normalized) return null;
-  // Override default round label for non-Bundesliga tournaments
-  if (normalized.round === 'Bundesliga' && defaultRound) {
-    normalized.round = defaultRound;
-  }
   return normalized;
 }
 
@@ -534,7 +595,7 @@ async function importFlashscoreWMMatches(pool, options = {}) {
     '/football/world/world-cup-2026/'
   ].filter((value, index, array) => value && array.indexOf(value) === index);
 
-  const defaultRound = options.defaultRound || null;
+  const defaultRound = options.defaultRound || 'WM';
   let tournamentUrl = requestedTournamentUrl || DEFAULT_WM_TOURNAMENT_URL;
   let allRaw = [];
   let lastError = null;
