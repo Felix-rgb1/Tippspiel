@@ -3,10 +3,9 @@ const bcrypt = require('bcryptjs');
 const pool = require('../db');
 const ExcelJS = require('exceljs');
 const { adminMiddleware } = require('../middleware/auth');
-const { syncMatchesFromFootballData } = require('../services/footballData');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 const { testRapidApi, isRapidApiConfigured } = require('../services/rapidApi');
-const { importFlashscoreBundesligaMatches, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
+const { importFlashscoreBundesligaMatches, importFlashscoreWMMatches, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
 
 const router = express.Router();
 
@@ -131,14 +130,14 @@ router.get('/tips/export', adminMiddleware, async (req, res) => {
 
 router.post('/matches/sync', adminMiddleware, async (req, res) => {
   try {
-    const syncResult = await syncMatchesFromFootballData(pool);
+    const importResult = await importFlashscoreWMMatches(pool);
     res.json({
-      message: `Synchronisierung abgeschlossen: ${syncResult.createdCount} neu, ${syncResult.updatedCount} aktualisiert.`,
-      ...syncResult
+      message: `WM-Spiele importiert: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert (${importResult.totalProcessed} verarbeitet, ${importResult.totalFetched} von API erhalten).`,
+      ...importResult
     });
   } catch (err) {
     console.error(err);
-    res.status(err.statusCode || 500).json({ error: err.message || 'Synchronisierung fehlgeschlagen' });
+    res.status(err.statusCode || 500).json({ error: err.message || 'WM-Import fehlgeschlagen' });
   }
 });
 

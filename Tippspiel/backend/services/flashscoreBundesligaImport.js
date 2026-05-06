@@ -454,7 +454,145 @@ async function syncBundesligaResults(pool, options = {}) {
   };
 }
 
+const WM_EXTERNAL_SOURCE = 'flashscore-wm';
+const DEFAULT_WM_TOURNAMENT_URL = '/football/world/world-cup-2026/';
+
+async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
+  const existing = await pool.query(
+    'SELECT id FROM matches WHERE external_source = $1 AND external_id = $2',
+    [externalSource, normalizedMatch.externalId]
+  );
+
+  if (existing.rows.length > 0) {
+    await pool.query(
+      `UPDATE matches
+       SET home_team = $1,
+           away_team = $2,
+           match_date = $3,
+           round = $4,
+           home_goals = $5,
+           away_goals = $6,
+           finished = $7,
+           updated_at = NOW()
+       WHERE external_source = $8 AND external_id = $9`,
+      [
+        normalizedMatch.homeTeam,
+        normalizedMatch.awayTeam,
+        normalizedMatch.matchDate,
+        normalizedMatch.round,
+        normalizedMatch.homeGoals,
+        normalizedMatch.awayGoals,
+        normalizedMatch.finished,
+        externalSource,
+        normalizedMatch.externalId
+      ]
+    );
+    return 'updated';
+  }
+
+  await pool.query(
+    `INSERT INTO matches (
+      home_team, away_team, match_date, round,
+      home_goals, away_goals, finished, external_source, external_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      normalizedMatch.homeTeam,
+      normalizedMatch.awayTeam,
+      normalizedMatch.matchDate,
+      normalizedMatch.round,
+      normalizedMatch.homeGoals,
+      normalizedMatch.awayGoals,
+      normalizedMatch.finished,
+      externalSource,
+      normalizedMatch.externalId
+    ]
+  );
+  return 'created';
+}
+
+function toNormalizedMatchWithRound(match, defaultRound) {
+  const normalized = toNormalizedMatch(match);
+  if (!normalized) return null;
+  // Override default round label for non-Bundesliga tournaments
+  if (normalized.round === 'Bundesliga' && defaultRound) {
+    normalized.round = defaultRound;
+  }
+  return normalized;
+}
+
+async function importFlashscoreWMMatches(pool, options = {}) {
+  if (!isRapidApiConfigured()) {
+    const error = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const tournamentUrl = options.tournamentUrl
+    || process.env.FLASHSCORE_TOURNAMENT_URL
+    || DEFAULT_WM_TOURNAMENT_URL;
+
+  const defaultRound = options.defaultRound || null;
+
+  // useConfiguredIds: false -> Stage-ID wird immer dynamisch von der API geholt.
+  // Damit werden auch Achtelfinale, Viertelfinale etc. importiert sobald sie
+  // von Flashscore als aktive Stage zurueckgegeben werden.
+  const [fixturesPayload, resultsPayload] = await Promise.all([
+    fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false }),
+    fetchFlashscoreTournamentResults(tournamentUrl, { useConfiguredIds: false })
+  ]);
+
+  const allRaw = [
+    ...toMatchList(fixturesPayload),
+    ...toMatchList(resultsPayload)
+  ];
+
+  if (!allRaw.length) {
+    const error = new Error(`Keine WM-Spiele von Flashscore erhalten (tournamentUrl=${tournamentUrl}). Bitte FLASHSCORE_TOURNAMENT_URL und Tournament-IDs in den Umgebungsvariablen prüfen.`);
+    error.statusCode = 502;
+    throw error;
+  }
+
+  // Deduplicate by externalId
+  const seen = new Set();
+  const normalizedMatches = allRaw
+    .map((m) => toNormalizedMatchWithRound(m, defaultRound))
+    .filter(Boolean)
+    .filter((m) => {
+      if (seen.has(m.externalId)) return false;
+      seen.add(m.externalId);
+      return true;
+    });
+
+  if (!normalizedMatches.length) {
+    const error = new Error('Flashscore hat Spiele geliefert, aber kein Match hatte ein verwertbares Format.');
+    error.statusCode = 502;
+    throw error;
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  for (const match of normalizedMatches) {
+    const action = await upsertMatchWithSource(pool, match, WM_EXTERNAL_SOURCE);
+    if (action === 'created') {
+      createdCount += 1;
+    } else {
+      updatedCount += 1;
+    }
+  }
+
+  return {
+    tournamentUrl,
+    externalSource: WM_EXTERNAL_SOURCE,
+    totalFetched: allRaw.length,
+    totalProcessed: normalizedMatches.length,
+    createdCount,
+    updatedCount
+  };
+}
+
 module.exports = {
   importFlashscoreBundesligaMatches,
+  importFlashscoreWMMatches,
   syncBundesligaResults
 };

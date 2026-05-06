@@ -297,7 +297,7 @@ function Admin() {
       setSuccess(response.data.message || 'Synchronisierung abgeschlossen');
       fetchMatches();
     } catch (err) {
-      setError(err.response?.data?.error || 'Synchronisierung fehlgeschlagen');
+      setError(err.response?.data?.error || 'WM-Import fehlgeschlagen');
     } finally {
       setSyncing(false);
     }
@@ -522,7 +522,7 @@ function Admin() {
               onClick={handleSyncMatches} 
               disabled={syncing}
             >
-              {syncing ? '⏳ Synchronisiert...' : '🔄 Spiele synchronisieren'}
+              {syncing ? '⏳ Import läuft...' : '🌍 WM-Spiele von Flashscore importieren'}
             </button>
             <button
               type="button"
