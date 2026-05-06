@@ -3,6 +3,14 @@ const { fetchFlashscoreTournamentFixtures, isRapidApiConfigured } = require('./r
 const DEFAULT_TOURNAMENT_URL = '/football/germany/bundesliga/';
 const EXTERNAL_SOURCE = 'flashscore-bundesliga';
 
+function normalizeName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
 function toMatchList(payload) {
   const collected = [];
   const visited = new Set();
