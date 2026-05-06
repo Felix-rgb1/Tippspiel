@@ -1409,15 +1409,6 @@ async function testRapidApi(path, queryParams = {}) {
   };
 }
 
-module.exports = {
-  isRapidApiConfigured,
-  fetchRapidApiProbabilities,
-  fetchRapidApiMatchInsights,
-  fetchFlashscoreTournamentFixtures,
-  fetchFlashscoreTournamentResults,
-  testRapidApi
-};
-
 async function fetchFlashscoreTournamentResults(tournamentUrl = getConfiguredFlashscoreTournamentUrl(), options = {}) {
   const ids = await fetchFlashscoreTournamentIds(tournamentUrl, options);
   if (!ids?.tournament_template_id || !ids?.season_id) {
@@ -1433,3 +1424,25 @@ async function fetchFlashscoreTournamentResults(tournamentUrl = getConfiguredFla
 
   return Array.isArray(payload) ? payload : [];
 }
+
+async function fetchFlashscoreMatchDetails(matchId) {
+  if (!matchId) {
+    return null;
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/matches/details', {
+    match_id: String(matchId)
+  });
+
+  return payload && typeof payload === 'object' ? payload : null;
+}
+
+module.exports = {
+  isRapidApiConfigured,
+  fetchRapidApiProbabilities,
+  fetchRapidApiMatchInsights,
+  fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreTournamentResults,
+  fetchFlashscoreMatchDetails,
+  testRapidApi
+};

@@ -1,4 +1,9 @@
-const { fetchFlashscoreTournamentFixtures, fetchFlashscoreTournamentResults, isRapidApiConfigured } = require('./rapidApi');
+const {
+  fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreTournamentResults,
+  fetchFlashscoreMatchDetails,
+  isRapidApiConfigured
+} = require('./rapidApi');
 
 const DEFAULT_TOURNAMENT_URL = '/football/germany/bundesliga/';
 const EXTERNAL_SOURCE = 'flashscore-bundesliga';
@@ -217,12 +222,14 @@ async function findSpecificExistingRound(pool, normalizedMatch) {
 }
 
 function toNormalizedMatch(match, fallbackRound = null) {
-  const externalId = toExternalId(
+  const sourceMatchId = String(
     match?.match_id
     || match?.id
     || match?.event_id
     || match?.eventId
-  );
+    || ''
+  ).trim();
+  const externalId = toExternalId(sourceMatchId);
 
   if (!externalId) {
     return null;
@@ -264,7 +271,81 @@ function toNormalizedMatch(match, fallbackRound = null) {
     finished,
     homeGoals: finished ? homeGoals : null,
     awayGoals: finished ? awayGoals : null,
-    externalId
+    externalId,
+    sourceMatchId
+  };
+}
+
+function mapTournamentNameToRound(tournamentName) {
+  const normalized = String(tournamentName || '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  const roundMatch = normalized.match(/\bround\s*(\d+)\b/);
+  if (roundMatch) {
+    const roundNumber = Number.parseInt(roundMatch[1], 10);
+    if (Number.isFinite(roundNumber) && roundNumber >= 1 && roundNumber <= 3) {
+      return `${roundNumber}. Spieltag`;
+    }
+  }
+
+  if (normalized.includes('round of 16') || normalized.includes('last 16')) {
+    return 'Achtelfinale';
+  }
+  if (normalized.includes('quarter-final')) {
+    return 'Viertelfinale';
+  }
+  if (normalized.includes('semi-final')) {
+    return 'Halbfinale';
+  }
+  if (normalized.includes('3rd place') || normalized.includes('third place')) {
+    return 'Spiel um Platz 3';
+  }
+  if (normalized.endsWith('final') || normalized.includes(' final')) {
+    return 'Finale';
+  }
+
+  return null;
+}
+
+async function enrichWmRoundsFromDetails(matches) {
+  const maxRequestsRaw = Number.parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '60', 10);
+  const maxRequests = Number.isFinite(maxRequestsRaw) && maxRequestsRaw > 0 ? maxRequestsRaw : 60;
+
+  const genericRoundMatches = matches.filter((match) => isGenericRoundLabel(match.round) && match.sourceMatchId);
+  const bySourceMatchId = new Map();
+
+  for (const match of genericRoundMatches) {
+    if (!bySourceMatchId.has(match.sourceMatchId)) {
+      bySourceMatchId.set(match.sourceMatchId, []);
+    }
+    bySourceMatchId.get(match.sourceMatchId).push(match);
+  }
+
+  const targetMatchIds = Array.from(bySourceMatchId.keys()).slice(0, maxRequests);
+  let resolvedCount = 0;
+
+  for (const sourceMatchId of targetMatchIds) {
+    try {
+      const details = await fetchFlashscoreMatchDetails(sourceMatchId);
+      const roundLabel = mapTournamentNameToRound(details?.tournament?.name);
+      if (!roundLabel) {
+        continue;
+      }
+
+      const linkedMatches = bySourceMatchId.get(sourceMatchId) || [];
+      linkedMatches.forEach((match) => {
+        match.round = roundLabel;
+        resolvedCount += 1;
+      });
+    } catch (error) {
+      // Detail endpoint is best effort only.
+    }
+  }
+
+  return {
+    requested: targetMatchIds.length,
+    resolvedCount,
+    remainingGeneric: matches.filter((match) => isGenericRoundLabel(match.round)).length
   };
 }
 
@@ -674,6 +755,8 @@ async function importFlashscoreWMMatches(pool, options = {}) {
     throw error;
   }
 
+  const detailsRoundStats = await enrichWmRoundsFromDetails(normalizedMatches);
+
   let createdCount = 0;
   let updatedCount = 0;
 
@@ -692,7 +775,8 @@ async function importFlashscoreWMMatches(pool, options = {}) {
     totalFetched: allRaw.length,
     totalProcessed: normalizedMatches.length,
     createdCount,
-    updatedCount
+    updatedCount,
+    detailsRoundStats
   };
 }
 
