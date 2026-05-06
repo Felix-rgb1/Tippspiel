@@ -118,6 +118,7 @@ export const adminAPI = {
     }),
   importWMMatches: () => apiPost('/admin/matches/import/wm', {}),
   importBundesliga: () => apiPost('/admin/matches/import/bundesliga', {}),
+  syncWMResults: () => apiPost('/admin/matches/sync-results/wm', {}),
   syncBundesligaResults: () => apiPost('/admin/matches/sync-results/bundesliga', {}),
   updateMatchResult: (matchId, homeGoals, awayGoals) =>
     apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),

@@ -23,6 +23,7 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importingWM, setImportingWM] = useState(false);
+  const [syncingWMResults, setSyncingWMResults] = useState(false);
   const [importingBundesliga, setImportingBundesliga] = useState(false);
   const [syncingBundesligaResults, setSyncingBundesligaResults] = useState(false);
   const [exportingTips, setExportingTips] = useState(false);
@@ -325,6 +326,25 @@ function Admin() {
     }
   };
 
+  const handleSyncWMResults = async () => {
+    try {
+      setSyncingWMResults(true);
+      setError('');
+      const response = await adminAPI.syncWMResults();
+      const data = response.data || {};
+      setSuccess(
+        data.message
+        || `WM-Ergebnisse aktualisiert: ${data.updatedCount || 0} Spiele eingetragen.`
+      );
+      setTimeout(() => setSuccess(''), 5000);
+      fetchMatches();
+    } catch (err) {
+      setError(err.response?.data?.error || 'WM-Ergebnis-Synchronisierung fehlgeschlagen');
+    } finally {
+      setSyncingWMResults(false);
+    }
+  };
+
   const handleSyncBundesligaResults = async () => {
     try {
       setSyncingBundesligaResults(true);
@@ -535,6 +555,14 @@ function Admin() {
               disabled={importingBundesliga}
             >
               {importingBundesliga ? '⏳ Import läuft...' : '🏆 Bundesliga von Flashscore importieren'}
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleSyncWMResults}
+              disabled={syncingWMResults}
+            >
+              {syncingWMResults ? '⏳ Aktualisiert...' : '🌍 WM-Ergebnisse aktualisieren'}
             </button>
             <button
               type="button"

@@ -788,8 +788,88 @@ async function importFlashscoreWMMatches(pool) {
   };
 }
 
+async function syncWMResults(pool) {
+  if (!isRapidApiConfigured()) {
+    const err = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const configuredUrl = normalizeTournamentUrl(process.env.FLASHSCORE_TOURNAMENT_URL);
+  const urlsToTry = [configuredUrl, ...WM_FALLBACK_TOURNAMENT_URLS.map(normalizeTournamentUrl)]
+    .filter((u, i, arr) => u && arr.indexOf(u) === i);
+
+  let rawMatches = [];
+  let usedUrl = urlsToTry[0];
+  let lastError = null;
+
+  for (const url of urlsToTry) {
+    try {
+      const payload = await fetchFlashscoreTournamentResults(url, { useConfiguredIds: false });
+      rawMatches = toMatchList(payload);
+      usedUrl = url;
+      if (rawMatches.length > 0) {
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+      if (isRateLimitError(err)) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  if (!rawMatches.length) {
+    const err = new Error(lastError?.message || `Keine WM-Ergebnisse von Flashscore erhalten (URLs: ${urlsToTry.join(', ')})`);
+    if (isRateLimitError(lastError)) {
+      err.message = 'RapidAPI Rate-Limit erreicht. Bitte in 1-2 Minuten erneut versuchen.';
+      err.statusCode = 429;
+    } else {
+      err.statusCode = lastError?.statusCode || 502;
+    }
+    throw err;
+  }
+
+  const finishedMatches = rawMatches
+    .map(extractWMMatch)
+    .filter(Boolean)
+    .filter((m) => m.finished && m.homeGoals !== null && m.awayGoals !== null);
+
+  if (!finishedMatches.length) {
+    return {
+      tournamentUrl: usedUrl,
+      externalSource: WM_EXTERNAL_SOURCE,
+      totalFetched: rawMatches.length,
+      finishedFromApi: 0,
+      createdCount: 0,
+      updatedCount: 0
+    };
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  for (const match of finishedMatches) {
+    const action = await upsertWMMatch(pool, match);
+    if (action === 'created') createdCount++;
+    else updatedCount++;
+  }
+
+  return {
+    tournamentUrl: usedUrl,
+    externalSource: WM_EXTERNAL_SOURCE,
+    totalFetched: rawMatches.length,
+    finishedFromApi: finishedMatches.length,
+    createdCount,
+    updatedCount
+  };
+}
+
 module.exports = {
   importFlashscoreBundesligaMatches,
   importFlashscoreWMMatches,
+  syncWMResults,
   syncBundesligaResults
 };

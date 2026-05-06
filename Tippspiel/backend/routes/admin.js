@@ -5,7 +5,12 @@ const ExcelJS = require('exceljs');
 const { adminMiddleware } = require('../middleware/auth');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 const { testRapidApi, isRapidApiConfigured } = require('../services/rapidApi');
-const { importFlashscoreBundesligaMatches, importFlashscoreWMMatches, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
+const {
+  importFlashscoreBundesligaMatches,
+  importFlashscoreWMMatches,
+  syncWMResults,
+  syncBundesligaResults
+} = require('../services/flashscoreBundesligaImport');
 
 const router = express.Router();
 
@@ -168,6 +173,19 @@ router.post('/matches/sync-results/bundesliga', adminMiddleware, async (req, res
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Ergebnis-Synchronisierung fehlgeschlagen' });
+  }
+});
+
+router.post('/matches/sync-results/wm', adminMiddleware, async (req, res) => {
+  try {
+    const syncResult = await syncWMResults(pool);
+    res.json({
+      message: `WM-Ergebnisse aktualisiert: ${syncResult.updatedCount} aktualisiert, ${syncResult.createdCount} neu angelegt (${syncResult.finishedFromApi} abgeschlossene Spiele von API erhalten).`,
+      ...syncResult
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'WM-Ergebnis-Synchronisierung fehlgeschlagen' });
   }
 });
 
