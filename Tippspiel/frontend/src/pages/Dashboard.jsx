@@ -395,7 +395,12 @@ function Dashboard() {
   const [savingBonus, setSavingBonus] = useState(false);
   const [now, setNow] = useState(new Date());
   const [liveUpdatesByMatch, setLiveUpdatesByMatch] = useState({});
+  const [scoreFlashByMatch, setScoreFlashByMatch] = useState({});
+  const [goalToasts, setGoalToasts] = useState([]);
   const [lastWinner, setLastWinner] = useState(null);
+  const previousLiveScoreRef = useRef({});
+  const scoreFlashTimersRef = useRef({});
+  const goalToastTimersRef = useRef({});
   const { user } = useAuth();
 
   useEffect(() => {
@@ -473,6 +478,77 @@ function Dashboard() {
       }
     };
   }, [matches]);
+
+  useEffect(() => {
+    Object.entries(liveUpdatesByMatch || {}).forEach(([matchId, update]) => {
+      const homeGoals = Number(update?.homeGoals);
+      const awayGoals = Number(update?.awayGoals);
+
+      if (!Number.isFinite(homeGoals) || !Number.isFinite(awayGoals)) {
+        return;
+      }
+
+      const nextScore = `${homeGoals}:${awayGoals}`;
+      const previousScore = previousLiveScoreRef.current[matchId];
+
+      if (previousScore && previousScore !== nextScore) {
+        const [prevHome, prevAway] = previousScore.split(':').map((goal) => Number(goal) || 0);
+        const homeDiff = homeGoals - prevHome;
+        const awayDiff = awayGoals - prevAway;
+        const currentMatch = matches.find((match) => String(match.id) === String(matchId));
+
+        if (currentMatch && (homeDiff > 0 || awayDiff > 0)) {
+          const homeTeamLabel = getTeamDisplay(currentMatch.home_team).label;
+          const awayTeamLabel = getTeamDisplay(currentMatch.away_team).label;
+
+          let headline = 'Tor!';
+          if (homeDiff > awayDiff) {
+            headline = `Tor ${homeTeamLabel}!`;
+          } else if (awayDiff > homeDiff) {
+            headline = `Tor ${awayTeamLabel}!`;
+          }
+
+          const toastId = `${matchId}-${Date.now()}`;
+          setGoalToasts((prev) => [
+            {
+              id: toastId,
+              headline,
+              detail: `${homeTeamLabel} ${homeGoals}:${awayGoals} ${awayTeamLabel}`,
+            },
+            ...prev,
+          ].slice(0, 4));
+
+          goalToastTimersRef.current[toastId] = setTimeout(() => {
+            setGoalToasts((prev) => prev.filter((toast) => toast.id !== toastId));
+            delete goalToastTimersRef.current[toastId];
+          }, 3200);
+        }
+
+        setScoreFlashByMatch((prev) => ({ ...prev, [matchId]: true }));
+
+        if (scoreFlashTimersRef.current[matchId]) {
+          clearTimeout(scoreFlashTimersRef.current[matchId]);
+        }
+
+        scoreFlashTimersRef.current[matchId] = setTimeout(() => {
+          setScoreFlashByMatch((prev) => ({ ...prev, [matchId]: false }));
+        }, 1100);
+      }
+
+      previousLiveScoreRef.current[matchId] = nextScore;
+    });
+  }, [liveUpdatesByMatch, matches]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(scoreFlashTimersRef.current).forEach((timerId) => {
+        clearTimeout(timerId);
+      });
+      Object.values(goalToastTimersRef.current).forEach((timerId) => {
+        clearTimeout(timerId);
+      });
+    };
+  }, []);
 
   const fetchMatches = async () => {
     try {
@@ -749,6 +825,20 @@ function Dashboard() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
+      {goalToasts.length > 0 && (
+        <div className="goal-toast-stack" aria-live="polite" aria-atomic="false">
+          {goalToasts.map((toast) => (
+            <div key={toast.id} className="goal-toast">
+              <span className="goal-toast-icon" aria-hidden="true">⚽</span>
+              <div className="goal-toast-content">
+                <strong>{toast.headline}</strong>
+                <span>{toast.detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {missingTipsCount > 0 && (
         <div className="missing-tips-banner">
           ⚠️ Du hast noch <strong>{missingTipsCount}</strong> {missingTipsCount === 1 ? 'Spiel' : 'Spiele'} ohne Tipp!
@@ -796,6 +886,7 @@ function Dashboard() {
             {upcomingMatches.map((match) => {
               const liveUpdate = liveUpdatesByMatch[match.id];
               const isFinished = Boolean(match.finished || liveUpdate?.isFinished);
+              const isScoreFlashing = Boolean(scoreFlashByMatch[match.id]);
               const status = getMatchStatus(match, liveUpdate);
               const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
               const tipSaveState = getTipSaveState(match.id);
@@ -837,7 +928,7 @@ function Dashboard() {
                   </div>
                   <span className={`match-status-badge ${status.className}`}>{status.label}</span>
                   {liveUpdate?.isLive && liveUpdate.homeGoals !== null && liveUpdate.awayGoals !== null && (
-                    <div className="next-live-score">{liveUpdate.homeGoals}:{liveUpdate.awayGoals}</div>
+                    <div className={`next-live-score${isScoreFlashing ? ' score-flash' : ''}`}>{liveUpdate.homeGoals}:{liveUpdate.awayGoals}</div>
                   )}
                   {!isFinished && (
                     <div className="next-match-tip-row">
@@ -986,6 +1077,7 @@ function Dashboard() {
           const effectiveFinished = Boolean(match.finished || liveUpdate?.isFinished);
           const effectiveHomeGoals = liveUpdate?.homeGoals ?? match.home_goals;
           const effectiveAwayGoals = liveUpdate?.awayGoals ?? match.away_goals;
+          const isScoreFlashing = Boolean(scoreFlashByMatch[match.id]);
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const tipSaveState = getTipSaveState(match.id);
           const deadlinePasssed = isDeadlinePassed(match.match_date);
@@ -1008,7 +1100,7 @@ function Dashboard() {
           const savedInline = Boolean(nextTipSavedByMatch[match.id]);
 
           return (
-            <div key={match.id} className={`match-card${effectiveFinished ? ' match-card-finished' : deadlinePasssed ? ' match-card-locked' : ''}`} style={getMatchThemeStyle(match.home_team, match.away_team)}>
+            <div key={match.id} className={`match-card${liveUpdate?.isLive ? ' match-card-live' : ''}${effectiveFinished ? ' match-card-finished' : deadlinePasssed ? ' match-card-locked' : ''}`} style={getMatchThemeStyle(match.home_team, match.away_team)}>
               <div className="match-topline">
                 <div className="match-date">
                   {formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}
@@ -1035,7 +1127,7 @@ function Dashboard() {
                 </div>
                 <div className="score">
                   {effectiveFinished || liveUpdate?.isLive ? (
-                    <div className="final-score">
+                    <div className={`final-score${isScoreFlashing ? ' score-flash' : ''}`}>
                       <span>{effectiveHomeGoals}</span>
                       <span>:</span>
                       <span>{effectiveAwayGoals}</span>
