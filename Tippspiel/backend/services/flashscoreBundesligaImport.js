@@ -508,6 +508,20 @@ const WM_FALLBACK_TOURNAMENT_URLS = [
   '/football/world/world-cup-2026/'
 ];
 
+function normalizeTournamentUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  // Defensive: some deployments accidentally set
+  // FLASHSCORE_TOURNAMENT_URL=FLASHSCORE_TOURNAMENT_URL=/football/world/world-cup/
+  // as value.
+  const withoutPrefix = raw.includes('=') ? raw.slice(raw.lastIndexOf('=') + 1).trim() : raw;
+  if (!withoutPrefix) return null;
+
+  const withLeadingSlash = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
 // Extracts a WM match from a raw Flashscore API object.
 // Returns null if any required field is missing.
 function extractWMMatch(raw) {
@@ -575,6 +589,14 @@ async function fetchAllWMRawMatches(tournamentUrl) {
     fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false }),
     fetchFlashscoreTournamentResults(tournamentUrl, { useConfiguredIds: false })
   ]);
+
+  if (fixturesResult.status === 'rejected' && resultsResult.status === 'rejected') {
+    const msgA = String(fixturesResult.reason?.message || 'fixtures-call failed');
+    const msgB = String(resultsResult.reason?.message || 'results-call failed');
+    const err = new Error(`Flashscore-Aufrufe fehlgeschlagen fuer ${tournamentUrl}: ${msgA} | ${msgB}`);
+    err.statusCode = fixturesResult.reason?.statusCode || resultsResult.reason?.statusCode || 502;
+    throw err;
+  }
 
   const fixturesPayload = fixturesResult.status === 'fulfilled' ? fixturesResult.value : [];
   const resultsPayload = resultsResult.status === 'fulfilled' ? resultsResult.value : [];
@@ -663,8 +685,8 @@ async function importFlashscoreWMMatches(pool) {
     throw err;
   }
 
-  const configuredUrl = process.env.FLASHSCORE_TOURNAMENT_URL;
-  const urlsToTry = [configuredUrl, ...WM_FALLBACK_TOURNAMENT_URLS]
+  const configuredUrl = normalizeTournamentUrl(process.env.FLASHSCORE_TOURNAMENT_URL);
+  const urlsToTry = [configuredUrl, ...WM_FALLBACK_TOURNAMENT_URLS.map(normalizeTournamentUrl)]
     .filter((u, i, arr) => u && arr.indexOf(u) === i);
 
   let rawMatches = [];

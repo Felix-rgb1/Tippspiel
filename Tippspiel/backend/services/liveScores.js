@@ -137,7 +137,7 @@ function getRapidOptionsForMatch(match) {
 
   return {
     tournamentUrl: process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/',
-    useConfiguredIds: true,
+    useConfiguredIds: false,
     cacheKey: 'flashscore:default'
   };
 }

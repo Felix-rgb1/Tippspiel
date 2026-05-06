@@ -181,7 +181,10 @@ function getRapidApiOptionsForMatch(match) {
     };
   }
 
-  return {};
+  return {
+    tournamentUrl: process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/',
+    useConfiguredIds: false
+  };
 }
 
 function getRoundLabel(match) {
