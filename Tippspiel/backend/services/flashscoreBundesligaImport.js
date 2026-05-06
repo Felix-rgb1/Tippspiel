@@ -349,8 +349,10 @@ function mapTournamentNameToRound(tournamentName) {
 }
 
 async function enrichWmRoundsFromDetails(matches) {
-  const maxRequestsRaw = Number.parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '60', 10);
+  const maxRequestsRaw = Number.parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '12', 10);
   const maxRequests = Number.isFinite(maxRequestsRaw) && maxRequestsRaw > 0 ? maxRequestsRaw : 60;
+  const delayMsRaw = Number.parseInt(process.env.FLASHSCORE_WM_DETAILS_DELAY_MS || '1100', 10);
+  const delayMs = Number.isFinite(delayMsRaw) && delayMsRaw >= 0 ? delayMsRaw : 1100;
 
   const genericRoundMatches = matches.filter((match) => isGenericRoundLabel(match.round) && match.sourceMatchId);
   const bySourceMatchId = new Map();
@@ -364,8 +366,15 @@ async function enrichWmRoundsFromDetails(matches) {
 
   const targetMatchIds = Array.from(bySourceMatchId.keys()).slice(0, maxRequests);
   let resolvedCount = 0;
+  let rateLimited = false;
 
-  for (const sourceMatchId of targetMatchIds) {
+  for (let index = 0; index < targetMatchIds.length; index += 1) {
+    const sourceMatchId = targetMatchIds[index];
+
+    if (index > 0 && delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
     try {
       const details = await fetchFlashscoreMatchDetails(sourceMatchId);
       const roundLabel = mapTournamentNameToRound(details?.tournament?.name);
@@ -379,6 +388,11 @@ async function enrichWmRoundsFromDetails(matches) {
         resolvedCount += 1;
       });
     } catch (error) {
+      const msg = String(error?.message || '');
+      if (error?.statusCode === 429 || msg.includes('429')) {
+        rateLimited = true;
+        break;
+      }
       // Detail endpoint is best effort only.
     }
   }
@@ -386,7 +400,8 @@ async function enrichWmRoundsFromDetails(matches) {
   return {
     requested: targetMatchIds.length,
     resolvedCount,
-    remainingGeneric: matches.filter((match) => isGenericRoundLabel(match.round)).length
+    remainingGeneric: matches.filter((match) => isGenericRoundLabel(match.round)).length,
+    rateLimited
   };
 }
 
@@ -744,10 +759,17 @@ async function importFlashscoreWMMatches(pool, options = {}) {
       // useConfiguredIds: false -> Stage-ID wird immer dynamisch von der API geholt.
       // Damit werden auch Achtelfinale, Viertelfinale etc. importiert sobald sie
       // von Flashscore als aktive Stage zurueckgegeben werden.
-      const [fixturesPayload, resultsPayload] = await Promise.all([
-        fetchFlashscoreTournamentFixtures(candidateTournamentUrl, { useConfiguredIds: false }),
-        fetchFlashscoreTournamentResults(candidateTournamentUrl, { useConfiguredIds: false })
-      ]);
+      const fixturesPayload = await fetchFlashscoreTournamentFixtures(candidateTournamentUrl, { useConfiguredIds: false });
+      let resultsPayload = [];
+
+      try {
+        resultsPayload = await fetchFlashscoreTournamentResults(candidateTournamentUrl, { useConfiguredIds: false });
+      } catch (resultsError) {
+        const msg = String(resultsError?.message || '');
+        if (!(resultsError?.statusCode === 429 || msg.includes('429'))) {
+          throw resultsError;
+        }
+      }
 
       const combinedRaw = [
         ...toMatchList(fixturesPayload),
