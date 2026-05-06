@@ -193,6 +193,29 @@ function isGenericRoundLabel(value) {
   return !normalized || normalized === 'wm' || normalized === 'bundesliga';
 }
 
+async function findSpecificExistingRound(pool, normalizedMatch) {
+  const nearbyCandidates = await pool.query(
+    `SELECT id, home_team, away_team, match_date, round, external_source, external_id
+     FROM matches
+     WHERE ABS(EXTRACT(EPOCH FROM (match_date - $1::timestamp))) <= 86400
+     ORDER BY created_at ASC`,
+    [normalizedMatch.matchDate]
+  );
+
+  const sameMatchCandidates = nearbyCandidates.rows.filter((row) => {
+    const sameHome = normalizeName(row.home_team) === normalizeName(normalizedMatch.homeTeam);
+    const sameAway = normalizeName(row.away_team) === normalizeName(normalizedMatch.awayTeam);
+    return sameHome && sameAway;
+  });
+
+  const specificRoundCandidate = sameMatchCandidates.find((row) => !isGenericRoundLabel(row.round));
+
+  return {
+    sameMatchCandidates,
+    specificRound: specificRoundCandidate?.round || null
+  };
+}
+
 function toNormalizedMatch(match, fallbackRound = null) {
   const externalId = toExternalId(
     match?.match_id
@@ -464,9 +487,13 @@ const DEFAULT_WM_TOURNAMENT_URL = '/football/world/world-cup-2026/';
 
 async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
   const existing = await pool.query(
-    'SELECT id FROM matches WHERE external_source = $1 AND external_id = $2',
+    'SELECT id, round FROM matches WHERE external_source = $1 AND external_id = $2',
     [externalSource, normalizedMatch.externalId]
   );
+
+  const resolvedExistingRound = isGenericRoundLabel(normalizedMatch.round)
+    ? ((existing.rows[0]?.round && !isGenericRoundLabel(existing.rows[0].round)) ? existing.rows[0].round : normalizedMatch.round)
+    : normalizedMatch.round;
 
   if (existing.rows.length > 0) {
     await pool.query(
@@ -484,7 +511,7 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
         normalizedMatch.homeTeam,
         normalizedMatch.awayTeam,
         normalizedMatch.matchDate,
-        normalizedMatch.round,
+        resolvedExistingRound,
         normalizedMatch.homeGoals,
         normalizedMatch.awayGoals,
         normalizedMatch.finished,
@@ -495,25 +522,13 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
     return 'updated';
   }
 
-  const nearbyCandidates = await pool.query(
-    `SELECT id, home_team, away_team, match_date, round, external_source, external_id
-     FROM matches
-     WHERE ABS(EXTRACT(EPOCH FROM (match_date - $1::timestamp))) <= 86400
-     ORDER BY created_at ASC`,
-    [normalizedMatch.matchDate]
-  );
-
-  const sameMatchCandidates = nearbyCandidates.rows.filter((row) => {
-    const sameHome = normalizeName(row.home_team) === normalizeName(normalizedMatch.homeTeam);
-    const sameAway = normalizeName(row.away_team) === normalizeName(normalizedMatch.awayTeam);
-    return sameHome && sameAway;
-  });
+  const { sameMatchCandidates, specificRound } = await findSpecificExistingRound(pool, normalizedMatch);
+  const resolvedRound = isGenericRoundLabel(normalizedMatch.round)
+    ? (specificRound || normalizedMatch.round)
+    : normalizedMatch.round;
 
   if (sameMatchCandidates.length > 0) {
     const targetMatch = sameMatchCandidates.find((row) => row.external_source !== externalSource) || sameMatchCandidates[0];
-    const resolvedRound = isGenericRoundLabel(normalizedMatch.round)
-      ? (targetMatch.round || normalizedMatch.round)
-      : normalizedMatch.round;
 
     await pool.query(
       `UPDATE matches
@@ -572,7 +587,7 @@ async function upsertMatchWithSource(pool, normalizedMatch, externalSource) {
       normalizedMatch.homeTeam,
       normalizedMatch.awayTeam,
       normalizedMatch.matchDate,
-      normalizedMatch.round,
+      resolvedRound,
       normalizedMatch.homeGoals,
       normalizedMatch.awayGoals,
       normalizedMatch.finished,
