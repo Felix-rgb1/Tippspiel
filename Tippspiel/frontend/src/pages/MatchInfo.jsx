@@ -29,6 +29,31 @@ function outcomeClass(outcome) {
   return 'is-loss';
 }
 
+function normalizeTeamName(teamName) {
+  return String(teamName || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function formatTeamName(teamName) {
+  const normalized = normalizeTeamName(teamName);
+  if (
+    normalized === 'd r congo' ||
+    normalized === 'dr congo' ||
+    normalized === 'congo dr' ||
+    normalized === 'congo rd' ||
+    normalized === 'democratic republic of congo' ||
+    normalized === 'democratic republic of the congo'
+  ) {
+    return 'DR Kongo';
+  }
+
+  return teamName;
+}
+
 function MatchInfo() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -91,7 +116,7 @@ function MatchInfo() {
           <section className="match-hero card">
             <div className="match-hero-copy">
               <div className="match-hero-kicker">Match Intelligence</div>
-              <h1>{matchPreview.home_team} vs {matchPreview.away_team}</h1>
+              <h1>{formatTeamName(matchPreview.home_team)} vs {formatTeamName(matchPreview.away_team)}</h1>
               <p className="match-hero-subtitle">
                 {formatDate(matchPreview.match_date)}
                 {matchPreview.round ? ` · ${matchPreview.round}` : ''}
@@ -126,7 +151,7 @@ function MatchInfo() {
       <section className="match-hero card">
         <div className="match-hero-copy">
           <div className="match-hero-kicker">Match Intelligence</div>
-          <h1>{insights.match.home_team} vs {insights.match.away_team}</h1>
+          <h1>{formatTeamName(insights.match.home_team)} vs {formatTeamName(insights.match.away_team)}</h1>
           <p className="match-hero-subtitle">
             {formatDate(insights.match.match_date)}
             {insights.match.round ? ` · ${insights.match.round}` : ''}

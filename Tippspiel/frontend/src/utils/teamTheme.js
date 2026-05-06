@@ -28,6 +28,7 @@ const TEAM_NAME_DE_MAP = {
   colombia: 'Kolumbien',
   kolumbien: 'Kolumbien',
   'congo dr': 'Demokratische Republik Kongo',
+  'd r congo': 'Demokratische Republik Kongo',
   congo: 'Kongo',
   kongo: 'Kongo',
   'costa rica': 'Costa Rica',
