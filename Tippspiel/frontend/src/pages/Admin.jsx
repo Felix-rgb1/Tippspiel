@@ -297,10 +297,9 @@ function Admin() {
       const data = response.data || {};
       setSuccess(
         data.message
-        || `WM-Import abgeschlossen: ${data.createdCount || 0} neu, ${data.updatedCount || 0} aktualisiert.`
+        || 'WM-Import gestartet. Bitte Seite in 2-3 Minuten neu laden.'
       );
-      setTimeout(() => setSuccess(''), 8000);
-      fetchMatches();
+      setTimeout(() => setSuccess(''), 15000);
     } catch (err) {
       setError(err.response?.data?.error || 'WM-Import fehlgeschlagen');
     } finally {

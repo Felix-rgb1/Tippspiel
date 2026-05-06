@@ -128,21 +128,21 @@ router.get('/tips/export', adminMiddleware, async (req, res) => {
   }
 });
 
-router.post('/matches/import/wm', adminMiddleware, async (req, res) => {
-  try {
-    const importResult = await importFlashscoreWMMatches(pool);
-    const roundStats = importResult.detailsRoundStats || {};
-    const roundInfo = roundStats.resolvedCount > 0
-      ? ` (${roundStats.resolvedCount} Spielrunden per Details-API ermittelt)`
-      : '';
-    res.json({
-      message: `WM-Import abgeschlossen: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert, ${importResult.totalFetched} von API erhalten.${roundInfo}`,
-      ...importResult
+router.post('/matches/import/wm', adminMiddleware, (req, res) => {
+  // Fire-and-forget: Render hat ein 30s Request-Timeout, der Import dauert ~2 Minuten.
+  // Wir starten den Import im Hintergrund und antworten sofort mit 202.
+  importFlashscoreWMMatches(pool)
+    .then((importResult) => {
+      const roundStats = importResult.detailsRoundStats || {};
+      console.log(`[WM-IMPORT] Abgeschlossen: ${importResult.createdCount} neu, ${importResult.updatedCount} aktualisiert, ${importResult.totalFetched} von API. Runden aufgelöst: ${roundStats.resolvedCount || 0}`);
+    })
+    .catch((err) => {
+      console.error('[WM-IMPORT] Fehler:', err.message || err);
     });
-  } catch (err) {
-    console.error(err);
-    res.status(err.statusCode || 500).json({ error: err.message || 'WM-Import fehlgeschlagen' });
-  }
+
+  res.status(202).json({
+    message: 'WM-Import gestartet. Dies kann 2-3 Minuten dauern. Bitte Seite danach neu laden.'
+  });
 });
 
 router.post('/matches/import/bundesliga', adminMiddleware, async (req, res) => {
