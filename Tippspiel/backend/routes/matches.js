@@ -74,6 +74,45 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// DEBUG: Get raw Flashscore match details to inspect incidents structure
+router.get('/:id/debug-flashscore', async (req, res) => {
+  try {
+    const matchResult = await pool.query(
+      'SELECT id, home_team, away_team, external_id, external_source FROM matches WHERE id = $1',
+      [req.params.id]
+    );
+    
+    if (matchResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    const match = matchResult.rows[0];
+    if (!String(match.external_source || '').includes('flashscore')) {
+      return res.status(400).json({ error: 'Match is not a Flashscore source' });
+    }
+
+    const { fetchFlashscoreMatchDetails } = require('../services/rapidApi');
+    const details = await fetchFlashscoreMatchDetails(match.external_id);
+
+    res.json({
+      match: {
+        id: match.id,
+        home_team: match.home_team,
+        away_team: match.away_team,
+        external_id: match.external_id
+      },
+      details_keys: Object.keys(details || {}),
+      incidents_field_exists: Boolean(details?.incidents),
+      events_field_exists: Boolean(details?.events),
+      match_incidents_field_exists: Boolean(details?.match_incidents),
+      full_details: details
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get match insights (team form, recent games, estimated win probabilities)
 router.get('/:id/insights', authMiddleware, async (req, res) => {
   try {

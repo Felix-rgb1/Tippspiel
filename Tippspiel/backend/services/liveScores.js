@@ -87,43 +87,74 @@ function toLiveCandidate(candidate) {
 }
 
 function extractIncidents(details) {
-  const raw = details?.incidents || details?.events || details?.match_incidents || [];
-  if (!Array.isArray(raw) || !raw.length) return [];
+  // Try multiple possible field names for incidents/events
+  const candidates = Array.isArray(details?.incidents)
+    ? details.incidents
+    : Array.isArray(details?.events)
+    ? details.events
+    : Array.isArray(details?.match_incidents)
+    ? details.match_incidents
+    : Array.isArray(details?.data?.incidents)
+    ? details.data.incidents
+    : Array.isArray(details?.data?.events)
+    ? details.data.events
+    : [];
 
-  return raw
+  if (!Array.isArray(candidates) || !candidates.length) return [];
+
+  return candidates
     .map((inc) => {
+      if (!inc || typeof inc !== 'object') return null;
+
       // Normalise type – Flashscore uses various naming conventions
       const rawType = String(
-        inc.incident_type || inc.type || inc.event_type || ''
+        inc.incident_type || inc.type || inc.event_type || inc.event_category || ''
       ).toLowerCase().replace(/[_\s-]/g, '');
 
       let type = null;
-      if (/goal|score/.test(rawType) && !/own/.test(rawType) && !/missed|penalty_missed/.test(rawType)) {
+      if (/goal|score|gol/.test(rawType) && !/own/.test(rawType) && !/missed|penalty_missed/.test(rawType)) {
         type = 'goal';
-      } else if (/owngoal/.test(rawType)) {
+      } else if (/owngoal|og/.test(rawType)) {
         type = 'own_goal';
-      } else if (/yellowred|secondyellow/.test(rawType)) {
+      } else if (/yellowred|secondyellow|doubleyellow/.test(rawType)) {
         type = 'yellow_red';
-      } else if (/yellowcard|yellow/.test(rawType)) {
+      } else if (/yellowcard|yellow|tarjeta/.test(rawType)) {
         type = 'yellow';
-      } else if (/redcard|red/.test(rawType)) {
+      } else if (/redcard|red|rojadir/.test(rawType)) {
         type = 'red';
-      } else if (/penaltymissed/.test(rawType)) {
+      } else if (/penaltymissed|missedpenalty/.test(rawType)) {
         type = 'penalty_missed';
       }
 
       if (!type) return null;
 
+      // Extract minute/time – try multiple field names
       const minute = parseNumeric(
-        inc.time ?? inc.minute ?? inc.elapsed ?? inc.injury_time
+        inc.time ?? inc.minute ?? inc.elapsed ?? inc.injury_time ?? inc.period_time ?? inc.match_minute
       );
+
+      // Extract player name – try multiple field names
       const player = String(
-        inc.player_name || inc.player || inc.name || ''
+        inc.player_name || inc.player || inc.name || inc.player_text || inc.description || ''
       ).trim();
-      // is_home: true = home team, false = away team
-      const isHome = inc.is_home !== undefined
-        ? Boolean(inc.is_home)
-        : (inc.team === 'home' || inc.side === 'home' || inc.participant === 'home' || null);
+
+      if (!player && type !== 'own_goal') {
+        return null; // Skip events without player info (unless own goal)
+      }
+
+      // Determine if home team scored – try multiple field name patterns
+      let isHome = null;
+      if (inc.is_home !== undefined) {
+        isHome = Boolean(inc.is_home);
+      } else if (inc.team === 'home' || inc.side === 'home' || inc.participant === 'home') {
+        isHome = true;
+      } else if (inc.team === 'away' || inc.side === 'away' || inc.participant === 'away') {
+        isHome = false;
+      } else if (inc.period_team_id !== undefined && inc.home_team_id !== undefined) {
+        isHome = inc.period_team_id === inc.home_team_id;
+      } else if (inc.team_id !== undefined && inc.home_id !== undefined) {
+        isHome = inc.team_id === inc.home_id;
+      }
 
       return { type, minute, player, isHome };
     })
