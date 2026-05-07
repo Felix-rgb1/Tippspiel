@@ -414,7 +414,8 @@ async function getLiveScoresForMatches(matches, pool = null) {
         let live = toLiveCandidate(best);
 
         // Always try to fetch details to get complete incident/goal scorer data
-        if (best?.match_id && (live.isLive || live.isFinished)) {
+        // and better status info
+        if (best?.match_id) {
           try {
             const details = await fetchFlashscoreMatchDetails(best.match_id);
             if (details) {
@@ -422,11 +423,15 @@ async function getLiveScoresForMatches(matches, pool = null) {
             }
             const detailsLive = toLiveCandidateFromDetails(details);
             if (detailsLive) {
+              // Merge details with live data, preferring details for completeness
               live = {
                 ...live,
                 ...detailsLive,
                 homeGoals: detailsLive.homeGoals ?? live.homeGoals,
                 awayGoals: detailsLive.awayGoals ?? live.awayGoals,
+                statusText: detailsLive.statusText || live.statusText,
+                isLive: detailsLive.isLive || live.isLive,
+                isFinished: detailsLive.isFinished || live.isFinished,
                 incidents: detailsLive.incidents?.length ? detailsLive.incidents : live.incidents
               };
             }
