@@ -109,8 +109,14 @@ function extractIncidents(details) {
   if (!Array.isArray(candidates) || !candidates.length) {
     // Debug: log available keys in details object
     if (details && typeof details === 'object') {
-      const keys = Object.keys(details).slice(0, 20);
-      console.debug('[extractIncidents] No incidents found. Available keys:', keys);
+      const keys = Object.keys(details);
+      console.debug('[extractIncidents] No incidents found.');
+      console.debug('[extractIncidents] All available keys:', keys);
+      
+      // Log nested structure for common containers
+      if (details.data) console.debug('[extractIncidents] details.data keys:', Object.keys(details.data));
+      if (details.match) console.debug('[extractIncidents] details.match keys:', Object.keys(details.match));
+      if (details.statistics) console.debug('[extractIncidents] details.statistics keys:', Object.keys(details.statistics));
     }
     return [];
   }
@@ -419,10 +425,12 @@ async function getLiveScoresForMatches(matches, pool = null) {
           try {
             const details = await fetchFlashscoreMatchDetails(best.match_id);
             if (details) {
-              console.debug(`[DETAILS-LOADED] Match ${match.id}: Fetched details, keys:`, Object.keys(details).slice(0, 15));
+              console.log(`[MATCH-${match.id}] Full details response:`, JSON.stringify(details, null, 2).substring(0, 2000));
+              console.debug(`[DETAILS-LOADED] Match ${match.id}: Fetched details, keys:`, Object.keys(details));
             }
             const detailsLive = toLiveCandidateFromDetails(details);
             if (detailsLive) {
+              console.log(`[MATCH-${match.id}] Extracted incidents:`, detailsLive.incidents);
               // Merge details with live data, preferring details for completeness
               live = {
                 ...live,
