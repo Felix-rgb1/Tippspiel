@@ -125,6 +125,13 @@ function MatchInfo() {
         if (nextLiveUpdate && !stopped) {
           setLiveUpdate(nextLiveUpdate);
 
+          // Debug logging
+          console.log('[DEBUG] Live update received:', {
+            incidents: nextLiveUpdate.incidents,
+            incidentCount: Array.isArray(nextLiveUpdate.incidents) ? nextLiveUpdate.incidents.length : 0,
+            goals: Array.isArray(nextLiveUpdate.incidents) ? nextLiveUpdate.incidents.filter(inc => inc.type === 'goal') : []
+          });
+
           const previous = previousLiveRef.current;
           const nextHome = Number(nextLiveUpdate.homeGoals);
           const nextAway = Number(nextLiveUpdate.awayGoals);

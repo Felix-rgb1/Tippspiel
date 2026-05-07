@@ -435,6 +435,14 @@ async function getLiveScoresForMatches(matches, pool = null) {
             fetchedAt: fixturesResult.fetchedAt
           };
 
+          // Debug logging for goalscorers
+          if (Array.isArray(live.incidents) && live.incidents.length > 0) {
+            const goals = live.incidents.filter(inc => inc.type === 'goal');
+            if (goals.length > 0) {
+              console.log(`[GOALSCORERS] Match ${match.id}: Found ${goals.length} goals`, JSON.stringify(goals, null, 2));
+            }
+          }
+
           // Auto-save finished match scores to database
           // Only update matches from external sources (live data), not manually entered ones
           if (live.isFinished && !match.finished && match.external_source && pool) {
