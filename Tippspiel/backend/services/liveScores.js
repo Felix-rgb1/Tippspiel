@@ -98,6 +98,12 @@ function extractIncidents(details) {
     ? details.data.incidents
     : Array.isArray(details?.data?.events)
     ? details.data.events
+    : Array.isArray(details?.goals)
+    ? details.goals
+    : Array.isArray(details?.goal_scorers)
+    ? details.goal_scorers
+    : Array.isArray(details?.scorers)
+    ? details.scorers
     : [];
 
   if (!Array.isArray(candidates) || !candidates.length) return [];
@@ -135,7 +141,8 @@ function extractIncidents(details) {
 
       // Extract player name – try multiple field names
       const player = String(
-        inc.player_name || inc.player || inc.name || inc.player_text || inc.description || ''
+        inc.player_name || inc.player || inc.name || inc.player_text || inc.description 
+        || inc.scorer || inc.goal_scorer || inc.person || inc.actor || ''
       ).trim();
 
       if (!player && type !== 'own_goal') {
@@ -358,7 +365,7 @@ function shouldCheckLiveForMatch(match) {
   return Math.abs(Date.now() - matchTs) <= LIVE_MATCH_TIME_TOLERANCE_MS;
 }
 
-async function getLiveScoresForMatches(matches) {
+async function getLiveScoresForMatches(matches, pool = null) {
   const candidates = (Array.isArray(matches) ? matches : []).filter(shouldCheckLiveForMatch);
 
   if (!candidates.length) {
@@ -424,8 +431,24 @@ async function getLiveScoresForMatches(matches) {
         if (live.homeGoals !== null && live.awayGoals !== null) {
           updates[match.id] = {
             ...live,
+            incidents: Array.isArray(live.incidents) ? live.incidents : [],
             fetchedAt: fixturesResult.fetchedAt
           };
+
+          // Auto-save finished match scores to database
+          // Only update matches from external sources (live data), not manually entered ones
+          if (live.isFinished && !match.finished && match.external_source && pool) {
+            try {
+              await pool.query(
+                `UPDATE matches
+                 SET home_goals = $1, away_goals = $2, finished = true, updated_at = NOW()
+                 WHERE id = $3 AND finished = false AND external_source IS NOT NULL`,
+                [live.homeGoals, live.awayGoals, match.id]
+              );
+            } catch (err) {
+              console.warn(`Failed to save finished match scores for match ${match.id}:`, err.message);
+            }
+          }
         }
       }
 

@@ -274,7 +274,7 @@ function MatchInfo() {
         <Link to="/" className="btn-primary">Dashboard</Link>
       </div>
 
-      {liveUpdate?.incidents && Array.isArray(liveUpdate.incidents) && liveUpdate.incidents.some(inc => inc.type === 'goal') && (
+      {liveUpdate && liveUpdate.incidents && Array.isArray(liveUpdate.incidents) && liveUpdate.incidents.filter(inc => inc.type === 'goal').length > 0 && (
         <section className="card goalscorers-card">
           <div className="section-heading compact">
             <div>

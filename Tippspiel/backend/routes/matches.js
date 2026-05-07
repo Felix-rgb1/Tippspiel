@@ -43,7 +43,7 @@ router.get('/live', async (req, res) => {
       [rawIds]
     );
 
-    const liveResult = await getLiveScoresForMatches(result.rows);
+    const liveResult = await getLiveScoresForMatches(result.rows, pool);
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
