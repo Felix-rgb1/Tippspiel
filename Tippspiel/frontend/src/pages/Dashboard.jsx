@@ -470,9 +470,26 @@ function Dashboard() {
       .filter((match) => !match.finished && isFlashscoreSource(match) && isInTrackingWindow(match))
       .map((match) => match.id);
 
+    console.log('[POLL-DEBUG] Dashboard poll check:', {
+      totalMatches: matches.length,
+      notFinished: matches.filter(m => !m.finished).length,
+      isFlashscore: matches.filter(m => isFlashscoreSource(m)).length,
+      inWindow: matches.filter(m => isInTrackingWindow(m)).length,
+      candidateIds,
+      details: matches.slice(0, 3).map(m => ({
+        id: m.id,
+        finished: m.finished,
+        external_source: m.external_source,
+        home: m.home_team
+      }))
+    });
+
     if (!candidateIds.length) {
+      console.log('[POLL-DEBUG] No candidates for polling - skipping');
       return undefined;
     }
+
+    console.log('[POLL-DEBUG] Starting polling for', candidateIds.length, 'matches:', candidateIds);
 
     let stopped = false;
     let timer = null;
@@ -488,7 +505,7 @@ function Dashboard() {
 
     const runPoll = async () => {
       if (!isPageVisible()) {
-        scheduleNextPoll(180000);
+        scheduleNextPoll(60000);
         return;
       }
 
@@ -504,11 +521,11 @@ function Dashboard() {
           }));
         }
 
-        const nextPollInMs = Number(payload.nextPollInMs) || 180000;
-        const delay = Math.max(30000, Math.min(300000, nextPollInMs));
+        const nextPollInMs = Number(payload.nextPollInMs) || 60000;
+        const delay = Math.max(15000, Math.min(300000, nextPollInMs));
         scheduleNextPoll(delay);
       } catch (err) {
-        scheduleNextPoll(180000);
+        scheduleNextPoll(60000);
       }
     };
 

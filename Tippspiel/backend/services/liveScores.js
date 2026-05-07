@@ -4,12 +4,14 @@ const {
   fetchFlashscoreMatchDetails
 } = require('./rapidApi');
 
-const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '90000', 10);
-const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '300000', 10);
+const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '15000', 10);
+const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '60000', 10);
 const LIVE_MATCH_TIME_TOLERANCE_MS = Number.parseInt(process.env.LIVE_MATCH_TIME_TOLERANCE_MS || '43200000', 10);
+const MATCH_DETAILS_CACHE_MS = Number.parseInt(process.env.MATCH_DETAILS_CACHE_MS || '300000', 10); // 5 min default
 
 const flashscoreCacheByTournament = new Map();
 const flashscoreInFlightByTournament = new Map();
+const matchDetailsCache = new Map(); // Cache für Match-Details
 
 function normalizeName(value) {
   return String(value || '')
@@ -107,17 +109,6 @@ function extractIncidents(details) {
     : [];
 
   if (!Array.isArray(candidates) || !candidates.length) {
-    // Debug: log available keys in details object
-    if (details && typeof details === 'object') {
-      const keys = Object.keys(details);
-      console.debug('[extractIncidents] No incidents found.');
-      console.debug('[extractIncidents] All available keys:', keys);
-      
-      // Log nested structure for common containers
-      if (details.data) console.debug('[extractIncidents] details.data keys:', Object.keys(details.data));
-      if (details.match) console.debug('[extractIncidents] details.match keys:', Object.keys(details.match));
-      if (details.statistics) console.debug('[extractIncidents] details.statistics keys:', Object.keys(details.statistics));
-    }
     return [];
   }
 
@@ -347,6 +338,38 @@ async function getTournamentFixturesCached(rapidOptions) {
   }
 }
 
+async function getMatchDetailsWithCache(matchId, isLive = false) {
+  const now = Date.now();
+  const cached = matchDetailsCache.get(matchId);
+
+  // Return cached data if still valid
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  // If match is live and cache is stale, update asynchronously (fire-and-forget)
+  // This keeps the response fast while still getting fresh live data
+  if (isLive && (!cached || cached.expiresAt <= now)) {
+    (async () => {
+      try {
+        const freshDetails = await fetchFlashscoreMatchDetails(matchId);
+        if (freshDetails) {
+          matchDetailsCache.set(matchId, {
+            data: freshDetails,
+            expiresAt: now + MATCH_DETAILS_CACHE_MS
+          });
+        }
+      } catch (err) {
+        // Silent fail - keep using cached data on error
+        console.warn(`[MATCH-DETAILS-CACHE] Failed to refresh details for match ${matchId}:`, err.message);
+      }
+    })();
+  }
+
+  // Return cached data (even if stale) or null if no cache exists
+  return cached ? cached.data : null;
+}
+
 function hasImminentMatch(matches) {
   const now = Date.now();
   const window = 30 * 60 * 1000; // 30 minutes
@@ -419,24 +442,14 @@ async function getLiveScoresForMatches(matches, pool = null) {
 
         let live = toLiveCandidate(best);
 
-        // Always try to fetch details to get complete incident/goal scorer data
-        // and better status info
-        if (best?.match_id) {
+        // Only fetch details for live matches to reduce API usage
+        // (Fixture data from tournament endpoint is good enough for non-live matches)
+        // Use smart cache: return fast, update async if live
+        if (best?.match_id && live.isLive) {
           try {
-            const details = await fetchFlashscoreMatchDetails(best.match_id);
-            if (details) {
-              console.log(`[MATCH-${match.id}] Full details response:`, JSON.stringify(details, null, 2).substring(0, 2000));
-              
-              // Check nested structures for goal scorer data
-              console.log('[NESTED] home_team:', details.home_team ? Object.keys(details.home_team) : 'null');
-              console.log('[NESTED] away_team:', details.away_team ? Object.keys(details.away_team) : 'null');
-              console.log('[NESTED] scores:', details.scores ? Object.keys(details.scores) : 'null');
-              if (details.scores?.home) console.log('[NESTED] scores.home:', Object.keys(details.scores.home));
-              if (details.scores?.away) console.log('[NESTED] scores.away:', Object.keys(details.scores.away));
-            }
+            const details = await getMatchDetailsWithCache(best.match_id, true);
             const detailsLive = toLiveCandidateFromDetails(details);
             if (detailsLive) {
-              console.log(`[MATCH-${match.id}] Extracted incidents:`, detailsLive.incidents);
               // Merge details with live data, preferring details for completeness
               live = {
                 ...live,
@@ -446,7 +459,7 @@ async function getLiveScoresForMatches(matches, pool = null) {
                 statusText: detailsLive.statusText || live.statusText,
                 isLive: detailsLive.isLive || live.isLive,
                 isFinished: detailsLive.isFinished || live.isFinished,
-                incidents: detailsLive.incidents?.length ? detailsLive.incidents : live.incidents
+                incidents: [] // Don't try to extract incidents - Flashscore API doesn't provide goal scorer data
               };
             }
           } catch (err) {

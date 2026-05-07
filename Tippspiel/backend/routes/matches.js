@@ -31,7 +31,7 @@ router.get('/live', async (req, res) => {
       return res.json({
         updates: {},
         fetchedAt: new Date().toISOString(),
-        nextPollInMs: 180000,
+        nextPollInMs: 60000,
         usedProvider: false
       });
     }

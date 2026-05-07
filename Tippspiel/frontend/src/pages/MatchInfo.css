@@ -81,8 +81,7 @@
 .probabilities-card,
 .insight-panel,
 .headtohead-panel,
-.live-ticker-card,
-.goalscorers-card {
+.live-ticker-card {
   border-radius: 1.35rem;
   border: 1px solid rgba(148, 163, 184, 0.2);
   box-shadow: 0 16px 35px rgba(15, 23, 42, 0.06);
@@ -511,103 +510,6 @@
 }
 
 /* ── Torschützen ──────────────────────────────────────── */
-.goalscorers-card {
-  padding: 1.3rem;
-}
-
-.goalscorers-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-}
-
-.goalscorers-column h3 {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 0.8rem;
-  letter-spacing: -0.01em;
-}
-
-.goalscorers-list {
-  list-style: none;
-  display: grid;
-  gap: 0.6rem;
-}
-
-.goalscorer-item {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.goalscorer-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
-  border-color: rgba(148, 163, 184, 0.32);
-}
-
-.goalscorers-away .goalscorer-item {
-  flex-direction: row-reverse;
-}
-
-.goalscorer-name {
-  color: #0f172a;
-  font-weight: 600;
-  font-size: 0.95rem;
-  flex: 1;
-}
-
-.goalscorer-minute {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.8rem;
-  padding: 0.25rem 0.55rem;
-  border-radius: 0.6rem;
-  background: rgba(51, 65, 85, 0.08);
-  color: #64748b;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.goalscorer-empty {
-  padding: 1rem;
-  text-align: center;
-  color: #94a3b8;
-  font-style: italic;
-  font-size: 0.9rem;
-}
-
-:root[data-theme='dark'] .goalscorers-column h3 {
-  color: #e2e8f0;
-}
-
-:root[data-theme='dark'] .goalscorer-item {
-  border-color: rgba(51, 65, 85, 0.88);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.76) 100%);
-}
-
-:root[data-theme='dark'] .goalscorer-name {
-  color: #e2e8f0;
-}
-
-:root[data-theme='dark'] .goalscorer-minute {
-  background: rgba(148, 163, 184, 0.1);
-  color: #94a3b8;
-}
-
-:root[data-theme='dark'] .goalscorer-empty {
-  color: #64748b;
-}
 
 @media (max-width: 700px) {
   .match-hero {
