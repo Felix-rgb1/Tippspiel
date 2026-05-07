@@ -106,7 +106,14 @@ function extractIncidents(details) {
     ? details.scorers
     : [];
 
-  if (!Array.isArray(candidates) || !candidates.length) return [];
+  if (!Array.isArray(candidates) || !candidates.length) {
+    // Debug: log available keys in details object
+    if (details && typeof details === 'object') {
+      const keys = Object.keys(details).slice(0, 20);
+      console.debug('[extractIncidents] No incidents found. Available keys:', keys);
+    }
+    return [];
+  }
 
   return candidates
     .map((inc) => {
@@ -406,9 +413,13 @@ async function getLiveScoresForMatches(matches, pool = null) {
 
         let live = toLiveCandidate(best);
 
-        if ((!live.statusText || (!live.isLive && !live.isFinished)) && best?.match_id) {
+        // Always try to fetch details to get complete incident/goal scorer data
+        if (best?.match_id && (live.isLive || live.isFinished)) {
           try {
             const details = await fetchFlashscoreMatchDetails(best.match_id);
+            if (details) {
+              console.debug(`[DETAILS-LOADED] Match ${match.id}: Fetched details, keys:`, Object.keys(details).slice(0, 15));
+            }
             const detailsLive = toLiveCandidateFromDetails(details);
             if (detailsLive) {
               live = {
@@ -419,8 +430,9 @@ async function getLiveScoresForMatches(matches, pool = null) {
                 incidents: detailsLive.incidents?.length ? detailsLive.incidents : live.incidents
               };
             }
-          } catch {
+          } catch (err) {
             // Details endpoint is optional fallback.
+            console.warn(`Failed to fetch match details for ${match.id}:`, err.message);
           }
         }
 
