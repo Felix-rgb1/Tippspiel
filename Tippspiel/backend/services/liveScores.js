@@ -243,13 +243,23 @@ async function getTournamentFixturesCached(rapidOptions) {
   }
 }
 
-function patchCacheLiveness(rapidOptions, hadLiveMatch) {
+function hasImminentMatch(matches) {
+  const now = Date.now();
+  const window = 30 * 60 * 1000; // 30 minutes
+  return matches.some((m) => {
+    const ts = new Date(m.match_date).getTime();
+    return Number.isFinite(ts) && Math.abs(ts - now) <= window;
+  });
+}
+
+function patchCacheLiveness(rapidOptions, hadLiveMatch, groupMatches) {
   const cached = flashscoreCacheByTournament.get(rapidOptions.cacheKey);
   if (!cached) return;
 
   const now = Date.now();
   cached.hadLiveMatch = hadLiveMatch;
-  cached.expiresAt = now + (hadLiveMatch ? LIVE_CACHE_HOT_MS : LIVE_CACHE_COLD_MS);
+  const useHot = hadLiveMatch || (Array.isArray(groupMatches) && hasImminentMatch(groupMatches));
+  cached.expiresAt = now + (useHot ? LIVE_CACHE_HOT_MS : LIVE_CACHE_COLD_MS);
 }
 
 function shouldCheckLiveForMatch(match) {
@@ -334,7 +344,7 @@ async function getLiveScoresForMatches(matches) {
         }
       }
 
-      patchCacheLiveness(group.options, hasLiveMatch);
+      patchCacheLiveness(group.options, hasLiveMatch, group.matches);
     } catch (error) {
       // Provider is optional; continue with other groups.
     }

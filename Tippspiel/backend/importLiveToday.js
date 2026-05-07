@@ -253,6 +253,13 @@ async function importLiveTodayMatches(options = {}) {
     };
   }
 
+  // Bereits importierte externe IDs laden, damit keine Duplikate gewählt werden
+  const existingResult = await pool.query(
+    'SELECT external_id FROM matches WHERE external_source = $1',
+    [config.externalSource]
+  );
+  const existingIds = new Set(existingResult.rows.map((r) => String(r.external_id)));
+
   const nowMs = Date.now();
   const withPriority = todaysMatches
     .map((match) => ({
@@ -262,6 +269,8 @@ async function importLiveTodayMatches(options = {}) {
       ts: Number(match?.timestamp) || 0
     }))
     .filter((entry) => {
+      const numId = String(toNumericExternalId(String(entry.match?.match_id || '')));
+      if (existingIds.has(numId)) return false;
       const matchMs = entry.ts ? entry.ts * 1000 : Number.NaN;
       // Keep live matches always, plus matches around "now" for reliable live polling tests.
       return entry.live || getTimeDistanceScore(matchMs, nowMs) <= 12 * 60 * 60 * 1000;
@@ -271,17 +280,40 @@ async function importLiveTodayMatches(options = {}) {
       return getTimeDistanceScore(a.ts * 1000, nowMs) - getTimeDistanceScore(b.ts * 1000, nowMs);
     });
 
-  const selectedPool = withPriority.length ? withPriority : todaysMatches
+  // Fallback: alle heutigen noch-nicht-importierten Spiele, wenn kein zeitnahes gefunden
+  const fallbackPool = todaysMatches
     .map((match) => ({
       match,
       status: normalizeStatus(match),
       live: isLiveStatus(normalizeStatus(match)),
       ts: Number(match?.timestamp) || 0
     }))
+    .filter((entry) => {
+      const numId = String(toNumericExternalId(String(entry.match?.match_id || '')));
+      return !existingIds.has(numId);
+    })
     .sort((a, b) => {
       if (a.live !== b.live) return a.live ? -1 : 1;
       return a.ts - b.ts;
     });
+
+  const selectedPool = withPriority.length ? withPriority : fallbackPool;
+
+  if (!selectedPool.length) {
+    pushLog(`Alle heutigen Spiele (${todaysMatches.length}) sind bereits in der Datenbank importiert. Keine neuen Spiele verfuegbar.`);
+    return {
+      ...normalizedOptions,
+      mode: config.mode,
+      externalSource: config.externalSource,
+      tournamentUrl: config.tournamentUrl,
+      totalToday: todaysMatches.length,
+      selected: [],
+      createdCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      logs
+    };
+  }
 
   const selected = selectedPool.slice(0, normalizedOptions.max);
 
