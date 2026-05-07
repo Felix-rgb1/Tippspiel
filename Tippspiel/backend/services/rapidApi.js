@@ -505,13 +505,20 @@ async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate, optio
       return entry?.bettingType === 'HOME_DRAW_AWAY' && entry?.bettingScope === 'FULL_TIME';
     }) || allMarkets.find((entry) => {
       const names = entry.odds.map((odd) => String(odd?.name || '').trim().toUpperCase());
-      return names.includes('1') && names.includes('X') && names.includes('2');
+      // name-basiert (andere Anbieter) ODER positionsbasiert mit mind. 3 Einträgen (Flashscore)
+      return (names.includes('1') && names.includes('X') && names.includes('2')) || entry.odds.length >= 3;
     });
 
     if (market) {
-      const homeOdd = market.odds.find((entry) => entry?.name === '1' || /home/i.test(String(entry?.name || '')))?.odd;
-      const drawOdd = market.odds.find((entry) => entry?.name === 'X' || /draw/i.test(String(entry?.name || '')))?.odd;
-      const awayOdd = market.odds.find((entry) => entry?.name === '2' || /away/i.test(String(entry?.name || '')))?.odd;
+      // Flashscore API liefert Odds ohne 'name'-Feld und mit 'value' statt 'odd'.
+      // Fallback: name-basierte Suche, dann positionsbasiert (0=Home, 1=Draw, 2=Away).
+      const pickOddValue = (entry) => entry?.odd ?? entry?.value ?? null;
+      const homeEntry = market.odds.find((e) => e?.name === '1' || /home/i.test(String(e?.name || ''))) ?? market.odds[0];
+      const drawEntry = market.odds.find((e) => e?.name === 'X' || /draw/i.test(String(e?.name || ''))) ?? market.odds[1];
+      const awayEntry = market.odds.find((e) => e?.name === '2' || /away/i.test(String(e?.name || ''))) ?? market.odds[2];
+      const homeOdd = pickOddValue(homeEntry);
+      const drawOdd = pickOddValue(drawEntry);
+      const awayOdd = pickOddValue(awayEntry);
       const probabilities = normalizeFromDecimalOdds(homeOdd, drawOdd, awayOdd);
 
       if (probabilities) {
