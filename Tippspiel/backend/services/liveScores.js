@@ -426,7 +426,13 @@ async function getLiveScoresForMatches(matches, pool = null) {
             const details = await fetchFlashscoreMatchDetails(best.match_id);
             if (details) {
               console.log(`[MATCH-${match.id}] Full details response:`, JSON.stringify(details, null, 2).substring(0, 2000));
-              console.debug(`[DETAILS-LOADED] Match ${match.id}: Fetched details, keys:`, Object.keys(details));
+              
+              // Check nested structures for goal scorer data
+              console.log('[NESTED] home_team:', details.home_team ? Object.keys(details.home_team) : 'null');
+              console.log('[NESTED] away_team:', details.away_team ? Object.keys(details.away_team) : 'null');
+              console.log('[NESTED] scores:', details.scores ? Object.keys(details.scores) : 'null');
+              if (details.scores?.home) console.log('[NESTED] scores.home:', Object.keys(details.scores.home));
+              if (details.scores?.away) console.log('[NESTED] scores.away:', Object.keys(details.scores.away));
             }
             const detailsLive = toLiveCandidateFromDetails(details);
             if (detailsLive) {
