@@ -1,4 +1,8 @@
-const { fetchFlashscoreTournamentFixtures, fetchFlashscoreMatchesByDate } = require('./rapidApi');
+const {
+  fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreMatchesByDate,
+  fetchFlashscoreMatchDetails
+} = require('./rapidApi');
 
 const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '90000', 10);
 const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '300000', 10);
@@ -72,6 +76,49 @@ function toLiveCandidate(candidate) {
 
   return {
     sourceMatchId: candidate?.match_id || null,
+    isLive,
+    isFinished,
+    statusText,
+    minute: extractMinute(statusText),
+    homeGoals,
+    awayGoals
+  };
+}
+
+function toLiveCandidateFromDetails(details) {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+
+  const matchStatus = details.match_status || {};
+  const stage = String(matchStatus.stage || '').trim();
+  const liveTime = String(matchStatus.live_time || '').trim();
+  const statusText = liveTime ? `${liveTime}'` : stage;
+
+  const isFinished = Boolean(
+    matchStatus.is_finished
+    || matchStatus.is_finished_after_extra_time
+    || matchStatus.is_finished_after_penalties
+  );
+
+  const isLive = Boolean(matchStatus.is_in_progress || (matchStatus.is_started && !isFinished));
+
+  const scores = details.scores || {};
+  const homeGoals = parseNumeric(
+    scores.home_score
+    ?? scores.home
+    ?? scores.final?.home
+    ?? scores.current?.home
+  );
+  const awayGoals = parseNumeric(
+    scores.away_score
+    ?? scores.away
+    ?? scores.final?.away
+    ?? scores.current?.away
+  );
+
+  return {
+    sourceMatchId: details.match_id || null,
     isLive,
     isFinished,
     statusText,
@@ -250,11 +297,31 @@ async function getLiveScoresForMatches(matches) {
       usedProvider = true;
       latestFetchedAt = fixturesResult.fetchedAt;
 
-      group.matches.forEach((match) => {
+      for (const match of group.matches) {
         const best = findBestCandidateForMatch(match, fixtures);
-        if (!best) return;
+        if (!best) {
+          continue;
+        }
 
-        const live = toLiveCandidate(best);
+        let live = toLiveCandidate(best);
+
+        if ((!live.statusText || (!live.isLive && !live.isFinished)) && best?.match_id) {
+          try {
+            const details = await fetchFlashscoreMatchDetails(best.match_id);
+            const detailsLive = toLiveCandidateFromDetails(details);
+            if (detailsLive) {
+              live = {
+                ...live,
+                ...detailsLive,
+                homeGoals: detailsLive.homeGoals ?? live.homeGoals,
+                awayGoals: detailsLive.awayGoals ?? live.awayGoals
+              };
+            }
+          } catch {
+            // Details endpoint is optional fallback.
+          }
+        }
+
         if (live.isLive) {
           hasLiveMatch = true;
         }
@@ -265,7 +332,7 @@ async function getLiveScoresForMatches(matches) {
             fetchedAt: fixturesResult.fetchedAt
           };
         }
-      });
+      }
 
       patchCacheLiveness(group.options, hasLiveMatch);
     } catch (error) {
