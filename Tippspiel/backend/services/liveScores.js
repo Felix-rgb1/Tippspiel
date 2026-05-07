@@ -198,8 +198,12 @@ function scoreCandidate(targetMatch, candidate) {
     ? Math.abs(targetTs - candidateTs)
     : Number.MAX_SAFE_INTEGER;
 
-  if (timeDiff <= 2 * 60 * 60 * 1000) {
+  // Strict timestamp requirement: only ±30 minutes to avoid false matches on repeated fixtures
+  if (timeDiff <= 30 * 60 * 1000) {
     score += 1;
+  } else if (timeDiff > 120 * 60 * 1000) {
+    // Penalize large time differences heavily to avoid cross-day matching
+    score = -1;
   }
 
   return { score, timeDiff };
