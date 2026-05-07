@@ -510,12 +510,14 @@ async function fetchFlashscoreProbabilities(homeTeam, awayTeam, matchDate, optio
     });
 
     if (market) {
-      // Flashscore API liefert Odds ohne 'name'-Feld und mit 'value' statt 'odd'.
-      // Fallback: name-basierte Suche, dann positionsbasiert (0=Home, 1=Draw, 2=Away).
+      // Flashscore API: Odds enthalten kein 'name'-Feld und nutzen 'value' statt 'odd'.
+      // Identifikation: eventParticipantId === null → Unentschieden; non-null → Home (1.) / Away (2.)
       const pickOddValue = (entry) => entry?.odd ?? entry?.value ?? null;
-      const homeEntry = market.odds.find((e) => e?.name === '1' || /home/i.test(String(e?.name || ''))) ?? market.odds[0];
-      const drawEntry = market.odds.find((e) => e?.name === 'X' || /draw/i.test(String(e?.name || ''))) ?? market.odds[1];
-      const awayEntry = market.odds.find((e) => e?.name === '2' || /away/i.test(String(e?.name || ''))) ?? market.odds[2];
+      const drawEntry = market.odds.find((e) => e?.eventParticipantId === null && e?.eventParticipantId !== undefined)
+        ?? market.odds.find((e) => e?.name === 'X' || /draw/i.test(String(e?.name || '')));
+      const nonDrawEntries = market.odds.filter((e) => e !== drawEntry && (e?.eventParticipantId !== null || e?.name === '1' || e?.name === '2' || /home|away/i.test(String(e?.name || ''))));
+      const homeEntry = nonDrawEntries[0] ?? market.odds.find((e) => e?.name === '1' || /home/i.test(String(e?.name || '')));
+      const awayEntry = nonDrawEntries[1] ?? market.odds.find((e) => e?.name === '2' || /away/i.test(String(e?.name || '')));
       const homeOdd = pickOddValue(homeEntry);
       const drawOdd = pickOddValue(drawEntry);
       const awayOdd = pickOddValue(awayEntry);
