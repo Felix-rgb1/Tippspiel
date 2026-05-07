@@ -274,6 +274,51 @@ function MatchInfo() {
         <Link to="/" className="btn-primary">Dashboard</Link>
       </div>
 
+      {liveUpdate?.incidents && Array.isArray(liveUpdate.incidents) && liveUpdate.incidents.some(inc => inc.type === 'goal') && (
+        <section className="card goalscorers-card">
+          <div className="section-heading compact">
+            <div>
+              <span className="section-eyebrow">Tore</span>
+              <h2>Torschützen</h2>
+            </div>
+          </div>
+          <div className="goalscorers-grid">
+            <div className="goalscorers-column goalscorers-home">
+              <h3>{formatTeamName(insights.match.home_team)}</h3>
+              <ul className="goalscorers-list">
+                {liveUpdate.incidents
+                  .filter((inc) => inc.type === 'goal' && inc.isHome === true)
+                  .map((inc, i) => (
+                    <li key={i} className="goalscorer-item">
+                      <span className="goalscorer-name">{inc.player || '–'}</span>
+                      {inc.minute != null && <span className="goalscorer-minute">{inc.minute}'</span>}
+                    </li>
+                  ))}
+                {!liveUpdate.incidents.some(inc => inc.type === 'goal' && inc.isHome === true) && (
+                  <li className="goalscorer-empty">Keine Tore</li>
+                )}
+              </ul>
+            </div>
+            <div className="goalscorers-column goalscorers-away">
+              <h3>{formatTeamName(insights.match.away_team)}</h3>
+              <ul className="goalscorers-list">
+                {liveUpdate.incidents
+                  .filter((inc) => inc.type === 'goal' && inc.isHome === false)
+                  .map((inc, i) => (
+                    <li key={i} className="goalscorer-item">
+                      {inc.minute != null && <span className="goalscorer-minute">{inc.minute}'</span>}
+                      <span className="goalscorer-name">{inc.player || '–'}</span>
+                    </li>
+                  ))}
+                {!liveUpdate.incidents.some(inc => inc.type === 'goal' && inc.isHome === false) && (
+                  <li className="goalscorer-empty">Keine Tore</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
       {showLiveTicker && (
         <section className="card live-ticker-card">
           <div className="section-heading compact">
