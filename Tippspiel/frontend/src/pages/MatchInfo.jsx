@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { matchAPI } from '../api';
 import './MatchInfo.css';
@@ -54,6 +54,22 @@ function formatTeamName(teamName) {
   return teamName;
 }
 
+function getTickerClock() {
+  return new Date().toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function buildTickerEvent(type, text) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    text,
+    clock: getTickerClock()
+  };
+}
+
 function MatchInfo() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -61,6 +77,9 @@ function MatchInfo() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [insights, setInsights] = useState(null);
+  const [liveUpdate, setLiveUpdate] = useState(null);
+  const [tickerEvents, setTickerEvents] = useState([]);
+  const previousLiveRef = useRef(null);
   // Pre-fill basic match data passed via navigation state for instant display
   const matchPreview = locationState?.match || null;
 
@@ -80,6 +99,85 @@ function MatchInfo() {
 
     fetchInsights();
   }, [id]);
+
+  useEffect(() => {
+    if (!insights?.match || insights?.match?.finished) {
+      return undefined;
+    }
+
+    let stopped = false;
+    let timer = null;
+
+    const scheduleNextPoll = (delayMs) => {
+      if (stopped) {
+        return;
+      }
+      timer = setTimeout(runPoll, delayMs);
+    };
+
+    const runPoll = async () => {
+      try {
+        const response = await matchAPI.getLive([Number(id)]);
+        const payload = response?.data || {};
+        const updates = payload?.updates || {};
+        const nextLiveUpdate = updates[id] || updates[String(id)] || null;
+
+        if (nextLiveUpdate && !stopped) {
+          setLiveUpdate(nextLiveUpdate);
+
+          const previous = previousLiveRef.current;
+          const nextHome = Number(nextLiveUpdate.homeGoals);
+          const nextAway = Number(nextLiveUpdate.awayGoals);
+          const previousHome = Number(previous?.homeGoals);
+          const previousAway = Number(previous?.awayGoals);
+
+          setTickerEvents((prevEvents) => {
+            const nextEvents = [...prevEvents];
+
+            if (nextLiveUpdate.isLive && !previous?.isLive) {
+              nextEvents.unshift(buildTickerEvent('start', 'Anpfiff - das Spiel laeuft jetzt live.'));
+            }
+
+            if (
+              Number.isFinite(nextHome)
+              && Number.isFinite(nextAway)
+              && Number.isFinite(previousHome)
+              && Number.isFinite(previousAway)
+              && (nextHome !== previousHome || nextAway !== previousAway)
+            ) {
+              nextEvents.unshift(buildTickerEvent('goal', `Neuer Spielstand: ${nextHome}:${nextAway}`));
+            }
+
+            if (nextLiveUpdate.isFinished && !previous?.isFinished) {
+              const finalText = Number.isFinite(nextHome) && Number.isFinite(nextAway)
+                ? `Abpfiff - Endstand ${nextHome}:${nextAway}`
+                : 'Abpfiff - Spiel beendet.';
+              nextEvents.unshift(buildTickerEvent('end', finalText));
+            }
+
+            return nextEvents.slice(0, 14);
+          });
+
+          previousLiveRef.current = nextLiveUpdate;
+        }
+
+        const nextPollInMs = Number(payload?.nextPollInMs) || 180000;
+        const delay = Math.max(30000, Math.min(300000, nextPollInMs));
+        scheduleNextPoll(delay);
+      } catch {
+        scheduleNextPoll(180000);
+      }
+    };
+
+    runPoll();
+
+    return () => {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [id, insights]);
 
   const sourceLabel = useMemo(() => {
     if (!insights?.source) return 'lokale Daten';
@@ -108,6 +206,12 @@ function MatchInfo() {
       tone: 'away'
     }
   ]), [insights]);
+
+  const showLiveTicker = Boolean(liveUpdate?.isLive || liveUpdate?.isFinished || tickerEvents.length > 0);
+  const liveMinuteText = Number.isFinite(Number(liveUpdate?.minute)) ? `${Number(liveUpdate.minute)}'` : '';
+  const liveScore = Number.isFinite(Number(liveUpdate?.homeGoals)) && Number.isFinite(Number(liveUpdate?.awayGoals))
+    ? `${Number(liveUpdate.homeGoals)}:${Number(liveUpdate.awayGoals)}`
+    : '-:-';
 
   if (loading) {
     return (
@@ -165,6 +269,41 @@ function MatchInfo() {
         <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>Zurueck</button>
         <Link to="/" className="btn-primary">Dashboard</Link>
       </div>
+
+      {showLiveTicker && (
+        <section className="card live-ticker-card">
+          <div className="section-heading compact">
+            <div>
+              <span className="section-eyebrow">Live</span>
+              <h2>Liveticker</h2>
+            </div>
+            <div className={`live-badge ${liveUpdate?.isLive ? 'is-live' : (liveUpdate?.isFinished ? 'is-finished' : '')}`}>
+              {liveUpdate?.isLive ? `LIVE ${liveMinuteText}`.trim() : (liveUpdate?.isFinished ? 'Abgeschlossen' : 'Aktualisierung laeuft')}
+            </div>
+          </div>
+
+          <div className="live-scoreline">
+            <strong>{formatTeamName(insights.match.home_team)}</strong>
+            <span>{liveScore}</span>
+            <strong>{formatTeamName(insights.match.away_team)}</strong>
+          </div>
+
+          <ul className="ticker-list">
+            {tickerEvents.length === 0 && (
+              <li className="ticker-item ticker-item-muted">
+                <span className="ticker-clock">jetzt</span>
+                <span>Warte auf Live-Ereignisse von Flashscore...</span>
+              </li>
+            )}
+            {tickerEvents.map((event) => (
+              <li key={event.id} className={`ticker-item ticker-item-${event.type}`}>
+                <span className="ticker-clock">{event.clock}</span>
+                <span>{event.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="card probabilities-card">
         <div className="section-heading">
