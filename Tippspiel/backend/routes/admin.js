@@ -11,6 +11,7 @@ const {
   syncWMResults,
   syncBundesligaResults
 } = require('../services/flashscoreBundesligaImport');
+const { importLiveTodayMatches } = require('../importLiveToday');
 
 const router = express.Router();
 
@@ -160,6 +161,33 @@ router.post('/matches/import/bundesliga', adminMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Bundesliga-Import fehlgeschlagen' });
+  }
+});
+
+router.post('/matches/import/live-today', adminMiddleware, async (req, res) => {
+  try {
+    const source = String(req.body?.source || 'any').trim().toLowerCase();
+    const max = Number.parseInt(String(req.body?.max || '1'), 10);
+    const tournamentUrl = String(req.body?.tournamentUrl || '').trim();
+
+    const importResult = await importLiveTodayMatches({
+      source,
+      max: Number.isFinite(max) && max > 0 ? max : 1,
+      tournamentUrl
+    });
+
+    const first = importResult.selected?.[0];
+    const firstLabel = first ? `${first.homeTeam} vs ${first.awayTeam}` : null;
+
+    res.json({
+      message: firstLabel
+        ? `Live-Testspiel importiert: ${firstLabel}`
+        : 'Keine passenden Spiele fuer heute gefunden.',
+      ...importResult
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Live-Test-Import fehlgeschlagen' });
   }
 });
 

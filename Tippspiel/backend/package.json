@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "import:bundesliga": "node importFlashscoreBundesliga.js"
+    "import:bundesliga": "node importFlashscoreBundesliga.js",
+    "import:live-today": "node importLiveToday.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

@@ -25,6 +25,7 @@ function Admin() {
   const [importingWM, setImportingWM] = useState(false);
   const [syncingWMResults, setSyncingWMResults] = useState(false);
   const [importingBundesliga, setImportingBundesliga] = useState(false);
+  const [importingLiveToday, setImportingLiveToday] = useState(false);
   const [syncingBundesligaResults, setSyncingBundesligaResults] = useState(false);
   const [exportingTips, setExportingTips] = useState(false);
   const [error, setError] = useState('');
@@ -326,6 +327,22 @@ function Admin() {
     }
   };
 
+  const handleImportLiveToday = async () => {
+    try {
+      setImportingLiveToday(true);
+      setError('');
+      const response = await adminAPI.importLiveToday('any', 1);
+      const data = response.data || {};
+      setSuccess(data.message || 'Live-Testspiel importiert');
+      setTimeout(() => setSuccess(''), 5000);
+      fetchMatches();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Live-Test-Import fehlgeschlagen');
+    } finally {
+      setImportingLiveToday(false);
+    }
+  };
+
   const handleSyncWMResults = async () => {
     try {
       setSyncingWMResults(true);
@@ -555,6 +572,14 @@ function Admin() {
               disabled={importingBundesliga}
             >
               {importingBundesliga ? '⏳ Import läuft...' : '🏆 Bundesliga von Flashscore importieren'}
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleImportLiveToday}
+              disabled={importingLiveToday}
+            >
+              {importingLiveToday ? '⏳ Import läuft...' : '🧪 Heutiges Live-Testspiel importieren'}
             </button>
             <button
               type="button"

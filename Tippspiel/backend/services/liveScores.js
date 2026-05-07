@@ -1,4 +1,4 @@
-const { fetchFlashscoreTournamentFixtures } = require('./rapidApi');
+const { fetchFlashscoreTournamentFixtures, fetchFlashscoreMatchesByDate } = require('./rapidApi');
 
 const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '90000', 10);
 const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '300000', 10);
@@ -127,8 +127,18 @@ function findBestCandidateForMatch(targetMatch, fixtures) {
 function getRapidOptionsForMatch(match) {
   const externalSource = String(match?.external_source || '').toLowerCase();
 
+  if (externalSource === 'flashscore-live-test-day') {
+    const todayBerlin = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+    return {
+      mode: 'by-date',
+      dateOnly: todayBerlin,
+      cacheKey: `flashscore:by-date:${todayBerlin}`
+    };
+  }
+
   if (externalSource === 'flashscore-bundesliga') {
     return {
+      mode: 'tournament',
       tournamentUrl: process.env.FLASHSCORE_BUNDESLIGA_TOURNAMENT_URL || '/football/germany/bundesliga/',
       useConfiguredIds: false,
       cacheKey: 'flashscore:bundesliga'
@@ -136,6 +146,7 @@ function getRapidOptionsForMatch(match) {
   }
 
   return {
+    mode: 'tournament',
     tournamentUrl: process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/',
     useConfiguredIds: false,
     cacheKey: 'flashscore:default'
@@ -158,9 +169,11 @@ async function getTournamentFixturesCached(rapidOptions) {
 
   const fetchPromise = (async () => {
     const fetchStartedAt = Date.now();
-    const fixturesPayload = await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
-      useConfiguredIds: rapidOptions.useConfiguredIds
-    });
+    const fixturesPayload = rapidOptions.mode === 'by-date'
+      ? await fetchFlashscoreMatchesByDate(rapidOptions.dateOnly)
+      : await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
+          useConfiguredIds: rapidOptions.useConfiguredIds
+        });
 
     const fixtures = toMatchEntries(fixturesPayload);
     const data = {
