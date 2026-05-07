@@ -208,7 +208,11 @@ function MatchInfo() {
   ]), [insights]);
 
   const showLiveTicker = Boolean(liveUpdate?.isLive || liveUpdate?.isFinished || tickerEvents.length > 0);
-  const liveMinuteText = Number.isFinite(Number(liveUpdate?.minute)) ? `${Number(liveUpdate.minute)}'` : '';
+  const LIVE_SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
+  const rawLiveStatus = String(liveUpdate?.statusText || '').trim().toUpperCase();
+  const liveMinuteText = LIVE_SPECIAL_STAGES.includes(rawLiveStatus)
+    ? rawLiveStatus
+    : (Number.isFinite(Number(liveUpdate?.minute)) && Number(liveUpdate.minute) > 0 ? `${Number(liveUpdate.minute)}'` : '');
   const liveScore = Number.isFinite(Number(liveUpdate?.homeGoals)) && Number.isFinite(Number(liveUpdate?.awayGoals))
     ? `${Number(liveUpdate.homeGoals)}:${Number(liveUpdate.awayGoals)}`
     : '-:-';
@@ -287,6 +291,49 @@ function MatchInfo() {
             <span>{liveScore}</span>
             <strong>{formatTeamName(insights.match.away_team)}</strong>
           </div>
+
+          {Array.isArray(liveUpdate?.incidents) && liveUpdate.incidents.length > 0 && (
+            <div className="live-incidents">
+              <div className="live-incidents-col live-incidents-home">
+                {liveUpdate.incidents
+                  .filter((inc) => inc.isHome === true)
+                  .map((inc, i) => (
+                    <div key={i} className={`live-incident live-incident-${inc.type}`}>
+                      <span className="live-incident-icon">
+                        {inc.type === 'goal' && '⚽'}
+                        {inc.type === 'own_goal' && '⚽'}
+                        {inc.type === 'yellow' && '🟨'}
+                        {inc.type === 'yellow_red' && '🟨🟥'}
+                        {inc.type === 'red' && '🟥'}
+                        {inc.type === 'penalty_missed' && '❌'}
+                      </span>
+                      <span className="live-incident-player">{inc.player || '–'}</span>
+                      {inc.minute != null && <span className="live-incident-minute">{inc.minute}'</span>}
+                      {inc.type === 'own_goal' && <span className="live-incident-tag">ET</span>}
+                    </div>
+                  ))}
+              </div>
+              <div className="live-incidents-col live-incidents-away">
+                {liveUpdate.incidents
+                  .filter((inc) => inc.isHome === false)
+                  .map((inc, i) => (
+                    <div key={i} className={`live-incident live-incident-${inc.type}`}>
+                      {inc.type === 'own_goal' && <span className="live-incident-tag">ET</span>}
+                      {inc.minute != null && <span className="live-incident-minute">{inc.minute}'</span>}
+                      <span className="live-incident-player">{inc.player || '–'}</span>
+                      <span className="live-incident-icon">
+                        {inc.type === 'goal' && '⚽'}
+                        {inc.type === 'own_goal' && '⚽'}
+                        {inc.type === 'yellow' && '🟨'}
+                        {inc.type === 'yellow_red' && '🟨🟥'}
+                        {inc.type === 'red' && '🟥'}
+                        {inc.type === 'penalty_missed' && '❌'}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           <ul className="ticker-list">
             {tickerEvents.length === 0 && (

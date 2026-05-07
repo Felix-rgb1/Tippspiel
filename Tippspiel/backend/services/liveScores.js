@@ -81,8 +81,54 @@ function toLiveCandidate(candidate) {
     statusText,
     minute: extractMinute(statusText),
     homeGoals,
-    awayGoals
+    awayGoals,
+    incidents: extractIncidents(candidate)
   };
+}
+
+function extractIncidents(details) {
+  const raw = details?.incidents || details?.events || details?.match_incidents || [];
+  if (!Array.isArray(raw) || !raw.length) return [];
+
+  return raw
+    .map((inc) => {
+      // Normalise type – Flashscore uses various naming conventions
+      const rawType = String(
+        inc.incident_type || inc.type || inc.event_type || ''
+      ).toLowerCase().replace(/[_\s-]/g, '');
+
+      let type = null;
+      if (/goal|score/.test(rawType) && !/own/.test(rawType) && !/missed|penalty_missed/.test(rawType)) {
+        type = 'goal';
+      } else if (/owngoal/.test(rawType)) {
+        type = 'own_goal';
+      } else if (/yellowred|secondyellow/.test(rawType)) {
+        type = 'yellow_red';
+      } else if (/yellowcard|yellow/.test(rawType)) {
+        type = 'yellow';
+      } else if (/redcard|red/.test(rawType)) {
+        type = 'red';
+      } else if (/penaltymissed/.test(rawType)) {
+        type = 'penalty_missed';
+      }
+
+      if (!type) return null;
+
+      const minute = parseNumeric(
+        inc.time ?? inc.minute ?? inc.elapsed ?? inc.injury_time
+      );
+      const player = String(
+        inc.player_name || inc.player || inc.name || ''
+      ).trim();
+      // is_home: true = home team, false = away team
+      const isHome = inc.is_home !== undefined
+        ? Boolean(inc.is_home)
+        : (inc.team === 'home' || inc.side === 'home' || inc.participant === 'home' || null);
+
+      return { type, minute, player, isHome };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
 }
 
 function toLiveCandidateFromDetails(details) {
@@ -93,7 +139,9 @@ function toLiveCandidateFromDetails(details) {
   const matchStatus = details.match_status || {};
   const stage = String(matchStatus.stage || '').trim();
   const liveTime = String(matchStatus.live_time || '').trim();
-  const statusText = liveTime ? `${liveTime}'` : stage;
+  // Special stages (HT, ET, BREAK…) take priority over live_time to avoid "0'" at half time.
+  const SPECIAL_STAGES = new Set(['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET', 'FT', 'FINISHED']);
+  const statusText = SPECIAL_STAGES.has(stage.toUpperCase()) ? stage : (liveTime ? `${liveTime}'` : stage);
 
   const isFinished = Boolean(
     matchStatus.is_finished
@@ -124,7 +172,8 @@ function toLiveCandidateFromDetails(details) {
     statusText,
     minute: extractMinute(statusText),
     homeGoals,
-    awayGoals
+    awayGoals,
+    incidents: extractIncidents(details)
   };
 }
 
@@ -324,7 +373,8 @@ async function getLiveScoresForMatches(matches) {
                 ...live,
                 ...detailsLive,
                 homeGoals: detailsLive.homeGoals ?? live.homeGoals,
-                awayGoals: detailsLive.awayGoals ?? live.awayGoals
+                awayGoals: detailsLive.awayGoals ?? live.awayGoals,
+                incidents: detailsLive.incidents?.length ? detailsLive.incidents : live.incidents
               };
             }
           } catch {

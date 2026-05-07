@@ -796,7 +796,11 @@ function Dashboard() {
 
   const getMatchStatus = (match, liveUpdate) => {
     if (liveUpdate?.isLive) {
-      const minute = Number.isFinite(liveUpdate.minute) ? `${liveUpdate.minute}'` : '';
+      const SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
+      const rawStatus = String(liveUpdate.statusText || '').trim().toUpperCase();
+      const minute = SPECIAL_STAGES.includes(rawStatus)
+        ? rawStatus
+        : (Number.isFinite(liveUpdate.minute) && liveUpdate.minute > 0 ? `${liveUpdate.minute}'` : '');
       return { label: `Live ${minute}`.trim(), className: 'status-live' };
     }
 
