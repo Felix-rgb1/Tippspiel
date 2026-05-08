@@ -24,7 +24,7 @@ async function buildLivePayload(rawIds) {
   }
 
   const result = await pool.query(
-    `SELECT id, home_team, away_team, match_date, finished, external_source
+    `SELECT id, home_team, away_team, match_date, finished, external_source, external_id
      FROM matches
      WHERE id = ANY($1::int[])`,
     [rawIds]

@@ -13,6 +13,28 @@ const flashscoreCacheByTournament = new Map();
 const flashscoreInFlightByTournament = new Map();
 const matchDetailsCache = new Map(); // Cache für Match-Details
 
+function toNumericExternalId(rawMatchId) {
+  const input = String(rawMatchId || '');
+  if (!input) return null;
+
+  const prime = 1099511628211n;
+  let hash = 1469598103934665603n;
+
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash *= prime;
+  }
+
+  const maxSafe = 9007199254740991n;
+  const normalized = (hash < 0n ? -hash : hash) % maxSafe;
+  return Number(normalized || 1n);
+}
+
+function normalizeExternalId(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function normalizeName(value) {
   return String(value || '')
     .toLowerCase()
@@ -252,6 +274,27 @@ function scoreCandidate(targetMatch, candidate) {
 }
 
 function findBestCandidateForMatch(targetMatch, fixtures) {
+  const targetExternalId = normalizeExternalId(targetMatch?.external_id);
+
+  if (targetExternalId) {
+    const exact = fixtures.find((fixture) => {
+      const fixtureRawId = fixture?.match_id || fixture?.id || fixture?.event_id;
+      if (!fixtureRawId) return false;
+
+      const numericFixtureId = normalizeExternalId(fixtureRawId);
+      if (numericFixtureId && numericFixtureId === targetExternalId) {
+        return true;
+      }
+
+      const hashedFixtureId = toNumericExternalId(fixtureRawId);
+      return hashedFixtureId === targetExternalId;
+    });
+
+    if (exact) {
+      return exact;
+    }
+  }
+
   const candidates = fixtures
     .map((fixture) => {
       const metrics = scoreCandidate(targetMatch, fixture);
