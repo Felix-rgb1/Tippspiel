@@ -5,6 +5,10 @@ require('./db');
 const pool = require('./db');
 const { warmUpApiFootballInsightsCache } = require('./services/footballData');
 const { ensureBonusFeaturesSchema } = require('./services/bonusFeatures');
+const {
+  syncWMResults,
+  syncBundesligaResults
+} = require('./services/flashscoreBundesligaImport');
 
 const app = express();
 
@@ -51,6 +55,67 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+function parseEnabledFlag(value, defaultValue = false) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const normalized = String(value).trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(normalized);
+}
+
+function startAutoResultSync(pool) {
+  const enabled = parseEnabledFlag(process.env.AUTO_RESULT_SYNC_ENABLED, true);
+  if (!enabled) {
+    console.log('[AUTO-RESULT-SYNC] deaktiviert (AUTO_RESULT_SYNC_ENABLED=false).');
+    return;
+  }
+
+  const intervalMinutesRaw = Number.parseInt(process.env.AUTO_RESULT_SYNC_INTERVAL_MINUTES || '10', 10);
+  const intervalMinutes = Number.isFinite(intervalMinutesRaw) ? Math.max(3, intervalMinutesRaw) : 10;
+  const intervalMs = intervalMinutes * 60 * 1000;
+
+  let isRunning = false;
+
+  const runSync = async () => {
+    if (isRunning) {
+      console.log('[AUTO-RESULT-SYNC] Lauf uebersprungen, vorheriger Durchlauf laeuft noch.');
+      return;
+    }
+
+    isRunning = true;
+    try {
+      const [wmResult, bundesligaResult] = await Promise.allSettled([
+        syncWMResults(pool),
+        syncBundesligaResults(pool)
+      ]);
+
+      if (wmResult.status === 'fulfilled') {
+        const r = wmResult.value;
+        console.log(
+          `[AUTO-RESULT-SYNC][WM] updated=${r.updatedCount || 0}, created=${r.createdCount || 0}, finishedFromApi=${r.finishedFromApi || 0}`
+        );
+      } else {
+        console.warn('[AUTO-RESULT-SYNC][WM] Fehler:', wmResult.reason?.message || wmResult.reason);
+      }
+
+      if (bundesligaResult.status === 'fulfilled') {
+        const r = bundesligaResult.value;
+        console.log(
+          `[AUTO-RESULT-SYNC][BL] updated=${r.updatedCount || 0}, skipped=${r.skippedCount || 0}, finishedFromApi=${r.finishedFromApi || 0}`
+        );
+      } else {
+        console.warn('[AUTO-RESULT-SYNC][BL] Fehler:', bundesligaResult.reason?.message || bundesligaResult.reason);
+      }
+    } catch (error) {
+      console.warn('[AUTO-RESULT-SYNC] Unerwarteter Fehler:', error.message);
+    } finally {
+      isRunning = false;
+    }
+  };
+
+  runSync();
+  setInterval(runSync, intervalMs);
+  console.log(`[AUTO-RESULT-SYNC] aktiv, Intervall=${intervalMinutes} Minuten.`);
+}
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -62,6 +127,8 @@ app.listen(PORT, () => {
     .catch((error) => {
       console.warn('[BONUS] Bonus-Features konnten nicht initialisiert werden:', error.message);
     });
+
+  startAutoResultSync(pool);
 
   const warmupEnabled = (process.env.APIFOOTBALL_WARMUP_ENABLED || 'false').toLowerCase() === 'true';
   if (!warmupEnabled) {
