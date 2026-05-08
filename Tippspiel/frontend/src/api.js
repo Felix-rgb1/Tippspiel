@@ -5,6 +5,14 @@ const isLocalDevelopmentHost = runtimeHostname === 'localhost' || runtimeHostnam
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 const API_URL = configuredApiUrl || (isLocalDevelopmentHost ? 'http://localhost:5000/api' : '');
 
+function buildApiPath(path) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (API_URL) {
+    return `${API_URL.replace(/\/$/, '')}${normalizedPath}`;
+  }
+  return `/api${normalizedPath}`;
+}
+
 function ensureApiConfigured() {
   if (!API_URL) {
     const error = new Error('API_NOT_CONFIGURED');
@@ -71,6 +79,7 @@ export const authAPI = {
 export const matchAPI = {
   getAll: () => apiGet('/matches'),
   getLive: (ids = []) => apiGet('/matches/live', { params: { ids: ids.join(',') } }),
+  getLiveStreamUrl: (ids = []) => buildApiPath(`/matches/live/stream?ids=${encodeURIComponent(ids.join(','))}`),
   getById: (id) => apiGet(`/matches/${id}`),
   getInsights: (id) => apiGet(`/matches/${id}/insights`),
 };

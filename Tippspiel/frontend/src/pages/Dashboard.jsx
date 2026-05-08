@@ -489,12 +489,23 @@ function Dashboard() {
       return undefined;
     }
 
-    console.log('[POLL-DEBUG] Starting polling for', candidateIds.length, 'matches:', candidateIds);
+    console.log('[POLL-DEBUG] Starting live stream for', candidateIds.length, 'matches:', candidateIds);
 
     let stopped = false;
     let timer = null;
+    let eventSource = null;
 
     const isPageVisible = () => (typeof document === 'undefined' ? true : document.visibilityState === 'visible');
+
+    const applyPayload = (payload) => {
+      const updates = payload?.updates || {};
+      if (!stopped) {
+        setLiveUpdatesByMatch((prev) => ({
+          ...prev,
+          ...updates
+        }));
+      }
+    };
 
     const scheduleNextPoll = (delayMs) => {
       if (stopped) {
@@ -512,14 +523,7 @@ function Dashboard() {
       try {
         const response = await matchAPI.getLive(candidateIds);
         const payload = response?.data || {};
-        const updates = payload.updates || {};
-
-        if (!stopped) {
-          setLiveUpdatesByMatch((prev) => ({
-            ...prev,
-            ...updates
-          }));
-        }
+        applyPayload(payload);
 
         const nextPollInMs = Number(payload.nextPollInMs) || 60000;
         const delay = Math.max(15000, Math.min(300000, nextPollInMs));
@@ -529,10 +533,48 @@ function Dashboard() {
       }
     };
 
-    runPoll();
+    const startPollingFallback = (initialDelayMs = 0) => {
+      if (stopped) {
+        return;
+      }
+      if (initialDelayMs > 0) {
+        scheduleNextPoll(initialDelayMs);
+      } else {
+        runPoll();
+      }
+    };
+
+    const supportsSSE = typeof window !== 'undefined' && typeof window.EventSource !== 'undefined';
+    const streamUrl = matchAPI.getLiveStreamUrl(candidateIds);
+
+    if (supportsSSE && streamUrl) {
+      eventSource = new window.EventSource(streamUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data || '{}');
+          applyPayload(payload);
+        } catch {
+          // Ignore malformed stream event and keep connection alive.
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        startPollingFallback(5000);
+      };
+    } else {
+      startPollingFallback();
+    }
 
     return () => {
       stopped = true;
+      if (eventSource) {
+        eventSource.close();
+      }
       if (timer) {
         clearTimeout(timer);
       }

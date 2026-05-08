@@ -6,6 +6,33 @@ const { getLiveScoresForMatches } = require('../services/liveScores');
 
 const router = express.Router();
 
+function parseLiveMatchIds(rawIdsValue) {
+  return String(rawIdsValue || '')
+    .split(',')
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+async function buildLivePayload(rawIds) {
+  if (!rawIds.length) {
+    return {
+      updates: {},
+      fetchedAt: new Date().toISOString(),
+      nextPollInMs: 60000,
+      usedProvider: false
+    };
+  }
+
+  const result = await pool.query(
+    `SELECT id, home_team, away_team, match_date, finished, external_source
+     FROM matches
+     WHERE id = ANY($1::int[])`,
+    [rawIds]
+  );
+
+  return getLiveScoresForMatches(result.rows, pool);
+}
+
 // Get all matches
 router.get('/', async (req, res) => {
   try {
@@ -22,28 +49,8 @@ router.get('/', async (req, res) => {
 // Get live score updates for selected matches
 router.get('/live', async (req, res) => {
   try {
-    const rawIds = String(req.query.ids || '')
-      .split(',')
-      .map((value) => Number.parseInt(value, 10))
-      .filter((value) => Number.isFinite(value) && value > 0);
-
-    if (!rawIds.length) {
-      return res.json({
-        updates: {},
-        fetchedAt: new Date().toISOString(),
-        nextPollInMs: 60000,
-        usedProvider: false
-      });
-    }
-
-    const result = await pool.query(
-      `SELECT id, home_team, away_team, match_date, finished, external_source
-       FROM matches
-       WHERE id = ANY($1::int[])`,
-      [rawIds]
-    );
-
-    const liveResult = await getLiveScoresForMatches(result.rows, pool);
+    const rawIds = parseLiveMatchIds(req.query.ids);
+    const liveResult = await buildLivePayload(rawIds);
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -53,6 +60,66 @@ router.get('/live', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch live scores' });
   }
+});
+
+// Stream live score updates (SSE)
+router.get('/live/stream', async (req, res) => {
+  const rawIds = parseLiveMatchIds(req.query.ids);
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  let stopped = false;
+  let timer = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  const send = (payload) => {
+    if (stopped) return;
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  const scheduleNext = (delayMs) => {
+    if (stopped) return;
+    const delay = Math.max(5000, Math.min(300000, Number(delayMs) || 60000));
+    timer = setTimeout(runTick, delay);
+  };
+
+  const runTick = async () => {
+    try {
+      const payload = await buildLivePayload(rawIds);
+      send(payload);
+      scheduleNext(payload?.nextPollInMs || 60000);
+    } catch {
+      scheduleNext(60000);
+    }
+  };
+
+  // Keep-alive comment so proxies do not close idle stream.
+  const keepAlive = setInterval(() => {
+    if (!stopped) {
+      res.write(': keep-alive\n\n');
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    stopped = true;
+    clearTimer();
+    clearInterval(keepAlive);
+    res.end();
+  });
+
+  runTick();
 });
 
 // Get single match

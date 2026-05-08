@@ -107,6 +107,60 @@ function MatchInfo() {
 
     let stopped = false;
     let timer = null;
+    let eventSource = null;
+
+    const applyPayload = (payload) => {
+      const updates = payload?.updates || {};
+      const nextLiveUpdate = updates[id] || updates[String(id)] || null;
+
+      if (!nextLiveUpdate || stopped) {
+        return;
+      }
+
+      setLiveUpdate(nextLiveUpdate);
+
+      // Debug logging
+      console.log('[DEBUG] Live update received:', {
+        incidents: nextLiveUpdate.incidents,
+        incidentCount: Array.isArray(nextLiveUpdate.incidents) ? nextLiveUpdate.incidents.length : 0,
+        goals: Array.isArray(nextLiveUpdate.incidents) ? nextLiveUpdate.incidents.filter(inc => inc.type === 'goal') : []
+      });
+
+      const previous = previousLiveRef.current;
+      const nextHome = Number(nextLiveUpdate.homeGoals);
+      const nextAway = Number(nextLiveUpdate.awayGoals);
+      const previousHome = Number(previous?.homeGoals);
+      const previousAway = Number(previous?.awayGoals);
+
+      setTickerEvents((prevEvents) => {
+        const nextEvents = [...prevEvents];
+
+        if (nextLiveUpdate.isLive && !previous?.isLive) {
+          nextEvents.unshift(buildTickerEvent('start', 'Anpfiff - das Spiel laeuft jetzt live.'));
+        }
+
+        if (
+          Number.isFinite(nextHome)
+          && Number.isFinite(nextAway)
+          && Number.isFinite(previousHome)
+          && Number.isFinite(previousAway)
+          && (nextHome !== previousHome || nextAway !== previousAway)
+        ) {
+          nextEvents.unshift(buildTickerEvent('goal', `Neuer Spielstand: ${nextHome}:${nextAway}`));
+        }
+
+        if (nextLiveUpdate.isFinished && !previous?.isFinished) {
+          const finalText = Number.isFinite(nextHome) && Number.isFinite(nextAway)
+            ? `Abpfiff - Endstand ${nextHome}:${nextAway}`
+            : 'Abpfiff - Spiel beendet.';
+          nextEvents.unshift(buildTickerEvent('end', finalText));
+        }
+
+        return nextEvents.slice(0, 14);
+      });
+
+      previousLiveRef.current = nextLiveUpdate;
+    };
 
     const scheduleNextPoll = (delayMs) => {
       if (stopped) {
@@ -119,54 +173,7 @@ function MatchInfo() {
       try {
         const response = await matchAPI.getLive([Number(id)]);
         const payload = response?.data || {};
-        const updates = payload?.updates || {};
-        const nextLiveUpdate = updates[id] || updates[String(id)] || null;
-
-        if (nextLiveUpdate && !stopped) {
-          setLiveUpdate(nextLiveUpdate);
-
-          // Debug logging
-          console.log('[DEBUG] Live update received:', {
-            incidents: nextLiveUpdate.incidents,
-            incidentCount: Array.isArray(nextLiveUpdate.incidents) ? nextLiveUpdate.incidents.length : 0,
-            goals: Array.isArray(nextLiveUpdate.incidents) ? nextLiveUpdate.incidents.filter(inc => inc.type === 'goal') : []
-          });
-
-          const previous = previousLiveRef.current;
-          const nextHome = Number(nextLiveUpdate.homeGoals);
-          const nextAway = Number(nextLiveUpdate.awayGoals);
-          const previousHome = Number(previous?.homeGoals);
-          const previousAway = Number(previous?.awayGoals);
-
-          setTickerEvents((prevEvents) => {
-            const nextEvents = [...prevEvents];
-
-            if (nextLiveUpdate.isLive && !previous?.isLive) {
-              nextEvents.unshift(buildTickerEvent('start', 'Anpfiff - das Spiel laeuft jetzt live.'));
-            }
-
-            if (
-              Number.isFinite(nextHome)
-              && Number.isFinite(nextAway)
-              && Number.isFinite(previousHome)
-              && Number.isFinite(previousAway)
-              && (nextHome !== previousHome || nextAway !== previousAway)
-            ) {
-              nextEvents.unshift(buildTickerEvent('goal', `Neuer Spielstand: ${nextHome}:${nextAway}`));
-            }
-
-            if (nextLiveUpdate.isFinished && !previous?.isFinished) {
-              const finalText = Number.isFinite(nextHome) && Number.isFinite(nextAway)
-                ? `Abpfiff - Endstand ${nextHome}:${nextAway}`
-                : 'Abpfiff - Spiel beendet.';
-              nextEvents.unshift(buildTickerEvent('end', finalText));
-            }
-
-            return nextEvents.slice(0, 14);
-          });
-
-          previousLiveRef.current = nextLiveUpdate;
-        }
+        applyPayload(payload);
 
         const nextPollInMs = Number(payload?.nextPollInMs) || 180000;
         const delay = Math.max(30000, Math.min(300000, nextPollInMs));
@@ -176,10 +183,48 @@ function MatchInfo() {
       }
     };
 
-    runPoll();
+    const startPollingFallback = (initialDelayMs = 0) => {
+      if (stopped) {
+        return;
+      }
+      if (initialDelayMs > 0) {
+        scheduleNextPoll(initialDelayMs);
+      } else {
+        runPoll();
+      }
+    };
+
+    const supportsSSE = typeof window !== 'undefined' && typeof window.EventSource !== 'undefined';
+    const streamUrl = matchAPI.getLiveStreamUrl([Number(id)]);
+
+    if (supportsSSE && streamUrl) {
+      eventSource = new window.EventSource(streamUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data || '{}');
+          applyPayload(payload);
+        } catch {
+          // Ignore malformed stream event and keep connection alive.
+        }
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        startPollingFallback(5000);
+      };
+    } else {
+      startPollingFallback();
+    }
 
     return () => {
       stopped = true;
+      if (eventSource) {
+        eventSource.close();
+      }
       if (timer) {
         clearTimeout(timer);
       }
