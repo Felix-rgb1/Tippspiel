@@ -75,6 +75,13 @@ function parseNumeric(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function toBooleanFlag(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  const text = String(value || '').trim().toLowerCase();
+  return text === '1' || text === 'true' || text === 'yes';
+}
+
 function extractMinute(rawStatus) {
   const text = String(rawStatus || '').trim();
   const match = text.match(/(\d{1,3})\s*'?/);
@@ -87,16 +94,37 @@ function getStatusText(candidate) {
     || candidate?.status_description
     || candidate?.event_stage_type
     || candidate?.event_stage
+    || candidate?.match_status?.stage
+    || candidate?.match_status?.live_time
     || '';
 }
 
 function toLiveCandidate(candidate) {
   const statusText = getStatusText(candidate);
-  const homeGoals = parseNumeric(candidate?.scores?.home);
-  const awayGoals = parseNumeric(candidate?.scores?.away);
+  const homeGoals = parseNumeric(candidate?.scores?.home ?? candidate?.home_score ?? candidate?.scores?.home_score);
+  const awayGoals = parseNumeric(candidate?.scores?.away ?? candidate?.away_score ?? candidate?.scores?.away_score);
 
-  const isLive = isFlashscoreLiveStatus(statusText);
-  const isFinished = isFlashscoreFinishedStatus(statusText);
+  const explicitFinished = Boolean(
+    toBooleanFlag(candidate?.is_finished)
+    || toBooleanFlag(candidate?.is_finished_after_extra_time)
+    || toBooleanFlag(candidate?.is_finished_after_penalties)
+    || toBooleanFlag(candidate?.match_status?.is_finished)
+    || toBooleanFlag(candidate?.match_status?.is_finished_after_extra_time)
+    || toBooleanFlag(candidate?.match_status?.is_finished_after_penalties)
+  );
+
+  const explicitLive = Boolean(
+    toBooleanFlag(candidate?.is_live)
+    || toBooleanFlag(candidate?.is_in_progress)
+    || toBooleanFlag(candidate?.match_status?.is_in_progress)
+    || (
+      (toBooleanFlag(candidate?.is_started) || toBooleanFlag(candidate?.match_status?.is_started))
+      && !explicitFinished
+    )
+  );
+
+  const isFinished = explicitFinished || isFlashscoreFinishedStatus(statusText);
+  const isLive = !isFinished && (explicitLive || isFlashscoreLiveStatus(statusText));
 
   return {
     sourceMatchId: candidate?.match_id || null,
