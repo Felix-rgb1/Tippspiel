@@ -134,8 +134,8 @@ export const adminAPI = {
   updateMatchResult: (matchId, homeGoals, awayGoals) =>
     apiPut(`/admin/matches/${matchId}/result`, { home_goals: homeGoals, away_goals: awayGoals }),
   getUsers: () => apiGet('/admin/users'),
-  updateUser: (userId, username, email, role) =>
-    apiPut(`/admin/users/${userId}`, { username, email, role }),
+  updateUser: (userId, username, email, role, avatar) =>
+    apiPut(`/admin/users/${userId}`, { username, email, role, ...(avatar !== undefined ? { avatar } : {}) }),
   resetUserPassword: (userId, newPassword) =>
     apiPost(`/admin/users/${userId}/reset-password`, { newPassword }),
   deleteUser: (userId) => apiDelete(`/admin/users/${userId}`),

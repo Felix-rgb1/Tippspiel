@@ -398,7 +398,7 @@ router.put('/matches/:id/result', adminMiddleware, async (req, res) => {
 router.get('/users', adminMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, email, role, created_at FROM users ORDER BY created_at DESC'
+      'SELECT id, username, email, role, avatar, created_at FROM users ORDER BY created_at DESC'
     );
 
     res.json(result.rows);
@@ -412,7 +412,7 @@ router.get('/users', adminMiddleware, async (req, res) => {
 router.put('/users/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { username, email, role } = req.body;
+    const { username, email, role, avatar } = req.body;
     const currentAdminId = String(req.user?.id || '');
     const targetUserId = String(id);
 
@@ -430,6 +430,23 @@ router.put('/users/:id', adminMiddleware, async (req, res) => {
 
     if (currentAdminId && currentAdminId === targetUserId && roleNormalized !== 'admin') {
       return res.status(400).json({ error: 'Du kannst dir die Admin-Rolle nicht selbst entziehen' });
+    }
+
+    // Validate avatar if provided
+    if (avatar !== undefined && avatar !== null) {
+      if (typeof avatar !== 'string') {
+        return res.status(400).json({ error: 'Invalid avatar' });
+      }
+      if (avatar.startsWith('data:')) {
+        if (!/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatar)) {
+          return res.status(400).json({ error: 'Invalid avatar image format' });
+        }
+        if (avatar.length > 200000) {
+          return res.status(400).json({ error: 'Avatar image too large (max ~150 KB)' });
+        }
+      } else if (avatar.length > 20) {
+        return res.status(400).json({ error: 'Invalid avatar' });
+      }
     }
 
     const duplicateResult = await pool.query(
@@ -450,10 +467,11 @@ router.put('/users/:id', adminMiddleware, async (req, res) => {
        SET username = $1,
            email = $2,
            role = $3,
+           avatar = COALESCE($4, avatar),
            updated_at = NOW()
-       WHERE id = $4
-       RETURNING id, username, email, role, created_at`,
-      [usernameNormalized, emailNormalized, roleNormalized, id]
+       WHERE id = $5
+       RETURNING id, username, email, role, avatar, created_at`,
+      [usernameNormalized, emailNormalized, roleNormalized, avatar || null, id]
     );
 
     if (result.rows.length === 0) {

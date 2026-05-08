@@ -1,9 +1,47 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { adminAPI, matchAPI, tipAPI } from '../api';
 import { getMatchThemeStyle } from '../utils/teamTheme';
 import { useAuth } from '../context/AuthContext';
 import './Admin.css';
+
+const PRESET_AVATARS = [
+  '⚽', '🏆', '🥅', '🎯', '🔥', '⚡', '💪', '🦁',
+  '🐯', '🦊', '🐺', '🦅', '🐉', '🌟', '💎', '🚀',
+  '🎸', '🎲', '🤖', '👾', '🍕', '🌮', '🍺', '☕',
+  '🌈', '❄️', '🌊', '🌙', '☀️', '🎃', '👻', '💀',
+];
+
+function AvatarDisplay({ value, size = '2rem' }) {
+  if (value && value.startsWith('data:')) {
+    return <img src={value} alt="Avatar" className="admin-avatar-img" style={{ width: size, height: size }} />;
+  }
+  return <span style={{ fontSize: size, lineHeight: 1 }}>{value || '⚽'}</span>;
+}
+
+function resizeImageToBase64(file, maxSize = 80) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 function Admin() {
   const { user: currentUser } = useAuth();
@@ -35,6 +73,8 @@ function Admin() {
   const [savingUser, setSavingUser] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [savingBonusResult, setSavingBonusResult] = useState(false);
+  const adminAvatarFileRef = useRef(null);
+  const [adminAvatarUploadError, setAdminAvatarUploadError] = useState('');
 
   // Quick edit form
   const [editForm, setEditForm] = useState({
@@ -225,8 +265,10 @@ function Admin() {
       username: user.username || '',
       email: user.email || '',
       role: user.role || 'user',
-      newPassword: ''
+      newPassword: '',
+      avatar: user.avatar || '⚽',
     });
+    setAdminAvatarUploadError('');
     setError('');
   };
 
@@ -236,8 +278,31 @@ function Admin() {
       username: '',
       email: '',
       role: 'user',
-      newPassword: ''
+      newPassword: '',
+      avatar: '⚽',
     });
+    setAdminAvatarUploadError('');
+  };
+
+  const handleAdminAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAdminAvatarUploadError('');
+    if (!file.type.startsWith('image/')) {
+      setAdminAvatarUploadError('Nur Bilddateien erlaubt');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAdminAvatarUploadError('Bild zu groß (max. 5 MB)');
+      return;
+    }
+    try {
+      const dataUrl = await resizeImageToBase64(file, 80);
+      setUserEditForm((prev) => ({ ...prev, avatar: dataUrl }));
+    } catch {
+      setAdminAvatarUploadError('Fehler beim Verarbeiten des Bildes');
+    }
+    e.target.value = '';
   };
 
   const handleSaveUser = async (userId) => {
@@ -258,7 +323,8 @@ function Admin() {
         userId,
         userEditForm.username,
         userEditForm.email,
-        userEditForm.role
+        userEditForm.role,
+        userEditForm.avatar
       );
       setSuccess('Benutzer aktualisiert');
       setTimeout(() => setSuccess(''), 2500);
@@ -884,6 +950,53 @@ function Admin() {
                             placeholder="Mindestens 6 Zeichen"
                           />
                         </div>
+                        <div className="user-edit-row">
+                          <label>Profilbild</label>
+                          <div className="admin-avatar-preview">
+                            <AvatarDisplay value={userEditForm.avatar} size="2.5rem" />
+                          </div>
+                          <div className="admin-avatar-upload-row">
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => adminAvatarFileRef.current?.click()}
+                            >
+                              📷 Bild hochladen
+                            </button>
+                            {userEditForm.avatar && userEditForm.avatar.startsWith('data:') && (
+                              <button
+                                type="button"
+                                className="btn-secondary btn-sm"
+                                onClick={() => setUserEditForm((prev) => ({ ...prev, avatar: '⚽' }))}
+                              >
+                                ✕ Entfernen
+                              </button>
+                            )}
+                            <input
+                              ref={adminAvatarFileRef}
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              onChange={handleAdminAvatarUpload}
+                            />
+                          </div>
+                          {adminAvatarUploadError && (
+                            <small style={{ color: '#dc2626' }}>{adminAvatarUploadError}</small>
+                          )}
+                          <div className="admin-avatar-grid">
+                            {PRESET_AVATARS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                className={`admin-avatar-option${userEditForm.avatar === emoji ? ' admin-avatar-option--selected' : ''}`}
+                                onClick={() => setUserEditForm((prev) => ({ ...prev, avatar: emoji }))}
+                                aria-label={emoji}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <div className="user-actions">
                           <button
                             type="button"
@@ -912,10 +1025,15 @@ function Admin() {
                       </div>
                     ) : (
                       <>
-                        <div>
-                          <strong>{user.username}</strong>
-                          <div className="user-info">{user.email}</div>
-                          <div className="user-role">{user.role === 'admin' ? '👑 Admin' : 'Spieler'}</div>
+                        <div className="user-item-info">
+                          <div className="user-item-avatar">
+                            <AvatarDisplay value={user.avatar} size="2rem" />
+                          </div>
+                          <div>
+                            <strong>{user.username}</strong>
+                            <div className="user-info">{user.email}</div>
+                            <div className="user-role">{user.role === 'admin' ? '👑 Admin' : 'Spieler'}</div>
+                          </div>
                         </div>
                         <div className="user-actions">
                           <button
