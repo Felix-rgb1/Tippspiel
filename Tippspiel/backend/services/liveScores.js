@@ -152,6 +152,9 @@ function toLiveCandidate(candidate) {
   const isFinished = explicitFinished || isFlashscoreFinishedStatus(statusText);
   const isLive = !isFinished && (explicitLive || isFlashscoreLiveStatus(statusText));
 
+  const homeRedCards = parseNumeric(candidate?.home_team?.red_cards) ?? 0;
+  const awayRedCards = parseNumeric(candidate?.away_team?.red_cards) ?? 0;
+
   return {
     sourceMatchId: candidate?.match_id || null,
     isLive,
@@ -160,6 +163,8 @@ function toLiveCandidate(candidate) {
     minute: extractMinute(statusText),
     homeGoals,
     awayGoals,
+    homeRedCards,
+    awayRedCards,
     incidents: extractIncidents(candidate)
   };
 }
@@ -257,8 +262,9 @@ function extractIncidents(details) {
         || ''
       ).trim();
 
-      if (!player && type !== 'own_goal' && type !== 'goal') {
-        return null; // Keep goal events even without player name.
+      const allowWithoutPlayer = type === 'goal' || type === 'own_goal' || type === 'red' || type === 'yellow_red' || type === 'yellow';
+      if (!player && !allowWithoutPlayer) {
+        return null;
       }
 
       // Determine if home team scored – try multiple field name patterns
@@ -275,10 +281,16 @@ function extractIncidents(details) {
         isHome = inc.team_id === inc.home_id;
       }
 
+      const fallbackPlayer = type === 'goal'
+        ? 'Unbekannter Torschuetze'
+        : (type === 'red' || type === 'yellow_red' || type === 'yellow')
+        ? 'Spieler unbekannt'
+        : '';
+
       return {
         type,
         minute,
-        player: player || (type === 'goal' ? 'Unbekannter Torschuetze' : ''),
+        player: player || fallbackPlayer,
         isHome
       };
     })
@@ -630,6 +642,9 @@ async function getLiveScoresForMatches(matches, pool = null) {
                 statusText: detailsLive.statusText || live.statusText,
                 isLive: detailsLive.isLive || live.isLive,
                 isFinished: detailsLive.isFinished || live.isFinished,
+                // Keep fixture red card counts – details endpoint doesn't provide them
+                homeRedCards: live.homeRedCards ?? 0,
+                awayRedCards: live.awayRedCards ?? 0,
                 // Keep fixture incidents as fallback when details endpoint has none.
                 incidents: Array.isArray(detailsLive.incidents) && detailsLive.incidents.length > 0
                   ? detailsLive.incidents

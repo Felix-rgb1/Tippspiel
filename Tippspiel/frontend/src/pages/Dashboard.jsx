@@ -466,19 +466,18 @@ function getLiveStatusLabel(liveUpdate) {
 }
 
 function getRedCardCounts(liveUpdate) {
+  // Use direct red card counts from fixture data (provided by Flashscore API)
+  const home = Number(liveUpdate?.homeRedCards) || 0;
+  const away = Number(liveUpdate?.awayRedCards) || 0;
+  // Also count from incidents array as fallback (in case of future API changes)
   const incidents = Array.isArray(liveUpdate?.incidents) ? liveUpdate.incidents : [];
-  return incidents.reduce((acc, incident) => {
-    const isRedCard = incident?.type === 'red' || incident?.type === 'yellow_red';
-    if (!isRedCard) return acc;
-
-    if (incident?.isHome === true) {
-      acc.home += 1;
-    } else if (incident?.isHome === false) {
-      acc.away += 1;
-    }
-
-    return acc;
-  }, { home: 0, away: 0 });
+  const incidentHome = incidents.filter(i => (i?.type === 'red' || i?.type === 'yellow_red') && i?.isHome === true).length;
+  const incidentAway = incidents.filter(i => (i?.type === 'red' || i?.type === 'yellow_red') && i?.isHome === false).length;
+  return {
+    home: Math.max(home, incidentHome),
+    away: Math.max(away, incidentAway),
+    unknown: 0
+  };
 }
 
 function Dashboard() {
@@ -1120,7 +1119,7 @@ function Dashboard() {
               const isScoreFlashing = Boolean(scoreFlashByMatch[match.id]);
               const status = getMatchStatus(match, liveUpdate);
               const redCards = getRedCardCounts(liveUpdate);
-              const hasRedCards = redCards.home > 0 || redCards.away > 0;
+              const hasRedCards = redCards.home > 0 || redCards.away > 0 || redCards.unknown > 0;
               const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
               const tipSaveState = getTipSaveState(match.id);
               const deadlinePasssed = isDeadlinePassed(match.match_date);
@@ -1164,6 +1163,9 @@ function Dashboard() {
                     <div className="live-red-cards" title="Rote Karten">
                       <span className="live-red-card-item">🟥 {homeTeamDisplay.label}: {redCards.home}</span>
                       <span className="live-red-card-item">🟥 {awayTeamDisplay.label}: {redCards.away}</span>
+                      {redCards.unknown > 0 && (
+                        <span className="live-red-card-item">🟥 Gesamt: {redCards.home + redCards.away + redCards.unknown}</span>
+                      )}
                     </div>
                   )}
                   {liveUpdate?.isLive && liveUpdate.homeGoals !== null && liveUpdate.awayGoals !== null && (
@@ -1318,7 +1320,7 @@ function Dashboard() {
           const effectiveAwayGoals = liveUpdate?.awayGoals ?? match.away_goals;
           const isScoreFlashing = Boolean(scoreFlashByMatch[match.id]);
           const redCards = getRedCardCounts(liveUpdate);
-          const hasRedCards = redCards.home > 0 || redCards.away > 0;
+          const hasRedCards = redCards.home > 0 || redCards.away > 0 || redCards.unknown > 0;
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const tipSaveState = getTipSaveState(match.id);
           const deadlinePasssed = isDeadlinePassed(match.match_date);
@@ -1353,6 +1355,9 @@ function Dashboard() {
                 <div className="live-red-cards" title="Rote Karten">
                   <span className="live-red-card-item">🟥 {homeTeamDisplay.label}: {redCards.home}</span>
                   <span className="live-red-card-item">🟥 {awayTeamDisplay.label}: {redCards.away}</span>
+                  {redCards.unknown > 0 && (
+                    <span className="live-red-card-item">🟥 Gesamt: {redCards.home + redCards.away + redCards.unknown}</span>
+                  )}
                 </div>
               )}
               
