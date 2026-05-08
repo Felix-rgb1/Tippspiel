@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { userAPI, leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import BallLoader from '../components/BallLoader';
@@ -11,11 +11,52 @@ const PRESET_AVATARS = [
   '🌈', '❄️', '🌊', '🌙', '☀️', '🎃', '👻', '💀',
 ];
 
+function AvatarDisplay({ value, size = '2rem', className = '' }) {
+  if (value && value.startsWith('data:')) {
+    return (
+      <img
+        src={value}
+        alt="Avatar"
+        className={`avatar-img ${className}`}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return <span className={className} style={{ fontSize: size, lineHeight: 1 }}>{value || '⚽'}</span>;
+}
+
+function resizeImageToBase64(file, maxSize = 80) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+        // Draw centered square crop
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function Profile() {
   const { user, updateUser } = useAuth();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [avatar, setAvatar] = useState('⚽');
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef(null);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -58,6 +99,28 @@ function Profile() {
     }
   };
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadError('');
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Nur Bilddateien erlaubt (JPG, PNG, WebP)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Bild zu groß (max. 5 MB)');
+      return;
+    }
+    try {
+      const dataUrl = await resizeImageToBase64(file, 80);
+      setAvatar(dataUrl);
+    } catch {
+      setUploadError('Fehler beim Verarbeiten des Bildes');
+    }
+    // Reset so the same file can be selected again
+    e.target.value = '';
+  };
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setError('');
@@ -97,7 +160,36 @@ function Profile() {
           <form onSubmit={handleUpdateProfile}>
             <div className="form-group">
               <label>Avatar</label>
-              <div className="avatar-current">{avatar}</div>
+              <div className="avatar-current">
+                <AvatarDisplay value={avatar} size="3.5rem" />
+              </div>
+              <div className="avatar-upload-row">
+                <button
+                  type="button"
+                  className="btn-secondary avatar-upload-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  📷 Bild hochladen
+                </button>
+                {avatar && avatar.startsWith('data:') && (
+                  <button
+                    type="button"
+                    className="btn-secondary avatar-upload-btn"
+                    onClick={() => setAvatar('⚽')}
+                  >
+                    ✕ Bild entfernen
+                  </button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleImageUpload}
+                />
+              </div>
+              {uploadError && <p className="avatar-upload-error">{uploadError}</p>}
+              <p className="avatar-picker-label">Oder Emoji wählen:</p>
               <div className="avatar-grid">
                 {PRESET_AVATARS.map((emoji) => (
                   <button

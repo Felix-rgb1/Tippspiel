@@ -32,9 +32,22 @@ router.put('/profile', authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const { username, email, avatar } = req.body;
 
-    // Validate avatar: must be a single emoji or empty
-    if (avatar !== undefined && avatar !== null && typeof avatar === 'string' && avatar.length > 10) {
-      return res.status(400).json({ error: 'Invalid avatar' });
+    // Validate avatar: must be an emoji (≤20 chars) or a data URL (image/jpeg|png|webp|gif, max ~150 KB base64)
+    if (avatar !== undefined && avatar !== null) {
+      if (typeof avatar !== 'string') {
+        return res.status(400).json({ error: 'Invalid avatar' });
+      }
+      const isDataUrl = avatar.startsWith('data:');
+      if (isDataUrl) {
+        if (!/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatar)) {
+          return res.status(400).json({ error: 'Invalid avatar image format' });
+        }
+        if (avatar.length > 200000) {
+          return res.status(400).json({ error: 'Avatar image too large (max ~150 KB)' });
+        }
+      } else if (avatar.length > 20) {
+        return res.status(400).json({ error: 'Invalid avatar' });
+      }
     }
 
     const result = await pool.query(
