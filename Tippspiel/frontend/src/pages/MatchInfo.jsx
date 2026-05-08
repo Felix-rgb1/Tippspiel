@@ -424,9 +424,23 @@ function MatchInfo() {
           </div>
 
           <div className="live-scoreline">
-            <strong>{formatTeamName(insights.match.home_team)}</strong>
+            <span className="live-scoreline-team">
+              <strong>{formatTeamName(insights.match.home_team)}</strong>
+              {Number(liveUpdate?.homeRedCards) > 0 && (
+                <span className="live-scoreline-redcards" title={`${liveUpdate.homeRedCards} Rote Karte${liveUpdate.homeRedCards > 1 ? 'n' : ''}`}>
+                  {'🟥'.repeat(Number(liveUpdate.homeRedCards))}
+                </span>
+              )}
+            </span>
             <span>{liveScore}</span>
-            <strong>{formatTeamName(insights.match.away_team)}</strong>
+            <span className="live-scoreline-team live-scoreline-team-away">
+              {Number(liveUpdate?.awayRedCards) > 0 && (
+                <span className="live-scoreline-redcards" title={`${liveUpdate.awayRedCards} Rote Karte${liveUpdate.awayRedCards > 1 ? 'n' : ''}`}>
+                  {'🟥'.repeat(Number(liveUpdate.awayRedCards))}
+                </span>
+              )}
+              <strong>{formatTeamName(insights.match.away_team)}</strong>
+            </span>
           </div>
 
           {Array.isArray(liveUpdate?.incidents) && liveUpdate.incidents.length > 0 && (

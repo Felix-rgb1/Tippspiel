@@ -1144,11 +1144,13 @@ function Dashboard() {
                     <span className="next-match-team">
                       <TeamFlag teamDisplay={homeTeamDisplay} />
                       <span className="team-name">{homeTeamDisplay.label}</span>
+                      {redCards.home > 0 && <span className="red-card-symbols" title={`${redCards.home} Rote Karte${redCards.home > 1 ? 'n' : ''}`}>{'🟥'.repeat(redCards.home)}</span>}
                     </span>
                     <span className="next-vs">vs</span>
                     <span className="next-match-team">
                       <TeamFlag teamDisplay={awayTeamDisplay} />
                       <span className="team-name">{awayTeamDisplay.label}</span>
+                      {redCards.away > 0 && <span className="red-card-symbols" title={`${redCards.away} Rote Karte${redCards.away > 1 ? 'n' : ''}`}>{'🟥'.repeat(redCards.away)}</span>}
                     </span>
                   </div>
                   <div className="next-match-meta">
@@ -1159,15 +1161,7 @@ function Dashboard() {
                     )}
                   </div>
                   <span className={`match-status-badge ${status.className}`}>{status.label}</span>
-                  {hasRedCards && (
-                    <div className="live-red-cards" title="Rote Karten">
-                      <span className="live-red-card-item">🟥 {homeTeamDisplay.label}: {redCards.home}</span>
-                      <span className="live-red-card-item">🟥 {awayTeamDisplay.label}: {redCards.away}</span>
-                      {redCards.unknown > 0 && (
-                        <span className="live-red-card-item">🟥 Gesamt: {redCards.home + redCards.away + redCards.unknown}</span>
-                      )}
-                    </div>
-                  )}
+
                   {liveUpdate?.isLive && liveUpdate.homeGoals !== null && liveUpdate.awayGoals !== null && (
                     <div className={`next-live-score${isScoreFlashing ? ' score-flash' : ''}`}>{liveUpdate.homeGoals}:{liveUpdate.awayGoals}</div>
                   )}
@@ -1376,6 +1370,7 @@ function Dashboard() {
                 <div className="team">
                   <TeamFlag teamDisplay={homeTeamDisplay} />
                   <span className="team-name">{homeTeamDisplay.label}</span>
+                  {redCards.home > 0 && <span className="red-card-symbols" title={`${redCards.home} Rote Karte${redCards.home > 1 ? 'n' : ''}`}>{'🟥'.repeat(redCards.home)}</span>}
                 </div>
                 <div className="score">
                   {effectiveFinished || liveUpdate?.isLive ? (
@@ -1391,6 +1386,7 @@ function Dashboard() {
                 <div className="team">
                   <TeamFlag teamDisplay={awayTeamDisplay} />
                   <span className="team-name">{awayTeamDisplay.label}</span>
+                  {redCards.away > 0 && <span className="red-card-symbols" title={`${redCards.away} Rote Karte${redCards.away > 1 ? 'n' : ''}`}>{'🟥'.repeat(redCards.away)}</span>}
                 </div>
               </div>
 

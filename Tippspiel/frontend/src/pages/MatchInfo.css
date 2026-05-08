@@ -130,6 +130,24 @@
   color: #0f172a;
 }
 
+.live-scoreline-team {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.live-scoreline-team-away {
+  justify-content: flex-end;
+}
+
+.live-scoreline-redcards {
+  font-size: 0.9rem;
+  line-height: 1;
+  letter-spacing: 0.05rem;
+  cursor: default;
+}
+
 .live-scoreline span {
   display: inline-flex;
   align-items: center;
