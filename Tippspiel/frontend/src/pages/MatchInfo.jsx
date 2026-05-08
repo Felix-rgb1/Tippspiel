@@ -262,6 +262,7 @@ function MatchInfo() {
   const showLiveTicker = Boolean(liveUpdate?.isLive || liveUpdate?.isFinished || tickerEvents.length > 0);
   const LIVE_SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
   const rawLiveStatus = String(liveUpdate?.statusText || '').trim().toUpperCase();
+  const isHalfTime = ['HT', 'HALF TIME', 'HALFTIME', 'PAUSE', 'BREAK'].includes(rawLiveStatus);
   const liveMinuteText = LIVE_SPECIAL_STAGES.includes(rawLiveStatus)
     ? rawLiveStatus
     : (Number.isFinite(Number(liveUpdate?.minute)) && Number(liveUpdate.minute) > 0 ? `${Number(liveUpdate.minute)}'` : '');
@@ -334,7 +335,9 @@ function MatchInfo() {
               <h2>Liveticker</h2>
             </div>
             <div className={`live-badge ${liveUpdate?.isLive ? 'is-live' : (liveUpdate?.isFinished ? 'is-finished' : '')}`}>
-              {liveUpdate?.isLive ? `LIVE ${liveMinuteText}`.trim() : (liveUpdate?.isFinished ? 'Abgeschlossen' : 'Aktualisierung laeuft')}
+              {liveUpdate?.isLive
+                ? (isHalfTime ? 'Halbzeit' : `LIVE ${liveMinuteText}`.trim())
+                : (liveUpdate?.isFinished ? 'Abgeschlossen' : 'Aktualisierung laeuft')}
             </div>
           </div>
 

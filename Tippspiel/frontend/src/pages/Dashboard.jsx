@@ -857,6 +857,10 @@ function Dashboard() {
     if (liveUpdate?.isLive) {
       const SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
       const rawStatus = String(liveUpdate.statusText || '').trim().toUpperCase();
+      const isHalfTime = ['HT', 'HALF TIME', 'HALFTIME', 'PAUSE', 'BREAK'].includes(rawStatus);
+      if (isHalfTime) {
+        return { label: 'Halbzeit', className: 'status-live' };
+      }
       const minute = SPECIAL_STAGES.includes(rawStatus)
         ? rawStatus
         : (Number.isFinite(liveUpdate.minute) && liveUpdate.minute > 0 ? `${liveUpdate.minute}'` : '');
