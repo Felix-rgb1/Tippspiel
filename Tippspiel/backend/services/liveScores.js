@@ -193,11 +193,32 @@ function extractIncidents(details) {
 
       // Normalise type – Flashscore uses various naming conventions
       const rawType = String(
-        inc.incident_type || inc.type || inc.event_type || inc.event_category || ''
+        inc.incident_type
+        || inc.type
+        || inc.event_type
+        || inc.event_category
+        || inc.event_name
+        || inc.category
+        || inc.action
+        || ''
       ).toLowerCase().replace(/[_\s-]/g, '');
 
+      const fallbackText = String(
+        inc.description
+        || inc.player_text
+        || inc.text
+        || inc.comment
+        || ''
+      ).toLowerCase();
+
       let type = null;
-      if (/goal|score|gol/.test(rawType) && !/own/.test(rawType) && !/missed|penalty_missed/.test(rawType)) {
+      const hasGoalHint = /goal|score|gol/.test(rawType)
+        || toBooleanFlag(inc.is_goal)
+        || toBooleanFlag(inc.goal)
+        || fallbackText.includes('goal')
+        || fallbackText.includes('tor');
+
+      if (hasGoalHint && !/own/.test(rawType) && !/missed|penalty_missed/.test(rawType)) {
         type = 'goal';
       } else if (/owngoal|og/.test(rawType)) {
         type = 'own_goal';
@@ -220,12 +241,23 @@ function extractIncidents(details) {
 
       // Extract player name – try multiple field names
       const player = String(
-        inc.player_name || inc.player || inc.name || inc.player_text || inc.description 
-        || inc.scorer || inc.goal_scorer || inc.person || inc.actor || ''
+        inc.player_name
+        || inc.player
+        || inc.player?.name
+        || inc.name
+        || inc.player_text
+        || inc.description
+        || inc.scorer
+        || inc.goal_scorer
+        || inc.person
+        || inc.actor
+        || inc.athlete
+        || inc.participant_name
+        || ''
       ).trim();
 
-      if (!player && type !== 'own_goal') {
-        return null; // Skip events without player info (unless own goal)
+      if (!player && type !== 'own_goal' && type !== 'goal') {
+        return null; // Keep goal events even without player name.
       }
 
       // Determine if home team scored – try multiple field name patterns
@@ -242,7 +274,12 @@ function extractIncidents(details) {
         isHome = inc.team_id === inc.home_id;
       }
 
-      return { type, minute, player, isHome };
+      return {
+        type,
+        minute,
+        player: player || (type === 'goal' ? 'Unbekannter Torschuetze' : ''),
+        isHome
+      };
     })
     .filter(Boolean)
     .sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999));
