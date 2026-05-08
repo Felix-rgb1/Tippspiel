@@ -419,6 +419,38 @@ function TeamFlag({ teamDisplay }) {
   );
 }
 
+function normalizeLiveStatus(statusText) {
+  return String(statusText || '').trim().toUpperCase();
+}
+
+function getLiveStatusLabel(liveUpdate) {
+  const rawStatus = normalizeLiveStatus(liveUpdate?.statusText);
+  const stageMap = {
+    HT: 'Halbzeit',
+    'HALF TIME': 'Halbzeit',
+    HALFTIME: 'Halbzeit',
+    PAUSE: 'Halbzeit',
+    BREAK: 'Halbzeit',
+    INT: 'Unterbrechung',
+    '1H': '1. Halbzeit',
+    '2H': '2. Halbzeit',
+    ET: 'Verlaengerung',
+    AET: 'Verlaengerung',
+    PEN: 'Elfmeterschiessen'
+  };
+
+  if (stageMap[rawStatus]) {
+    return stageMap[rawStatus];
+  }
+
+  const minute = Number(liveUpdate?.minute);
+  if (Number.isFinite(minute) && minute > 0) {
+    return `Live ${minute}'`;
+  }
+
+  return 'Live';
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
@@ -439,10 +471,15 @@ function Dashboard() {
   const [now, setNow] = useState(new Date());
   const [liveUpdatesByMatch, setLiveUpdatesByMatch] = useState({});
   const [scoreFlashByMatch, setScoreFlashByMatch] = useState({});
+  const [liveUpdateFlashByMatch, setLiveUpdateFlashByMatch] = useState({});
   const [goalToasts, setGoalToasts] = useState([]);
   const [lastWinner, setLastWinner] = useState(null);
+  const [liveConnectionMode, setLiveConnectionMode] = useState('idle');
+  const [lastLiveEventAt, setLastLiveEventAt] = useState(null);
   const previousLiveScoreRef = useRef({});
+  const previousLiveMetaRef = useRef({});
   const scoreFlashTimersRef = useRef({});
+  const liveUpdateFlashTimersRef = useRef({});
   const goalToastTimersRef = useRef({});
   const { user } = useAuth();
 
@@ -486,6 +523,7 @@ function Dashboard() {
 
     if (!candidateIds.length) {
       console.log('[POLL-DEBUG] No candidates for polling - skipping');
+      setLiveConnectionMode('idle');
       return undefined;
     }
 
@@ -500,6 +538,7 @@ function Dashboard() {
     const applyPayload = (payload) => {
       const updates = payload?.updates || {};
       if (!stopped) {
+        setLastLiveEventAt(new Date());
         setLiveUpdatesByMatch((prev) => ({
           ...prev,
           ...updates
@@ -523,6 +562,7 @@ function Dashboard() {
       try {
         const response = await matchAPI.getLive(candidateIds);
         const payload = response?.data || {};
+        setLiveConnectionMode('polling');
         applyPayload(payload);
 
         const nextPollInMs = Number(payload.nextPollInMs) || 60000;
@@ -548,11 +588,17 @@ function Dashboard() {
     const streamUrl = matchAPI.getLiveStreamUrl(candidateIds);
 
     if (supportsSSE && streamUrl) {
+      setLiveConnectionMode('connecting');
       eventSource = new window.EventSource(streamUrl);
+
+      eventSource.onopen = () => {
+        setLiveConnectionMode('sse');
+      };
 
       eventSource.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data || '{}');
+          setLiveConnectionMode('sse');
           applyPayload(payload);
         } catch {
           // Ignore malformed stream event and keep connection alive.
@@ -560,6 +606,7 @@ function Dashboard() {
       };
 
       eventSource.onerror = () => {
+        setLiveConnectionMode('polling');
         if (eventSource) {
           eventSource.close();
           eventSource = null;
@@ -567,6 +614,7 @@ function Dashboard() {
         startPollingFallback(5000);
       };
     } else {
+      setLiveConnectionMode('polling');
       startPollingFallback();
     }
 
@@ -585,15 +633,39 @@ function Dashboard() {
     Object.entries(liveUpdatesByMatch || {}).forEach(([matchId, update]) => {
       const homeGoals = Number(update?.homeGoals);
       const awayGoals = Number(update?.awayGoals);
-
-      if (!Number.isFinite(homeGoals) || !Number.isFinite(awayGoals)) {
-        return;
-      }
-
-      const nextScore = `${homeGoals}:${awayGoals}`;
+      const hasScore = Number.isFinite(homeGoals) && Number.isFinite(awayGoals);
+      const nextScore = hasScore ? `${homeGoals}:${awayGoals}` : null;
       const previousScore = previousLiveScoreRef.current[matchId];
 
-      if (previousScore && previousScore !== nextScore) {
+      const nextMeta = {
+        isLive: Boolean(update?.isLive),
+        isFinished: Boolean(update?.isFinished),
+        statusText: normalizeLiveStatus(update?.statusText),
+        minute: Number.isFinite(Number(update?.minute)) ? Number(update.minute) : null,
+        score: nextScore
+      };
+      const previousMeta = previousLiveMetaRef.current[matchId];
+
+      const statusChanged = Boolean(
+        previousMeta
+        && (
+          previousMeta.isLive !== nextMeta.isLive
+          || previousMeta.isFinished !== nextMeta.isFinished
+          || previousMeta.statusText !== nextMeta.statusText
+        )
+      );
+
+      if (statusChanged) {
+        setLiveUpdateFlashByMatch((prev) => ({ ...prev, [matchId]: true }));
+        if (liveUpdateFlashTimersRef.current[matchId]) {
+          clearTimeout(liveUpdateFlashTimersRef.current[matchId]);
+        }
+        liveUpdateFlashTimersRef.current[matchId] = setTimeout(() => {
+          setLiveUpdateFlashByMatch((prev) => ({ ...prev, [matchId]: false }));
+        }, 1800);
+      }
+
+      if (hasScore && previousScore && previousScore !== nextScore) {
         const [prevHome, prevAway] = previousScore.split(':').map((goal) => Number(goal) || 0);
         const homeDiff = homeGoals - prevHome;
         const awayDiff = awayGoals - prevAway;
@@ -623,27 +695,41 @@ function Dashboard() {
           goalToastTimersRef.current[toastId] = setTimeout(() => {
             setGoalToasts((prev) => prev.filter((toast) => toast.id !== toastId));
             delete goalToastTimersRef.current[toastId];
-          }, 3200);
+          }, 5500);
         }
 
         setScoreFlashByMatch((prev) => ({ ...prev, [matchId]: true }));
+        setLiveUpdateFlashByMatch((prev) => ({ ...prev, [matchId]: true }));
 
         if (scoreFlashTimersRef.current[matchId]) {
           clearTimeout(scoreFlashTimersRef.current[matchId]);
+        }
+        if (liveUpdateFlashTimersRef.current[matchId]) {
+          clearTimeout(liveUpdateFlashTimersRef.current[matchId]);
         }
 
         scoreFlashTimersRef.current[matchId] = setTimeout(() => {
           setScoreFlashByMatch((prev) => ({ ...prev, [matchId]: false }));
         }, 1100);
+
+        liveUpdateFlashTimersRef.current[matchId] = setTimeout(() => {
+          setLiveUpdateFlashByMatch((prev) => ({ ...prev, [matchId]: false }));
+        }, 1800);
       }
 
-      previousLiveScoreRef.current[matchId] = nextScore;
+      if (hasScore) {
+        previousLiveScoreRef.current[matchId] = nextScore;
+      }
+      previousLiveMetaRef.current[matchId] = nextMeta;
     });
   }, [liveUpdatesByMatch, matches]);
 
   useEffect(() => {
     return () => {
       Object.values(scoreFlashTimersRef.current).forEach((timerId) => {
+        clearTimeout(timerId);
+      });
+      Object.values(liveUpdateFlashTimersRef.current).forEach((timerId) => {
         clearTimeout(timerId);
       });
       Object.values(goalToastTimersRef.current).forEach((timerId) => {
@@ -855,16 +941,7 @@ function Dashboard() {
 
   const getMatchStatus = (match, liveUpdate) => {
     if (liveUpdate?.isLive) {
-      const SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
-      const rawStatus = String(liveUpdate.statusText || '').trim().toUpperCase();
-      const isHalfTime = ['HT', 'HALF TIME', 'HALFTIME', 'PAUSE', 'BREAK'].includes(rawStatus);
-      if (isHalfTime) {
-        return { label: 'Halbzeit', className: 'status-live' };
-      }
-      const minute = SPECIAL_STAGES.includes(rawStatus)
-        ? rawStatus
-        : (Number.isFinite(liveUpdate.minute) && liveUpdate.minute > 0 ? `${liveUpdate.minute}'` : '');
-      return { label: `Live ${minute}`.trim(), className: 'status-live' };
+      return { label: getLiveStatusLabel(liveUpdate), className: 'status-live' };
     }
 
     if (liveUpdate?.isFinished || match.finished) {
@@ -924,12 +1001,26 @@ function Dashboard() {
     m => !m.finished && !isDeadlinePassed(m.match_date) && !tips[m.id]
   ).length;
 
+  const liveConnectionText = (() => {
+    if (liveConnectionMode === 'sse') return 'Live verbunden (SSE)';
+    if (liveConnectionMode === 'polling') return 'Live verbunden (Fallback)';
+    if (liveConnectionMode === 'connecting') return 'Live verbindet...';
+    return 'Live inaktiv';
+  })();
+
   return (
     <BallLoader loading={loading} title="Dashboard wird geladen" subtitle="Spiele und Tipps werden vorbereitet...">
     <div className="container">
       <div className="page-title">
         <h1>Dashboard</h1>
         <p>Geben Sie Ihre Tipps ab!</p>
+        <div className={`live-connection-chip is-${liveConnectionMode}`}>
+          <span className="dot" aria-hidden="true" />
+          <span>{liveConnectionText}</span>
+          {lastLiveEventAt && (
+            <span className="ts">letztes Update {lastLiveEventAt.toLocaleTimeString('de-DE')}</span>
+          )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -1006,7 +1097,7 @@ function Dashboard() {
               const awayTeamDisplay = getTeamDisplay(match.away_team);
 
               return (
-                <div key={`next-${match.id}`} className="next-match-card">
+                <div key={`next-${match.id}`} className={`next-match-card${liveUpdateFlashByMatch[match.id] ? ' next-match-card-updated' : ''}`}>
                   <div
                     className="next-match-teams match-info-trigger"
                     role="button"
@@ -1210,7 +1301,7 @@ function Dashboard() {
           const savedInline = Boolean(nextTipSavedByMatch[match.id]);
 
           return (
-            <div key={match.id} className={`match-card${liveUpdate?.isLive ? ' match-card-live' : ''}${effectiveFinished ? ' match-card-finished' : deadlinePasssed ? ' match-card-locked' : ''}`} style={getMatchThemeStyle(match.home_team, match.away_team)}>
+            <div key={match.id} className={`match-card${liveUpdate?.isLive ? ' match-card-live' : ''}${liveUpdateFlashByMatch[match.id] ? ' match-card-updated' : ''}${effectiveFinished ? ' match-card-finished' : deadlinePasssed ? ' match-card-locked' : ''}`} style={getMatchThemeStyle(match.home_team, match.away_team)}>
               <div className="match-topline">
                 <div className="match-date">
                   {formatDate(match.match_date)}{match.round ? ` · ${match.round}` : ''}

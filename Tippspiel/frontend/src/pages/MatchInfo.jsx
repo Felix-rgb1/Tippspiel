@@ -70,6 +70,54 @@ function buildTickerEvent(type, text) {
   };
 }
 
+function normalizeLiveStatus(statusText) {
+  return String(statusText || '').trim().toUpperCase();
+}
+
+function getLiveStageLabel(rawStatus, minute) {
+  const map = {
+    HT: 'Halbzeit',
+    'HALF TIME': 'Halbzeit',
+    HALFTIME: 'Halbzeit',
+    PAUSE: 'Halbzeit',
+    BREAK: 'Halbzeit',
+    INT: 'Unterbrechung',
+    '1H': '1. Halbzeit',
+    '2H': '2. Halbzeit',
+    ET: 'Verlaengerung',
+    AET: 'Verlaengerung',
+    PEN: 'Elfmeterschiessen'
+  };
+
+  if (map[rawStatus]) {
+    return map[rawStatus];
+  }
+
+  if (Number.isFinite(Number(minute)) && Number(minute) > 0) {
+    return `LIVE ${Number(minute)}'`;
+  }
+
+  return 'LIVE';
+}
+
+function getTickerStatusText(rawStatus) {
+  const map = {
+    HT: 'Halbzeit.',
+    'HALF TIME': 'Halbzeit.',
+    HALFTIME: 'Halbzeit.',
+    PAUSE: 'Halbzeit.',
+    BREAK: 'Halbzeit.',
+    INT: 'Spiel unterbrochen.',
+    '1H': '1. Halbzeit laeuft.',
+    '2H': '2. Halbzeit laeuft.',
+    ET: 'Verlaengerung laeuft.',
+    AET: 'Nach Verlaengerung.',
+    PEN: 'Elfmeterschiessen laeuft.'
+  };
+
+  return map[rawStatus] || null;
+}
+
 function MatchInfo() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -79,6 +127,8 @@ function MatchInfo() {
   const [insights, setInsights] = useState(null);
   const [liveUpdate, setLiveUpdate] = useState(null);
   const [tickerEvents, setTickerEvents] = useState([]);
+  const [liveConnectionMode, setLiveConnectionMode] = useState('idle');
+  const [lastLiveEventAt, setLastLiveEventAt] = useState(null);
   const previousLiveRef = useRef(null);
   // Pre-fill basic match data passed via navigation state for instant display
   const matchPreview = locationState?.match || null;
@@ -117,6 +167,7 @@ function MatchInfo() {
         return;
       }
 
+      setLastLiveEventAt(new Date());
       setLiveUpdate(nextLiveUpdate);
 
       // Debug logging
@@ -134,6 +185,13 @@ function MatchInfo() {
 
       setTickerEvents((prevEvents) => {
         const nextEvents = [...prevEvents];
+        const previousStatus = normalizeLiveStatus(previous?.statusText);
+        const nextStatus = normalizeLiveStatus(nextLiveUpdate?.statusText);
+        const statusEventText = getTickerStatusText(nextStatus);
+
+        if (statusEventText && nextStatus && previousStatus && nextStatus !== previousStatus) {
+          nextEvents.unshift(buildTickerEvent('status', statusEventText));
+        }
 
         if (nextLiveUpdate.isLive && !previous?.isLive) {
           nextEvents.unshift(buildTickerEvent('start', 'Anpfiff - das Spiel laeuft jetzt live.'));
@@ -173,6 +231,7 @@ function MatchInfo() {
       try {
         const response = await matchAPI.getLive([Number(id)]);
         const payload = response?.data || {};
+        setLiveConnectionMode('polling');
         applyPayload(payload);
 
         const nextPollInMs = Number(payload?.nextPollInMs) || 180000;
@@ -198,11 +257,17 @@ function MatchInfo() {
     const streamUrl = matchAPI.getLiveStreamUrl([Number(id)]);
 
     if (supportsSSE && streamUrl) {
+      setLiveConnectionMode('connecting');
       eventSource = new window.EventSource(streamUrl);
+
+      eventSource.onopen = () => {
+        setLiveConnectionMode('sse');
+      };
 
       eventSource.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data || '{}');
+          setLiveConnectionMode('sse');
           applyPayload(payload);
         } catch {
           // Ignore malformed stream event and keep connection alive.
@@ -210,6 +275,7 @@ function MatchInfo() {
       };
 
       eventSource.onerror = () => {
+        setLiveConnectionMode('polling');
         if (eventSource) {
           eventSource.close();
           eventSource = null;
@@ -217,6 +283,7 @@ function MatchInfo() {
         startPollingFallback(5000);
       };
     } else {
+      setLiveConnectionMode('polling');
       startPollingFallback();
     }
 
@@ -261,11 +328,20 @@ function MatchInfo() {
 
   const showLiveTicker = Boolean(liveUpdate?.isLive || liveUpdate?.isFinished || tickerEvents.length > 0);
   const LIVE_SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
-  const rawLiveStatus = String(liveUpdate?.statusText || '').trim().toUpperCase();
+  const rawLiveStatus = normalizeLiveStatus(liveUpdate?.statusText);
   const isHalfTime = ['HT', 'HALF TIME', 'HALFTIME', 'PAUSE', 'BREAK'].includes(rawLiveStatus);
   const liveMinuteText = LIVE_SPECIAL_STAGES.includes(rawLiveStatus)
     ? rawLiveStatus
     : (Number.isFinite(Number(liveUpdate?.minute)) && Number(liveUpdate.minute) > 0 ? `${Number(liveUpdate.minute)}'` : '');
+  const liveBadgeText = liveUpdate?.isLive
+    ? getLiveStageLabel(rawLiveStatus, liveUpdate?.minute)
+    : (liveUpdate?.isFinished ? 'Abgeschlossen' : 'Aktualisierung laeuft');
+  const liveConnectionText = (() => {
+    if (liveConnectionMode === 'sse') return 'Live verbunden (SSE)';
+    if (liveConnectionMode === 'polling') return 'Live verbunden (Fallback)';
+    if (liveConnectionMode === 'connecting') return 'Live verbindet...';
+    return 'Live inaktiv';
+  })();
   const liveScore = Number.isFinite(Number(liveUpdate?.homeGoals)) && Number.isFinite(Number(liveUpdate?.awayGoals))
     ? `${Number(liveUpdate.homeGoals)}:${Number(liveUpdate.awayGoals)}`
     : '-:-';
@@ -335,10 +411,16 @@ function MatchInfo() {
               <h2>Liveticker</h2>
             </div>
             <div className={`live-badge ${liveUpdate?.isLive ? 'is-live' : (liveUpdate?.isFinished ? 'is-finished' : '')}`}>
-              {liveUpdate?.isLive
-                ? (isHalfTime ? 'Halbzeit' : `LIVE ${liveMinuteText}`.trim())
-                : (liveUpdate?.isFinished ? 'Abgeschlossen' : 'Aktualisierung laeuft')}
+              {liveBadgeText}
             </div>
+          </div>
+
+          <div className={`live-connection-indicator is-${liveConnectionMode}`}>
+            <span className="dot" aria-hidden="true" />
+            <span>{liveConnectionText}</span>
+            {lastLiveEventAt && (
+              <span className="ts">letztes Update {lastLiveEventAt.toLocaleTimeString('de-DE')}</span>
+            )}
           </div>
 
           <div className="live-scoreline">
