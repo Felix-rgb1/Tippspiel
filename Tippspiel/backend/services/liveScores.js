@@ -114,13 +114,14 @@ function extractMinute(rawStatus) {
 }
 
 function getStatusText(candidate) {
+  // Prefer detailed stage fields before generic status like "LIVE".
   return candidate?.status_type
-    || candidate?.status
     || candidate?.status_description
     || candidate?.event_stage_type
     || candidate?.event_stage
     || candidate?.match_status?.stage
     || candidate?.match_status?.live_time
+    || candidate?.status
     || '';
 }
 

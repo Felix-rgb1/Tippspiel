@@ -617,6 +617,31 @@
   color: #b91c1c;
 }
 
+.live-red-cards {
+  margin-top: 0.4rem;
+  margin-bottom: 0.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.live-red-card-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tip-inputs {
   display: flex;
   gap: 0.65rem;
@@ -1469,6 +1494,12 @@
 
 :root[data-theme='dark'] .next-live-score {
   color: #fca5a5;
+}
+
+:root[data-theme='dark'] .live-red-card-item {
+  background: rgba(127, 29, 29, 0.3);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
 }
 
 /* Professional Dashboard Refresh */
