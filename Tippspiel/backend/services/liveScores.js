@@ -592,7 +592,10 @@ async function getLiveScoresForMatches(matches, pool = null) {
                 statusText: detailsLive.statusText || live.statusText,
                 isLive: detailsLive.isLive || live.isLive,
                 isFinished: detailsLive.isFinished || live.isFinished,
-                incidents: [] // Don't try to extract incidents - Flashscore API doesn't provide goal scorer data
+                // Keep fixture incidents as fallback when details endpoint has none.
+                incidents: Array.isArray(detailsLive.incidents) && detailsLive.incidents.length > 0
+                  ? detailsLive.incidents
+                  : (Array.isArray(live.incidents) ? live.incidents : [])
               };
             }
           } catch (err) {
