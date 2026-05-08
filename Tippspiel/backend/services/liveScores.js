@@ -8,10 +8,35 @@ const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS ||
 const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '60000', 10);
 const LIVE_MATCH_TIME_TOLERANCE_MS = Number.parseInt(process.env.LIVE_MATCH_TIME_TOLERANCE_MS || '43200000', 10);
 const MATCH_DETAILS_CACHE_MS = Number.parseInt(process.env.MATCH_DETAILS_CACHE_MS || '300000', 10); // 5 min default
+const MATCH_DETAILS_LIVE_CACHE_MS = Number.parseInt(process.env.MATCH_DETAILS_LIVE_CACHE_MS || '20000', 10);
+const LIVE_DEBUG_MATCH_ID = Number.parseInt(process.env.LIVE_DEBUG_MATCH_ID || '', 10);
+const LIVE_DEBUG_EXTERNAL_ID = Number.parseInt(process.env.LIVE_DEBUG_EXTERNAL_ID || '', 10);
+const LIVE_DEBUG_TEAM_QUERY = String(process.env.LIVE_DEBUG_TEAM_QUERY || '').trim().toLowerCase();
 
 const flashscoreCacheByTournament = new Map();
 const flashscoreInFlightByTournament = new Map();
 const matchDetailsCache = new Map(); // Cache für Match-Details
+
+function shouldDebugMatch(match) {
+  if (!match) return false;
+
+  const dbId = Number.parseInt(String(match.id || ''), 10);
+  const externalId = Number.parseInt(String(match.external_id || ''), 10);
+  const teams = `${String(match.home_team || '')} ${String(match.away_team || '')}`.toLowerCase();
+
+  if (Number.isFinite(LIVE_DEBUG_MATCH_ID) && dbId === LIVE_DEBUG_MATCH_ID) return true;
+  if (Number.isFinite(LIVE_DEBUG_EXTERNAL_ID) && externalId === LIVE_DEBUG_EXTERNAL_ID) return true;
+  if (LIVE_DEBUG_TEAM_QUERY && teams.includes(LIVE_DEBUG_TEAM_QUERY)) return true;
+  return false;
+}
+
+function logLiveDebug(match, label, payload = {}) {
+  const id = match?.id ?? '?';
+  const home = String(match?.home_team || '?');
+  const away = String(match?.away_team || '?');
+  const prefix = `[LIVE-DEBUG][${id}] ${home} vs ${away} :: ${label}`;
+  console.log(prefix, payload);
+}
 
 function toNumericExternalId(rawMatchId) {
   const input = String(rawMatchId || '');
@@ -412,29 +437,27 @@ async function getTournamentFixturesCached(rapidOptions) {
 async function getMatchDetailsWithCache(matchId, isLive = false) {
   const now = Date.now();
   const cached = matchDetailsCache.get(matchId);
+  const ttlMs = isLive
+    ? Math.max(5000, MATCH_DETAILS_LIVE_CACHE_MS)
+    : Math.max(30000, MATCH_DETAILS_CACHE_MS);
 
   // Return cached data if still valid
   if (cached && cached.expiresAt > now) {
     return cached.data;
   }
 
-  // If match is live and cache is stale, update asynchronously (fire-and-forget)
-  // This keeps the response fast while still getting fresh live data
-  if (isLive && (!cached || cached.expiresAt <= now)) {
-    (async () => {
-      try {
-        const freshDetails = await fetchFlashscoreMatchDetails(matchId);
-        if (freshDetails) {
-          matchDetailsCache.set(matchId, {
-            data: freshDetails,
-            expiresAt: now + MATCH_DETAILS_CACHE_MS
-          });
-        }
-      } catch (err) {
-        // Silent fail - keep using cached data on error
-        console.warn(`[MATCH-DETAILS-CACHE] Failed to refresh details for match ${matchId}:`, err.message);
-      }
-    })();
+  try {
+    const freshDetails = await fetchFlashscoreMatchDetails(matchId);
+    if (freshDetails) {
+      matchDetailsCache.set(matchId, {
+        data: freshDetails,
+        expiresAt: Date.now() + ttlMs
+      });
+      return freshDetails;
+    }
+  } catch (err) {
+    // Keep stale cache on fetch error to avoid breaking live status rendering.
+    console.warn(`[MATCH-DETAILS-CACHE] Failed to refresh details for match ${matchId}:`, err.message);
   }
 
   // Return cached data (even if stale) or null if no cache exists
@@ -506,20 +529,59 @@ async function getLiveScoresForMatches(matches, pool = null) {
       latestFetchedAt = fixturesResult.fetchedAt;
 
       for (const match of group.matches) {
+        const debugMatch = shouldDebugMatch(match);
         const best = findBestCandidateForMatch(match, fixtures);
         if (!best) {
+          if (debugMatch) {
+            logLiveDebug(match, 'no-candidate', {
+              fixturesInGroup: fixtures.length,
+              externalId: match.external_id || null
+            });
+          }
           continue;
         }
 
         let live = toLiveCandidate(best);
+
+        if (debugMatch) {
+          logLiveDebug(match, 'fixture-candidate', {
+            fixtureMatchId: best.match_id || best.id || best.event_id || null,
+            statusText: live.statusText,
+            minute: live.minute,
+            isLive: live.isLive,
+            isFinished: live.isFinished,
+            homeGoals: live.homeGoals,
+            awayGoals: live.awayGoals
+          });
+        }
 
         // Only fetch details for live matches to reduce API usage
         // (Fixture data from tournament endpoint is good enough for non-live matches)
         // Use smart cache: return fast, update async if live
         if (best?.match_id && live.isLive) {
           try {
+            const detailsCacheBefore = matchDetailsCache.get(best.match_id);
+            const detailsCacheAgeMs = detailsCacheBefore
+              ? Math.max(0, Date.now() - (detailsCacheBefore.expiresAt - Math.max(5000, MATCH_DETAILS_LIVE_CACHE_MS)))
+              : null;
+
             const details = await getMatchDetailsWithCache(best.match_id, true);
             const detailsLive = toLiveCandidateFromDetails(details);
+
+            if (debugMatch) {
+              logLiveDebug(match, 'details-fetch', {
+                matchId: best.match_id,
+                hadCacheBefore: Boolean(detailsCacheBefore),
+                cacheAgeMsApprox: detailsCacheAgeMs,
+                detailsStatus: detailsLive?.statusText || null,
+                detailsMinute: detailsLive?.minute ?? null,
+                detailsIsLive: detailsLive?.isLive ?? null,
+                detailsIsFinished: detailsLive?.isFinished ?? null,
+                detailsHomeGoals: detailsLive?.homeGoals ?? null,
+                detailsAwayGoals: detailsLive?.awayGoals ?? null
+              });
+            }
+
             if (detailsLive) {
               // Merge details with live data, preferring details for completeness
               live = {
@@ -543,12 +605,30 @@ async function getLiveScoresForMatches(matches, pool = null) {
           hasLiveMatch = true;
         }
 
+        if (debugMatch) {
+          logLiveDebug(match, 'final-live-state', {
+            statusText: live.statusText,
+            minute: live.minute,
+            isLive: live.isLive,
+            isFinished: live.isFinished,
+            homeGoals: live.homeGoals,
+            awayGoals: live.awayGoals
+          });
+        }
+
         if (live.homeGoals !== null && live.awayGoals !== null) {
           updates[match.id] = {
             ...live,
             incidents: Array.isArray(live.incidents) ? live.incidents : [],
             fetchedAt: fixturesResult.fetchedAt
           };
+
+          if (debugMatch) {
+            logLiveDebug(match, 'sent-update', {
+              sent: true,
+              reason: 'has-score-values'
+            });
+          }
 
           // Debug logging for goalscorers
           if (Array.isArray(live.incidents) && live.incidents.length > 0) {
@@ -572,6 +652,15 @@ async function getLiveScoresForMatches(matches, pool = null) {
               console.warn(`Failed to save finished match scores for match ${match.id}:`, err.message);
             }
           }
+        } else if (debugMatch) {
+          logLiveDebug(match, 'not-sent-update', {
+            sent: false,
+            reason: 'missing-score-values',
+            homeGoals: live.homeGoals,
+            awayGoals: live.awayGoals,
+            isLive: live.isLive,
+            minute: live.minute
+          });
         }
       }
 
