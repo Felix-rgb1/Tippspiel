@@ -624,9 +624,6 @@
   letter-spacing: 0.05rem;
   cursor: default;
 }
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 .tip-inputs {
   display: flex;
