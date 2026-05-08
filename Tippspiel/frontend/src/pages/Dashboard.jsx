@@ -1119,7 +1119,6 @@ function Dashboard() {
               const isScoreFlashing = Boolean(scoreFlashByMatch[match.id]);
               const status = getMatchStatus(match, liveUpdate);
               const redCards = getRedCardCounts(liveUpdate);
-              const hasRedCards = redCards.home > 0 || redCards.away > 0 || redCards.unknown > 0;
               const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
               const tipSaveState = getTipSaveState(match.id);
               const deadlinePasssed = isDeadlinePassed(match.match_date);
@@ -1314,7 +1313,6 @@ function Dashboard() {
           const effectiveAwayGoals = liveUpdate?.awayGoals ?? match.away_goals;
           const isScoreFlashing = Boolean(scoreFlashByMatch[match.id]);
           const redCards = getRedCardCounts(liveUpdate);
-          const hasRedCards = redCards.home > 0 || redCards.away > 0 || redCards.unknown > 0;
           const tip = tips[match.id] || { home_goals: 0, away_goals: 0 };
           const tipSaveState = getTipSaveState(match.id);
           const deadlinePasssed = isDeadlinePassed(match.match_date);
@@ -1345,15 +1343,6 @@ function Dashboard() {
                 </div>
                 <span className={`match-status-badge ${status.className}`}>{status.label}</span>
               </div>
-              {hasRedCards && (
-                <div className="live-red-cards" title="Rote Karten">
-                  <span className="live-red-card-item">🟥 {homeTeamDisplay.label}: {redCards.home}</span>
-                  <span className="live-red-card-item">🟥 {awayTeamDisplay.label}: {redCards.away}</span>
-                  {redCards.unknown > 0 && (
-                    <span className="live-red-card-item">🟥 Gesamt: {redCards.home + redCards.away + redCards.unknown}</span>
-                  )}
-                </div>
-              )}
               
               <div
                 className="match-teams match-info-trigger"
