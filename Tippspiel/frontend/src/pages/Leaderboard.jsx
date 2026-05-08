@@ -147,7 +147,7 @@ function Leaderboard() {
           {topThree.map((entry, index) => (
             <div key={`podium-${entry.id}`} className={`podium-card podium-${index + 1}`}>
               <div className="podium-rank">{index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : '🥉'} Platz {index + 1}</div>
-              <div className="podium-name">{entry.username}</div>
+              <div className="podium-name"><span aria-hidden="true">{entry.avatar || '⚽'}</span> {entry.username}</div>
               <div className="podium-points">{entry.total_points || 0} Punkte</div>
             </div>
           ))}
@@ -205,6 +205,7 @@ function Leaderboard() {
               {trendEl}
             </div>
             <div className="col-name">
+              <span className="entry-avatar" aria-hidden="true">{entry.avatar || '⚽'}</span>
               {entry.username}
               {isLastRow && <span className="last-lantern" title="Rote Laterne" aria-label="Rote Laterne">🏮</span>}
               {isOwnRow && <span className="own-pill">Du</span>}
@@ -247,7 +248,7 @@ function Leaderboard() {
             {matchdayEntries.map((entry, index) => (
               <div key={`matchday-${entry.id}`} className="table-row matchday-grid">
                 <div className="col-rank">{index + 1}.</div>
-                <div className="col-name">{entry.username}</div>
+                <div className="col-name"><span className="entry-avatar" aria-hidden="true">{entry.avatar || '⚽'}</span>{entry.username}</div>
                 <div className="col-points">{entry.tips_count || 0}</div>
                 <div className="col-points"><strong>{entry.round_points || 0}</strong></div>
               </div>

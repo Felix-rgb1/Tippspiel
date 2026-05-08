@@ -4,6 +4,57 @@
   gap: 1.5rem;
 }
 
+/* Avatar picker */
+.avatar-current {
+  font-size: 3rem;
+  text-align: center;
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+}
+
+.avatar-option {
+  font-size: 1.5rem;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.avatar-option:hover {
+  background: var(--gray-100, rgba(0,0,0,0.06));
+}
+
+.avatar-option--selected {
+  border-color: var(--primary, #4f46e5);
+  background: rgba(79, 70, 229, 0.1);
+}
+
+:root[data-theme='dark'] .avatar-option:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+:root[data-theme='dark'] .avatar-option--selected {
+  border-color: #818cf8;
+  background: rgba(129, 140, 248, 0.15);
+}
+
+/* Leaderboard avatar badge */
+.entry-avatar {
+  font-size: 1.1rem;
+  margin-right: 0.3rem;
+}
+
+
 .form-group {
   margin-bottom: 1.5rem;
 }

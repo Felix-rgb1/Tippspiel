@@ -4,10 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import BallLoader from '../components/BallLoader';
 import './Profile.css';
 
+const PRESET_AVATARS = [
+  '⚽', '🏆', '🥅', '🎯', '🔥', '⚡', '💪', '🦁',
+  '🐯', '🦊', '🐺', '🦅', '🐉', '🌟', '💎', '🚀',
+  '🎸', '🎲', '🤖', '👾', '🍕', '🌮', '🍺', '☕',
+  '🌈', '❄️', '🌊', '🌙', '☀️', '🎃', '👻', '💀',
+];
+
 function Profile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [avatar, setAvatar] = useState('⚽');
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,6 +33,7 @@ function Profile() {
       const profileResponse = await userAPI.getProfile();
       setUsername(profileResponse.data.username);
       setEmail(profileResponse.data.email);
+      setAvatar(profileResponse.data.avatar || '⚽');
 
       const statsResponse = await leaderboardAPI.getUserStats(user.id);
       setStats(statsResponse.data);
@@ -41,7 +50,8 @@ function Profile() {
     setSuccess('');
 
     try {
-      await userAPI.updateProfile(username, email);
+      const res = await userAPI.updateProfile(username, email, avatar);
+      updateUser({ username: res.data.username, email: res.data.email, avatar: res.data.avatar });
       setSuccess('Profil aktualisiert!');
     } catch (err) {
       setError(err.response?.data?.error || 'Fehler beim Aktualisieren');
@@ -85,6 +95,23 @@ function Profile() {
         <div className="card">
           <h2>Benutzerinformationen</h2>
           <form onSubmit={handleUpdateProfile}>
+            <div className="form-group">
+              <label>Avatar</label>
+              <div className="avatar-current">{avatar}</div>
+              <div className="avatar-grid">
+                {PRESET_AVATARS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className={`avatar-option${avatar === emoji ? ' avatar-option--selected' : ''}`}
+                    onClick={() => setAvatar(emoji)}
+                    aria-label={emoji}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="form-group">
               <label>Benutzername</label>
               <input

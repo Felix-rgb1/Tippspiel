@@ -65,6 +65,7 @@ router.get('/', async (req, res) => {
       SELECT 
         u.id,
         u.username,
+        COALESCE(u.avatar, '⚽') AS avatar,
         COALESCE(tt.tips_submitted, 0) AS tips_submitted,
         COALESCE(st.match_points, 0) AS match_points,
         COALESCE(bt.bonus_points, 0) AS bonus_points,
@@ -126,6 +127,7 @@ router.get('/', async (req, res) => {
       SELECT
         u.id,
         u.username,
+        COALESCE(u.avatar, '⚽') AS avatar,
         COALESCE(tt.tips_submitted, 0) AS tips_submitted,
         COALESCE(st.match_points, 0) AS match_points,
         0 AS bonus_points,
@@ -204,13 +206,14 @@ router.get('/matchday', async (req, res) => {
       SELECT
         u.id,
         u.username,
+        COALESCE(u.avatar, '⚽') AS avatar,
         COALESCE(SUM(rst.points), 0) AS round_points,
         COALESCE(COUNT(rst.points), 0) AS tips_count,
         COALESCE(SUM(rst.exact_hit), 0) AS exact_matches,
         COALESCE(SUM(rst.trend_hit), 0) AS trend_matches
       FROM users u
       LEFT JOIN round_scored_tips rst ON rst.user_id = u.id
-      GROUP BY u.id, u.username
+      GROUP BY u.id, u.username, u.avatar
       ORDER BY round_points DESC, exact_matches DESC, trend_matches DESC, u.username ASC
     `, [selectedRound]);
 

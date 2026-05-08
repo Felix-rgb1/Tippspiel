@@ -107,8 +107,8 @@ export const leaderboardAPI = {
 // User
 export const userAPI = {
   getProfile: () => apiGet('/user/profile'),
-  updateProfile: (username, email) =>
-    apiPut('/user/profile', { username, email }),
+  updateProfile: (username, email, avatar) =>
+    apiPut('/user/profile', { username, email, ...(avatar !== undefined ? { avatar } : {}) }),
   changePassword: (oldPassword, newPassword) =>
     apiPost('/user/change-password', { oldPassword, newPassword }),
 };

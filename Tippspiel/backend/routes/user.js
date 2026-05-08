@@ -11,7 +11,7 @@ router.get('/profile', authMiddleware, async (req, res) => {
     const userId = req.user.id;
 
     const result = await pool.query(
-      'SELECT id, username, email, role, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, role, avatar, created_at FROM users WHERE id = $1',
       [userId]
     );
 
@@ -30,11 +30,16 @@ router.get('/profile', authMiddleware, async (req, res) => {
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { username, email } = req.body;
+    const { username, email, avatar } = req.body;
+
+    // Validate avatar: must be a single emoji or empty
+    if (avatar !== undefined && avatar !== null && typeof avatar === 'string' && avatar.length > 10) {
+      return res.status(400).json({ error: 'Invalid avatar' });
+    }
 
     const result = await pool.query(
-      'UPDATE users SET username = $1, email = $2, updated_at = NOW() WHERE id = $3 RETURNING id, username, email, role, created_at',
-      [username || req.user.username, email, userId]
+      'UPDATE users SET username = $1, email = $2, avatar = COALESCE($3, avatar), updated_at = NOW() WHERE id = $4 RETURNING id, username, email, role, avatar, created_at',
+      [username || req.user.username, email, avatar || null, userId]
     );
 
     res.json(result.rows[0]);
