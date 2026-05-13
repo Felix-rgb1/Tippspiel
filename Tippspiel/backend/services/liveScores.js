@@ -4,7 +4,7 @@ const {
   fetchFlashscoreMatchDetails
 } = require('./rapidApi');
 
-const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '15000', 10);
+const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '10000', 10);
 const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS || '60000', 10);
 const LIVE_MATCH_TIME_TOLERANCE_MS = Number.parseInt(process.env.LIVE_MATCH_TIME_TOLERANCE_MS || '43200000', 10);
 const MATCH_DETAILS_CACHE_MS = Number.parseInt(process.env.MATCH_DETAILS_CACHE_MS || '300000', 10); // 5 min default

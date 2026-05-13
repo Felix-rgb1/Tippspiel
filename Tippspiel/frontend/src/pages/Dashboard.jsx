@@ -522,7 +522,10 @@ function Dashboard() {
   }, []);
 
   useEffect(() => {
-    const isFlashscoreSource = (match) => String(match.external_source || '').toLowerCase().includes('flashscore');
+    const isFlashscoreSource = (match) => {
+      const source = String(match.external_source || '').toLowerCase();
+      return source.includes('flashscore') && !source.includes('test-bundesliga');
+    };
     const isInTrackingWindow = (match) => {
       const matchTs = new Date(match.match_date).getTime();
       if (!Number.isFinite(matchTs)) {
@@ -595,7 +598,10 @@ function Dashboard() {
         applyPayload(payload);
 
         const nextPollInMs = Number(payload.nextPollInMs) || 60000;
-        const delay = Math.max(15000, Math.min(300000, nextPollInMs));
+        const updates = payload?.updates || {};
+        const hasLiveMatch = Object.values(updates).some((entry) => Boolean(entry?.isLive));
+        const minDelay = hasLiveMatch ? 5000 : 15000;
+        const delay = Math.max(minDelay, Math.min(300000, nextPollInMs));
         scheduleNextPoll(delay);
       } catch (err) {
         scheduleNextPoll(60000);
