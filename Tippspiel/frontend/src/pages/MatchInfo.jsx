@@ -118,6 +118,35 @@ function getTickerStatusText(rawStatus) {
   return map[rawStatus] || null;
 }
 
+function extractKeyStats(statsData) {
+  if (!statsData || typeof statsData !== 'object') return null;
+
+  // Extract "match" (full-game) stats
+  const matchStats = Array.isArray(statsData.match) ? statsData.match : [];
+  const stats = {};
+
+  for (const item of matchStats) {
+    const name = String(item.name || '').toLowerCase();
+    const homeVal = item.home_team;
+    const awayVal = item.away_team;
+
+    if (name.includes('possession')) {
+      stats.possession = { home: homeVal, away: awayVal };
+    } else if (name === 'total shots') {
+      stats.shots = { home: homeVal, away: awayVal };
+    } else if (name === 'shots on target') {
+      stats.shotsOnTarget = { home: homeVal, away: awayVal };
+    } else if (name.includes('corner')) {
+      stats.corners = { home: homeVal, away: awayVal };
+    } else if (name === 'fouls') {
+      stats.fouls = { home: homeVal, away: awayVal };
+    }
+  }
+
+  return Object.keys(stats).length > 0 ? stats : null;
+}
+
+
 function MatchInfo() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -129,6 +158,8 @@ function MatchInfo() {
   const [tickerEvents, setTickerEvents] = useState([]);
   const [liveConnectionMode, setLiveConnectionMode] = useState('idle');
   const [lastLiveEventAt, setLastLiveEventAt] = useState(null);
+  const [liveStats, setLiveStats] = useState(null);
+  const [liveStatsLoading, setLiveStatsLoading] = useState(false);
   const previousLiveRef = useRef(null);
   // Pre-fill basic match data passed via navigation state for instant display
   const matchPreview = locationState?.match || null;
@@ -297,6 +328,52 @@ function MatchInfo() {
       }
     };
   }, [id, insights]);
+
+  // Load live stats when match is live or just finished (load on demand, not on every update)
+  useEffect(() => {
+    // Only load stats if match is live or was just finished; don't load for matches that finished long ago
+    const isLiveOrJustFinished = liveUpdate?.isLive || liveUpdate?.isFinished;
+    if (!isLiveOrJustFinished) {
+      return undefined;
+    }
+
+    let stopped = false;
+    let timer = null;
+
+    const fetchStats = async () => {
+      if (stopped) return;
+      try {
+        setLiveStatsLoading(true);
+        const response = await matchAPI.getLiveStats(id);
+        if (!stopped) {
+          setLiveStats(response.data?.stats || null);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch live stats:', err.message);
+        // Don't show error, just silently fail for stats
+      } finally {
+        if (!stopped) {
+          setLiveStatsLoading(false);
+        }
+      }
+    };
+
+    const scheduleNextFetch = () => {
+      if (stopped) return;
+      // Update less frequently once match is finished (every 90s)
+      const interval = liveUpdate?.isLive ? 60000 : 90000;
+      timer = setTimeout(fetchStats, interval);
+    };
+
+    // Initial fetch
+    fetchStats();
+    scheduleNextFetch();
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [id, liveUpdate?.isLive, liveUpdate?.isFinished]);
 
   const sourceLabel = useMemo(() => {
     if (!insights?.source) return 'lokale Daten';
@@ -502,6 +579,83 @@ function MatchInfo() {
           </ul>
         </section>
       )}
+
+      {liveStats && (function() {
+        const keyStats = extractKeyStats(liveStats);
+        return keyStats ? (
+          <section className="card live-stats-card">
+            <div className="section-heading compact">
+              <div>
+                <span className="section-eyebrow">Live</span>
+                <h2>Spielstatistiken</h2>
+              </div>
+              {liveStatsLoading && <span className="muted">wird aktualisiert...</span>}
+            </div>
+
+            <div className="live-stats-grid">
+              {keyStats.possession && (
+                <div className="stat-panel">
+                  <div className="stat-label">Ballbesitz</div>
+                  <div className="stat-bar-container">
+                    <div className="stat-bar">
+                      <div className="stat-fill home" style={{ width: String(keyStats.possession.home).replace('%', '') + '%' }} />
+                      <div className="stat-fill away" style={{ width: String(keyStats.possession.away).replace('%', '') + '%' }} />
+                    </div>
+                    <div className="stat-values">
+                      <span className="home-val">{keyStats.possession.home}</span>
+                      <span className="away-val">{keyStats.possession.away}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {keyStats.shots && (
+                <div className="stat-panel">
+                  <div className="stat-label">Schüsse</div>
+                  <div className="stat-values-simple">
+                    <span className="home-val">{keyStats.shots.home}</span>
+                    <span className="divider">:</span>
+                    <span className="away-val">{keyStats.shots.away}</span>
+                  </div>
+                </div>
+              )}
+
+              {keyStats.shotsOnTarget && (
+                <div className="stat-panel">
+                  <div className="stat-label">Schüsse aufs Tor</div>
+                  <div className="stat-values-simple">
+                    <span className="home-val">{keyStats.shotsOnTarget.home}</span>
+                    <span className="divider">:</span>
+                    <span className="away-val">{keyStats.shotsOnTarget.away}</span>
+                  </div>
+                </div>
+              )}
+
+              {keyStats.corners && (
+                <div className="stat-panel">
+                  <div className="stat-label">Ecken</div>
+                  <div className="stat-values-simple">
+                    <span className="home-val">{keyStats.corners.home}</span>
+                    <span className="divider">:</span>
+                    <span className="away-val">{keyStats.corners.away}</span>
+                  </div>
+                </div>
+              )}
+
+              {keyStats.fouls && (
+                <div className="stat-panel">
+                  <div className="stat-label">Fouls</div>
+                  <div className="stat-values-simple">
+                    <span className="home-val">{keyStats.fouls.home}</span>
+                    <span className="divider">:</span>
+                    <span className="away-val">{keyStats.fouls.away}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null;
+      })()}
 
       <div className="card probabilities-card">
         <div className="section-heading">

@@ -1487,6 +1487,18 @@ async function fetchFlashscoreMatchDetails(matchId) {
   return payload && typeof payload === 'object' ? payload : null;
 }
 
+async function fetchFlashscoreMatchStats(matchId) {
+  if (!matchId) {
+    return null;
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/matches/match/stats', {
+    match_id: String(matchId)
+  });
+
+  return payload && typeof payload === 'object' ? payload : null;
+}
+
 module.exports = {
   isRapidApiConfigured,
   fetchRapidApiProbabilities,
@@ -1495,5 +1507,6 @@ module.exports = {
   fetchFlashscoreMatchesByDate,
   fetchFlashscoreTournamentResults,
   fetchFlashscoreMatchDetails,
+  fetchFlashscoreMatchStats,
   testRapidApi
 };

@@ -82,6 +82,7 @@ export const matchAPI = {
   getLiveStreamUrl: (ids = []) => buildApiPath(`/matches/live/stream?ids=${encodeURIComponent(ids.join(','))}`),
   getById: (id) => apiGet(`/matches/${id}`),
   getInsights: (id) => apiGet(`/matches/${id}/insights`),
+  getLiveStats: (id) => apiGet(`/matches/${id}/live-stats`),
 };
 
 // Tips

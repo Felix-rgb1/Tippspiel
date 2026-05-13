@@ -1,7 +1,8 @@
 const {
   fetchFlashscoreTournamentFixtures,
   fetchFlashscoreMatchesByDate,
-  fetchFlashscoreMatchDetails
+  fetchFlashscoreMatchDetails,
+  fetchFlashscoreMatchStats
 } = require('./rapidApi');
 
 const LIVE_CACHE_HOT_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_HOT_MS || '10000', 10);
@@ -9,6 +10,7 @@ const LIVE_CACHE_COLD_MS = Number.parseInt(process.env.LIVE_SCORE_CACHE_COLD_MS 
 const LIVE_MATCH_TIME_TOLERANCE_MS = Number.parseInt(process.env.LIVE_MATCH_TIME_TOLERANCE_MS || '43200000', 10);
 const MATCH_DETAILS_CACHE_MS = Number.parseInt(process.env.MATCH_DETAILS_CACHE_MS || '300000', 10); // 5 min default
 const MATCH_DETAILS_LIVE_CACHE_MS = Number.parseInt(process.env.MATCH_DETAILS_LIVE_CACHE_MS || '20000', 10);
+const MATCH_STATS_CACHE_MS = Number.parseInt(process.env.MATCH_STATS_CACHE_MS || '60000', 10); // 60s for live stats
 const LIVE_DEBUG_MATCH_ID = Number.parseInt(process.env.LIVE_DEBUG_MATCH_ID || '', 10);
 const LIVE_DEBUG_EXTERNAL_ID = Number.parseInt(process.env.LIVE_DEBUG_EXTERNAL_ID || '', 10);
 const LIVE_DEBUG_TEAM_QUERY = String(process.env.LIVE_DEBUG_TEAM_QUERY || '').trim().toLowerCase();
@@ -16,6 +18,7 @@ const LIVE_DEBUG_TEAM_QUERY = String(process.env.LIVE_DEBUG_TEAM_QUERY || '').tr
 const flashscoreCacheByTournament = new Map();
 const flashscoreInFlightByTournament = new Map();
 const matchDetailsCache = new Map(); // Cache für Match-Details
+const matchStatsCache = new Map(); // Cache für Match-Stats
 
 function shouldDebugMatch(match) {
   if (!match) return false;
@@ -514,6 +517,34 @@ async function getMatchDetailsWithCache(matchId, isLive = false) {
   return cached ? cached.data : null;
 }
 
+async function getMatchStatsWithCache(matchId) {
+  const now = Date.now();
+  const cached = matchStatsCache.get(matchId);
+  const ttlMs = MATCH_STATS_CACHE_MS;
+
+  // Return cached data if still valid
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  try {
+    const freshStats = await fetchFlashscoreMatchStats(matchId);
+    if (freshStats) {
+      matchStatsCache.set(matchId, {
+        data: freshStats,
+        expiresAt: Date.now() + ttlMs
+      });
+      return freshStats;
+    }
+  } catch (err) {
+    // Keep stale cache on fetch error
+    console.warn(`[MATCH-STATS-CACHE] Failed to refresh stats for match ${matchId}:`, err.message);
+  }
+
+  // Return cached data (even if stale) or null if no cache exists
+  return cached ? cached.data : null;
+}
+
 function hasImminentMatch(matches) {
   const now = Date.now();
   const window = 30 * 60 * 1000; // 30 minutes
@@ -735,5 +766,6 @@ async function getLiveScoresForMatches(matches, pool = null) {
 }
 
 module.exports = {
-  getLiveScoresForMatches
+  getLiveScoresForMatches,
+  getMatchStatsWithCache
 };

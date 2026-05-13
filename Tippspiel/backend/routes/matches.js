@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getMatchInsights } = require('../services/footballData');
-const { getLiveScoresForMatches } = require('../services/liveScores');
+const { getLiveScoresForMatches, getMatchStatsWithCache } = require('../services/liveScores');
 
 const router = express.Router();
 
@@ -177,6 +177,47 @@ router.get('/:id/debug-flashscore', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Get live stats for a match (only on demand from MatchInfo page)
+router.get('/:id/live-stats', authMiddleware, async (req, res) => {
+  try {
+    const matchResult = await pool.query(
+      'SELECT id, home_team, away_team, match_date, finished, external_source, external_id FROM matches WHERE id = $1',
+      [req.params.id]
+    );
+    
+    if (matchResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    const match = matchResult.rows[0];
+    if (!String(match.external_source || '').includes('flashscore')) {
+      return res.status(400).json({ error: 'Match is not a Flashscore source' });
+    }
+
+    // Get current live info to extract sourceMatchId from Flashscore
+    const liveInfo = await getLiveScoresForMatches([match], pool);
+    const sourceMatchId = liveInfo?.updates?.[match.id]?.sourceMatchId;
+
+    if (!sourceMatchId) {
+      return res.status(400).json({ error: 'Could not find live match in Flashscore' });
+    }
+
+    // Fetch stats using the real Flashscore match ID
+    const stats = await getMatchStatsWithCache(sourceMatchId);
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.json({
+      stats,
+      fetchedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch live stats' });
   }
 });
 
