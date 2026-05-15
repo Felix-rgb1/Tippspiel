@@ -3,8 +3,39 @@ const pool = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getMatchInsights } = require('../services/footballData');
 const { getLiveScoresForMatches, getMatchStatsWithCache } = require('../services/liveScores');
+const { syncWMResults, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
 
 const router = express.Router();
+
+const RESULT_SYNC_MIN_INTERVAL_MS = Number.parseInt(process.env.ON_OPEN_RESULT_SYNC_MIN_INTERVAL_MS || '180000', 10);
+let lastOnOpenResultSyncAt = 0;
+let ongoingOnOpenResultSync = null;
+
+async function runResultSyncJob() {
+  const [wmResult, bundesligaResult] = await Promise.allSettled([
+    syncWMResults(pool),
+    syncBundesligaResults(pool)
+  ]);
+
+  const wm = wmResult.status === 'fulfilled'
+    ? { ok: true, ...wmResult.value }
+    : { ok: false, error: wmResult.reason?.message || 'WM Sync fehlgeschlagen' };
+
+  const bundesliga = bundesligaResult.status === 'fulfilled'
+    ? { ok: true, ...bundesligaResult.value }
+    : { ok: false, error: bundesligaResult.reason?.message || 'Bundesliga Sync fehlgeschlagen' };
+
+  const now = Date.now();
+  lastOnOpenResultSyncAt = now;
+
+  return {
+    executed: true,
+    cached: false,
+    syncedAt: new Date(now).toISOString(),
+    wm,
+    bundesliga
+  };
+}
 
 function parseLiveMatchIds(rawIdsValue) {
   return String(rawIdsValue || '')
@@ -120,6 +151,39 @@ router.get('/live/stream', async (req, res) => {
   });
 
   runTick();
+});
+
+// Trigger result sync when users open the dashboard.
+router.post('/sync-results-on-open', authMiddleware, async (req, res) => {
+  try {
+    const now = Date.now();
+    const minIntervalMs = Number.isFinite(RESULT_SYNC_MIN_INTERVAL_MS)
+      ? Math.max(30000, RESULT_SYNC_MIN_INTERVAL_MS)
+      : 180000;
+
+    if (ongoingOnOpenResultSync) {
+      const result = await ongoingOnOpenResultSync;
+      return res.json({ ...result, fromInFlight: true });
+    }
+
+    if (now - lastOnOpenResultSyncAt < minIntervalMs) {
+      return res.json({
+        executed: false,
+        cached: true,
+        syncedAt: new Date(lastOnOpenResultSyncAt).toISOString(),
+        nextAllowedSyncAt: new Date(lastOnOpenResultSyncAt + minIntervalMs).toISOString()
+      });
+    }
+
+    ongoingOnOpenResultSync = runResultSyncJob();
+    const result = await ongoingOnOpenResultSync;
+    res.json(result);
+  } catch (err) {
+    console.error('[ON-OPEN-RESULT-SYNC] Fehler:', err.message || err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'On-open Ergebnis-Sync fehlgeschlagen' });
+  } finally {
+    ongoingOnOpenResultSync = null;
+  }
 });
 
 // Get single match

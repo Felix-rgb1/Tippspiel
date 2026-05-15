@@ -78,6 +78,7 @@ export const authAPI = {
 // Matches
 export const matchAPI = {
   getAll: () => apiGet('/matches'),
+  syncResultsOnOpen: () => apiPost('/matches/sync-results-on-open', {}),
   getLive: (ids = []) => apiGet('/matches/live', { params: { ids: ids.join(',') } }),
   getLiveStreamUrl: (ids = []) => buildApiPath(`/matches/live/stream?ids=${encodeURIComponent(ids.join(','))}`),
   getById: (id) => apiGet(`/matches/${id}`),

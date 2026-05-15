@@ -776,7 +776,8 @@ function Dashboard() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const [matchesResult, bonusResult, lastWinnerResult] = await Promise.allSettled([
+      const [syncResult, matchesResult, bonusResult, lastWinnerResult] = await Promise.allSettled([
+        matchAPI.syncResultsOnOpen(),
         matchAPI.getAll(),
         tipAPI.getBonusTip(),
         leaderboardAPI.getLastWinner()
@@ -786,7 +787,25 @@ function Dashboard() {
         throw matchesResult.reason;
       }
 
-      setMatches(matchesResult.value.data);
+      let nextMatches = matchesResult.value.data;
+
+      if (syncResult.status === 'fulfilled') {
+        const syncData = syncResult.value?.data || {};
+        const changedCount =
+          (Number(syncData?.wm?.updatedCount) || 0)
+          + (Number(syncData?.wm?.createdCount) || 0)
+          + (Number(syncData?.bundesliga?.updatedCount) || 0)
+          + (Number(syncData?.bundesliga?.createdCount) || 0);
+
+        if (syncData.executed && changedCount > 0) {
+          const refreshedMatches = await matchAPI.getAll();
+          nextMatches = refreshedMatches.data;
+        }
+      } else {
+        console.warn('[DASHBOARD] Ergebnis-Sync beim Oeffnen fehlgeschlagen:', syncResult.reason?.message || syncResult.reason);
+      }
+
+      setMatches(nextMatches);
 
       // Fetch user's tips
       const [tipsResponse, visibleTipsResponse] = await Promise.all([
