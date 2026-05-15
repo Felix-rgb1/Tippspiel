@@ -12,6 +12,9 @@ let lastOnOpenResultSyncAt = 0;
 let ongoingOnOpenResultSync = null;
 
 async function runResultSyncJob() {
+  // Set the timestamp immediately so rapid-retry is throttled even when this job throws.
+  lastOnOpenResultSyncAt = Date.now();
+
   const backfillWindowHoursRaw = Number.parseInt(process.env.ON_OPEN_RESULT_SYNC_BACKFILL_HOURS || '72', 10);
   const backfillWindowHours = Number.isFinite(backfillWindowHoursRaw)
     ? Math.max(6, Math.min(336, backfillWindowHoursRaw))
@@ -57,7 +60,6 @@ async function runResultSyncJob() {
     : { ok: false, error: bundesligaResult.reason?.message || 'Bundesliga Sync fehlgeschlagen' };
 
   const now = Date.now();
-  lastOnOpenResultSyncAt = now;
 
   return {
     executed: true,

@@ -603,11 +603,11 @@ async function getLiveScoresForMatches(matches, pool = null, options = {}) {
 
   const groups = new Map();
   candidates.forEach((match) => {
-    const options = getRapidOptionsForMatch(match);
-    if (!groups.has(options.cacheKey)) {
-      groups.set(options.cacheKey, { options, matches: [] });
+    const rapidOptions = getRapidOptionsForMatch(match);
+    if (!groups.has(rapidOptions.cacheKey)) {
+      groups.set(rapidOptions.cacheKey, { options: rapidOptions, matches: [] });
     }
-    groups.get(options.cacheKey).matches.push(match);
+    groups.get(rapidOptions.cacheKey).matches.push(match);
   });
 
   const updates = {};

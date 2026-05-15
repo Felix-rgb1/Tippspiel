@@ -793,7 +793,6 @@ function Dashboard() {
         const syncData = syncResult.value?.data || {};
         const changedCount =
           (Number(syncData?.backfill?.finishedUpdates) || 0)
-          + (Number(syncData?.backfill?.providerUpdates) || 0)
           + (Number(syncData?.wm?.updatedCount) || 0)
           + (Number(syncData?.wm?.createdCount) || 0)
           + (Number(syncData?.bundesliga?.updatedCount) || 0)
