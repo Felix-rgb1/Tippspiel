@@ -419,11 +419,15 @@ function getRapidOptionsForMatch(match) {
   const externalSource = String(match?.external_source || '').toLowerCase();
 
   if (externalSource === 'flashscore-live-test-day') {
-    const todayBerlin = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+    const matchDate = new Date(match?.match_date || Date.now());
+    const dateOnlyBerlin = Number.isNaN(matchDate.getTime())
+      ? new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+      : matchDate.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+
     return {
       mode: 'by-date',
-      dateOnly: todayBerlin,
-      cacheKey: `flashscore:by-date:${todayBerlin}`
+      dateOnly: dateOnlyBerlin,
+      cacheKey: `flashscore:by-date:${dateOnlyBerlin}`
     };
   }
 
@@ -564,20 +568,29 @@ function patchCacheLiveness(rapidOptions, hadLiveMatch, groupMatches) {
   cached.expiresAt = now + (useHot ? LIVE_CACHE_HOT_MS : LIVE_CACHE_COLD_MS);
 }
 
-function shouldCheckLiveForMatch(match) {
+function shouldCheckLiveForMatch(match, options = {}) {
   if (!match || match.finished) return false;
 
   const source = String(match.external_source || '').toLowerCase();
   if (!source.includes('flashscore')) return false;
 
+  if (options.forceCheckAll) {
+    return true;
+  }
+
   const matchTs = new Date(match.match_date).getTime();
   if (!Number.isFinite(matchTs)) return false;
 
-  return Math.abs(Date.now() - matchTs) <= LIVE_MATCH_TIME_TOLERANCE_MS;
+  const toleranceMsRaw = Number(options.liveMatchTimeToleranceMs);
+  const toleranceMs = Number.isFinite(toleranceMsRaw) && toleranceMsRaw > 0
+    ? toleranceMsRaw
+    : LIVE_MATCH_TIME_TOLERANCE_MS;
+
+  return Math.abs(Date.now() - matchTs) <= toleranceMs;
 }
 
-async function getLiveScoresForMatches(matches, pool = null) {
-  const candidates = (Array.isArray(matches) ? matches : []).filter(shouldCheckLiveForMatch);
+async function getLiveScoresForMatches(matches, pool = null, options = {}) {
+  const candidates = (Array.isArray(matches) ? matches : []).filter((match) => shouldCheckLiveForMatch(match, options));
 
   if (!candidates.length) {
     return {

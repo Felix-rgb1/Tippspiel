@@ -12,6 +12,37 @@ let lastOnOpenResultSyncAt = 0;
 let ongoingOnOpenResultSync = null;
 
 async function runResultSyncJob() {
+  const backfillWindowHoursRaw = Number.parseInt(process.env.ON_OPEN_RESULT_SYNC_BACKFILL_HOURS || '72', 10);
+  const backfillWindowHours = Number.isFinite(backfillWindowHoursRaw)
+    ? Math.max(6, Math.min(336, backfillWindowHoursRaw))
+    : 72;
+
+  const backfillLimitRaw = Number.parseInt(process.env.ON_OPEN_RESULT_SYNC_BACKFILL_LIMIT || '200', 10);
+  const backfillLimit = Number.isFinite(backfillLimitRaw)
+    ? Math.max(20, Math.min(1000, backfillLimitRaw))
+    : 200;
+
+  const unfinishedResult = await pool.query(
+    `SELECT id, home_team, away_team, match_date, finished, external_source, external_id
+     FROM matches
+     WHERE (finished = false OR finished IS NULL)
+       AND external_source LIKE 'flashscore%'
+       AND match_date >= NOW() - ($1::int * INTERVAL '1 hour')
+       AND match_date <= NOW() + INTERVAL '6 hours'
+     ORDER BY match_date DESC
+     LIMIT $2`,
+    [backfillWindowHours, backfillLimit]
+  );
+
+  const liveBackfillPayload = await getLiveScoresForMatches(unfinishedResult.rows, pool, {
+    forceCheckAll: true
+  });
+
+  const liveBackfillUpdates = Object.values(liveBackfillPayload?.updates || {});
+  const backfillFinishedCount = liveBackfillUpdates.filter(
+    (entry) => Boolean(entry?.isFinished) && Number.isFinite(Number(entry?.homeGoals)) && Number.isFinite(Number(entry?.awayGoals))
+  ).length;
+
   const [wmResult, bundesligaResult] = await Promise.allSettled([
     syncWMResults(pool),
     syncBundesligaResults(pool)
@@ -32,6 +63,12 @@ async function runResultSyncJob() {
     executed: true,
     cached: false,
     syncedAt: new Date(now).toISOString(),
+    backfill: {
+      checkedCount: unfinishedResult.rows.length,
+      providerUpdates: liveBackfillUpdates.length,
+      finishedUpdates: backfillFinishedCount,
+      fetchedAt: liveBackfillPayload?.fetchedAt || null
+    },
     wm,
     bundesliga
   };
