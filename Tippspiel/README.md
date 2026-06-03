@@ -2,6 +2,10 @@
 
 Ein Full-Stack Tippspiel für die Fußball-Weltmeisterschaft mit Benutzerregistrierung, Tipps, Leaderboard und Admin Panel.
 
+## Bedienungsanleitung fuer Spieler
+
+Eine einfache Einfuehrung fuer neue und unerfahrene Spieler findest du in [BEDIENUNGSANLEITUNG.md](./BEDIENUNGSANLEITUNG.md).
+
 ## Tech Stack
 
 - **Frontend**: React + Vite

@@ -137,6 +137,14 @@ const TEAM_ISO_MAP = {
   'elfenbeinkuste': 'CI'
 };
 
+function AvatarDisplay({ value }) {
+  if (value && value.startsWith('data:')) {
+    return <img src={value} alt="Avatar" className="bonus-public-avatar-img" />;
+  }
+
+  return <span className="bonus-public-avatar" aria-hidden="true">{value || '⚽'}</span>;
+}
+
 const TEAM_NAME_DE_MAP = {
   // Unique country mappings (English and German variants merged)
   argentina: 'Argentinien',
@@ -496,6 +504,8 @@ function Dashboard() {
   const [bonusTip, setBonusTip] = useState({ champion_team: '', runner_up_team: '' });
   const [bonusLocked, setBonusLocked] = useState(false);
   const [bonusDeadline, setBonusDeadline] = useState(null);
+  const [publicBonusTips, setPublicBonusTips] = useState([]);
+  const [publicBonusTipsExpanded, setPublicBonusTipsExpanded] = useState(false);
   const [savingBonus, setSavingBonus] = useState(false);
   const [now, setNow] = useState(new Date());
   const [liveUpdatesByMatch, setLiveUpdatesByMatch] = useState({});
@@ -517,6 +527,12 @@ function Dashboard() {
   }, [user]);
 
   useEffect(() => {
+    if (!bonusLocked) {
+      setPublicBonusTipsExpanded(false);
+    }
+  }, [bonusLocked]);
+
+  useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -527,6 +543,11 @@ function Dashboard() {
       return source.includes('flashscore') && !source.includes('test-bundesliga');
     };
     const isInTrackingWindow = (match) => {
+      const source = String(match.external_source || '').toLowerCase();
+      if (source === 'flashscore-wm' || source === 'flashscore-bundesliga') {
+        return true;
+      }
+
       const matchTs = new Date(match.match_date).getTime();
       if (!Number.isFinite(matchTs)) {
         return false;
@@ -776,10 +797,11 @@ function Dashboard() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const [syncResult, matchesResult, bonusResult, lastWinnerResult] = await Promise.allSettled([
+      const [syncResult, matchesResult, bonusResult, publicBonusResult, lastWinnerResult] = await Promise.allSettled([
         matchAPI.syncResultsOnOpen(),
         matchAPI.getAll(),
         tipAPI.getBonusTip(),
+        tipAPI.getVisibleBonusTips(),
         leaderboardAPI.getLastWinner()
       ]);
 
@@ -844,6 +866,12 @@ function Dashboard() {
         setBonusLocked(true);
         setBonusDeadline(null);
         setBonusTip({ champion_team: '', runner_up_team: '' });
+      }
+
+      if (publicBonusResult.status === 'fulfilled' && publicBonusResult.value?.data?.locked) {
+        setPublicBonusTips(Array.isArray(publicBonusResult.value.data.tips) ? publicBonusResult.value.data.tips : []);
+      } else {
+        setPublicBonusTips([]);
       }
 
       if (lastWinnerResult.status === 'fulfilled' && lastWinnerResult.value?.data?.winner) {
@@ -992,6 +1020,10 @@ function Dashboard() {
       ...prev,
       [matchId]: !prev[matchId],
     }));
+  };
+
+  const togglePublicBonusTips = () => {
+    setPublicBonusTipsExpanded((prev) => !prev);
   };
 
   const getMatchStatus = (match, liveUpdate) => {
@@ -1304,6 +1336,39 @@ function Dashboard() {
           </button>
         </div>
       </div>
+
+      {bonusLocked && publicBonusTips.length > 0 && (
+        <div className="bonus-public-panel">
+          <button
+            type="button"
+            className="bonus-public-toggle"
+            onClick={togglePublicBonusTips}
+          >
+            <span className="bonus-public-title">WM-Tipps aller Spieler</span>
+            <span className="bonus-public-meta">
+              {publicBonusTips.length} {publicBonusTips.length === 1 ? 'Tipp' : 'Tipps'} {publicBonusTipsExpanded ? 'ausblenden' : 'anzeigen'}
+            </span>
+          </button>
+
+          {publicBonusTipsExpanded && (
+            <div className="bonus-public-list">
+              {publicBonusTips.map((tip) => (
+                <div key={tip.user_id} className="bonus-public-row">
+                  <span className="bonus-public-user">
+                    <AvatarDisplay value={tip.avatar} />
+                    <span>{tip.username}</span>
+                  </span>
+                  <span className="bonus-public-pair">
+                    <strong>{tip.champion_team}</strong>
+                    <span>•</span>
+                    <strong>{tip.runner_up_team}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="round-filter">
         {['Alle', 'Offen', 'Abgeschlossen'].map((status) => (

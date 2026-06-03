@@ -41,26 +41,31 @@ function logLiveDebug(match, label, payload = {}) {
   console.log(prefix, payload);
 }
 
-function toNumericExternalId(rawMatchId) {
+function toDeterministicBigintString(rawMatchId) {
   const input = String(rawMatchId || '');
   if (!input) return null;
 
-  const prime = 1099511628211n;
   let hash = 1469598103934665603n;
+  const prime = 1099511628211n;
 
   for (let i = 0; i < input.length; i += 1) {
     hash ^= BigInt(input.charCodeAt(i));
     hash *= prime;
   }
 
-  const maxSafe = 9007199254740991n;
-  const normalized = (hash < 0n ? -hash : hash) % maxSafe;
-  return Number(normalized || 1n);
+  const positive63Bit = hash & 0x7fffffffffffffffn;
+  return positive63Bit.toString();
 }
 
 function normalizeExternalId(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    return raw.replace(/^0+(?=\d)/, '');
+  }
+
+  return toDeterministicBigintString(raw);
 }
 
 function normalizeName(value) {
@@ -387,12 +392,12 @@ function findBestCandidateForMatch(targetMatch, fixtures) {
       const fixtureRawId = fixture?.match_id || fixture?.id || fixture?.event_id;
       if (!fixtureRawId) return false;
 
-      const numericFixtureId = normalizeExternalId(fixtureRawId);
-      if (numericFixtureId && numericFixtureId === targetExternalId) {
+      const normalizedFixtureId = normalizeExternalId(fixtureRawId);
+      if (normalizedFixtureId && normalizedFixtureId === targetExternalId) {
         return true;
       }
 
-      const hashedFixtureId = toNumericExternalId(fixtureRawId);
+      const hashedFixtureId = toDeterministicBigintString(fixtureRawId);
       return hashedFixtureId === targetExternalId;
     });
 
@@ -573,6 +578,11 @@ function shouldCheckLiveForMatch(match, options = {}) {
 
   const source = String(match.external_source || '').toLowerCase();
   if (!source.includes('flashscore')) return false;
+
+  // For core competitions, do not gate by time window to prevent missed live updates.
+  if (source === 'flashscore-wm' || source === 'flashscore-bundesliga') {
+    return true;
+  }
 
   if (options.forceCheckAll) {
     return true;

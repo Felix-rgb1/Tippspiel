@@ -148,6 +148,65 @@ router.get('/bonus/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Get all bonus tips once the deadline has passed
+router.get('/bonus/visible', authMiddleware, async (req, res) => {
+  try {
+    const bonusFeaturesAvailable = await areBonusFeaturesAvailable(pool);
+
+    if (!bonusFeaturesAvailable) {
+      return res.json({
+        tips: [],
+        deadline: null,
+        locked: false,
+        unavailable: true
+      });
+    }
+
+    const firstMatchResult = await pool.query('SELECT MIN(match_date) AS first_match_date FROM matches');
+    const firstMatchDate = firstMatchResult.rows[0]?.first_match_date;
+    const locked = firstMatchDate ? new Date() > new Date(firstMatchDate) : false;
+
+    if (!locked) {
+      return res.json({
+        tips: [],
+        deadline: firstMatchDate ? new Date(firstMatchDate).toISOString() : null,
+        locked: false
+      });
+    }
+
+    const result = await pool.query(
+      `SELECT
+         bt.user_id,
+         u.username,
+         COALESCE(u.avatar, '⚽') AS avatar,
+         bt.champion_team,
+         bt.runner_up_team,
+         bt.created_at,
+         bt.updated_at
+       FROM bonus_tips bt
+       JOIN users u ON u.id = bt.user_id
+       ORDER BY LOWER(u.username) ASC, u.username ASC`
+    );
+
+    res.json({
+      tips: result.rows,
+      deadline: firstMatchDate ? new Date(firstMatchDate).toISOString() : null,
+      locked: true
+    });
+  } catch (err) {
+    console.error(err);
+    if (isMissingRelationError(err)) {
+      return res.json({
+        tips: [],
+        deadline: null,
+        locked: false,
+        unavailable: true
+      });
+    }
+    res.status(500).json({ error: 'Failed to fetch visible bonus tips' });
+  }
+});
+
 // Submit or update bonus tips (Weltmeister / Vizemeister)
 router.post('/bonus', authMiddleware, async (req, res) => {
   try {

@@ -93,6 +93,7 @@ export const tipAPI = {
   getUserTips: (userId) => apiGet(`/tips/user/${userId}`),
   getVisibleTips: () => apiGet('/tips/visible'),
   getBonusTip: () => apiGet('/tips/bonus/me'),
+  getVisibleBonusTips: () => apiGet('/tips/bonus/visible'),
   submitBonusTip: (championTeam, runnerUpTeam) =>
     apiPost('/tips/bonus', { champion_team: championTeam, runner_up_team: runnerUpTeam }),
 };
