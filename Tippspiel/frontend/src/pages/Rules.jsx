@@ -68,8 +68,8 @@ function Rules() {
               Dafür gibt es Extrapunkte:
             </p>
             <ul className="rules-list compact-list">
-              <li>Richtiger Weltmeister: <strong>20 Punkte</strong></li>
-              <li>Richtiger Vizemeister: <strong>15 Punkte</strong></li>
+              <li>Richtiger Weltmeister: <strong>10 Punkte</strong></li>
+              <li>Richtiger Vizemeister: <strong>5 Punkte</strong></li>
             </ul>
           </div>
         </section>
