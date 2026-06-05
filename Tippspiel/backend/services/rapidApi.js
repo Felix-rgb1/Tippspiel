@@ -1499,6 +1499,59 @@ async function fetchFlashscoreMatchStats(matchId) {
   return payload && typeof payload === 'object' ? payload : null;
 }
 
+// Cache for standings (5 min TTL)
+let standingsCache = null;
+let standingsCacheAt = 0;
+const STANDINGS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchFlashscoreGroupStandings(tournamentUrl, options = {}) {
+  const now = Date.now();
+  if (!options.forceRefresh && standingsCache && (now - standingsCacheAt) < STANDINGS_CACHE_TTL_MS) {
+    return standingsCache;
+  }
+
+  const ids = await fetchFlashscoreTournamentIds(tournamentUrl, options);
+  if (!ids?.tournament_template_id || !ids?.season_id) {
+    return null;
+  }
+
+  const rows = await rapidApiRequest('/api/flashscore/v2/tournaments/standings', {
+    tournament_id: ids.tournament_id,
+    tournament_stage_id: ids.tournament_stage_id,
+    tournament_template_id: ids.tournament_template_id,
+    season_id: ids.season_id,
+    type: 'overall'
+  });
+
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+
+  // Group by group name, skip "Ranking of third-placed teams" etc.
+  const grouped = {};
+  for (const row of rows) {
+    if (!row.group || !row.group.startsWith('Group ')) continue;
+    const letter = row.group.replace('Group ', '').trim();
+    if (!grouped[letter]) grouped[letter] = [];
+    grouped[letter].push({
+      team_id: row.team_id,
+      name: row.name,
+      played: row.matches_played,
+      won: row.wins,
+      drawn: row.draws,
+      lost: row.losses,
+      gf: parseInt((row.goals || '0:0').split(':')[0], 10) || 0,
+      ga: parseInt((row.goals || '0:0').split(':')[1], 10) || 0,
+      gd: row.goal_difference,
+      points: row.points
+    });
+  }
+
+  standingsCache = grouped;
+  standingsCacheAt = now;
+  return grouped;
+}
+
 module.exports = {
   isRapidApiConfigured,
   fetchRapidApiProbabilities,
@@ -1508,5 +1561,6 @@ module.exports = {
   fetchFlashscoreTournamentResults,
   fetchFlashscoreMatchDetails,
   fetchFlashscoreMatchStats,
+  fetchFlashscoreGroupStandings,
   testRapidApi
 };

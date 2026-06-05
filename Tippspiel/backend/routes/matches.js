@@ -4,6 +4,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { getMatchInsights } = require('../services/footballData');
 const { getLiveScoresForMatches, getMatchStatsWithCache } = require('../services/liveScores');
 const { syncWMResults, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
+const { fetchFlashscoreGroupStandings, isRapidApiConfigured } = require('../services/rapidApi');
 
 const router = express.Router();
 
@@ -102,6 +103,59 @@ async function buildLivePayload(rawIds) {
 
   return getLiveScoresForMatches(result.rows, pool);
 }
+
+// English → German team name mapping for Flashscore standings
+const EN_TO_DE_TEAM = {
+  'Czech Republic': 'Tschechien', 'Mexico': 'Mexiko', 'South Africa': 'Suedafrika',
+  'South Korea': 'Suedkorea', 'Switzerland': 'Schweiz', 'Bosnia & Herzegovina': 'Bosnia-Herzegovina',
+  'Canada': 'Kanada', 'Qatar': 'Katar', 'Scotland': 'Schottland', 'Brazil': 'Brasilien',
+  'Haiti': 'Haiti', 'Morocco': 'Marokko', 'Turkey': 'Tuerkei', 'Paraguay': 'Paraguay',
+  'USA': 'USA', 'Australia': 'Australien', 'Germany': 'Deutschland', 'Ecuador': 'Ecuador',
+  'Ivory Coast': 'Elfenbeinkueste', 'Curacao': 'Curacao', 'Sweden': 'Schweden',
+  'Netherlands': 'Niederlande', 'Tunisia': 'Tunesien', 'Japan': 'Japan',
+  'Belgium': 'Belgien', 'Egypt': 'Aegypten', 'Iran': 'Iran', 'New Zealand': 'Neuseeland',
+  'Spain': 'Spanien', 'Uruguay': 'Uruguay', 'Cape Verde': 'Cape Verde Islands',
+  'Saudi Arabia': 'Saudi-Arabien', 'France': 'Frankreich', 'Norway': 'Norwegen',
+  'Senegal': 'Senegal', 'Iraq': 'Irak', 'Austria': 'Oesterreich', 'Argentina': 'Argentinien',
+  'Algeria': 'Algeria', 'Jordan': 'Jordan', 'Portugal': 'Portugal', 'Colombia': 'Kolumbien',
+  'D.R. Congo': 'Congo DR', 'Uzbekistan': 'Usbekistan', 'Croatia': 'Kroatien',
+  'England': 'England', 'Ghana': 'Ghana', 'Panama': 'Panama'
+};
+
+// Get live group standings from Flashscore
+router.get('/group-standings', authMiddleware, async (req, res) => {
+  try {
+    if (!isRapidApiConfigured()) {
+      return res.status(503).json({ error: 'Standings-Provider nicht konfiguriert' });
+    }
+
+    const tournamentUrl = process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
+    const forceRefresh = req.query.refresh === '1';
+    const grouped = await fetchFlashscoreGroupStandings(tournamentUrl, { forceRefresh });
+
+    if (!grouped) {
+      return res.status(502).json({ error: 'Konnte Standings nicht laden' });
+    }
+
+    // Translate team names to German and build teamToGroup map
+    const translatedGroups = {};
+    const teamToGroup = {};
+
+    for (const [letter, teams] of Object.entries(grouped)) {
+      translatedGroups[letter] = teams.map((row) => {
+        const deName = EN_TO_DE_TEAM[row.name] || row.name;
+        teamToGroup[deName] = letter;
+        return { ...row, name: deName, name_en: row.name };
+      });
+    }
+
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({ groups: translatedGroups, teamToGroup });
+  } catch (err) {
+    console.error('[group-standings]', err.message || err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Fehler beim Laden der Standings' });
+  }
+});
 
 // Get all matches
 router.get('/', async (req, res) => {

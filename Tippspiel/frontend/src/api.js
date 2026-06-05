@@ -84,6 +84,7 @@ export const matchAPI = {
   getById: (id) => apiGet(`/matches/${id}`),
   getInsights: (id) => apiGet(`/matches/${id}/insights`),
   getLiveStats: (id) => apiGet(`/matches/${id}/live-stats`),
+  getGroupStandings: () => apiGet('/matches/group-standings'),
 };
 
 // Tips
