@@ -137,14 +137,14 @@ router.get('/group-standings', authMiddleware, async (req, res) => {
       return res.status(502).json({ error: 'Konnte Standings nicht laden' });
     }
 
-    // Translate team names to German and build teamToGroup map
+    // Build teamToGroup: map both English (DB) and German names → group letter
     const translatedGroups = {};
     const teamToGroup = {};
-
     for (const [letter, teams] of Object.entries(grouped)) {
       translatedGroups[letter] = teams.map((row) => {
         const deName = EN_TO_DE_TEAM[row.name] || row.name;
-        teamToGroup[deName] = letter;
+        teamToGroup[row.name] = letter;   // English name (matches DB)
+        teamToGroup[deName] = letter;     // German name (fallback)
         return { ...row, name: deName, name_en: row.name };
       });
     }

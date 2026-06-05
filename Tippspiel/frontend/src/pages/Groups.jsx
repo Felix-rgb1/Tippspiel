@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -77,26 +77,27 @@ export default function Groups() {
   const inputRefs = useRef({});
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       matchAPI.getAll(),
       tipAPI.getUserTips(user.id),
       matchAPI.getGroupStandings(),
     ])
-      .then(([matchRes, tipRes, standingsRes]) => {
-        setMatches(matchRes.data || []);
-        const tipsMap = {};
-        (tipRes.data || []).forEach((t) => {
-          tipsMap[t.match_id] = { home_goals: t.home_goals, away_goals: t.away_goals };
-        });
-        setTips(tipsMap);
-        setSavedTips(tipsMap);
-        if (standingsRes.data?.groups) {
-          setStandings(standingsRes.data.groups);
-          setTeamToGroup(standingsRes.data.teamToGroup || {});
+      .then(([matchResult, tipResult, standingsResult]) => {
+        if (matchResult.status === 'fulfilled') {
+          setMatches(matchResult.value.data || []);
         }
-      })
-      .catch((err) => {
-        if (err.config?.url?.includes('group-standings')) {
+        if (tipResult.status === 'fulfilled') {
+          const tipsMap = {};
+          (tipResult.value.data || []).forEach((t) => {
+            tipsMap[t.match_id] = { home_goals: t.home_goals, away_goals: t.away_goals };
+          });
+          setTips(tipsMap);
+          setSavedTips(tipsMap);
+        }
+        if (standingsResult.status === 'fulfilled' && standingsResult.value.data?.groups) {
+          setStandings(standingsResult.value.data.groups);
+          setTeamToGroup(standingsResult.value.data.teamToGroup || {});
+        } else if (standingsResult.status === 'rejected') {
           setStandingsError('Tabellen konnten nicht geladen werden');
         }
       })
@@ -152,7 +153,7 @@ export default function Groups() {
     return {
       hasSavedTip: Boolean(persisted),
       isDirty,
-      buttonLabel: !persisted ? 'Tipp speichern' : isDirty ? 'Ã„nderungen speichern' : 'Gespeichert âœ“',
+      buttonLabel: !persisted ? 'Tipp speichern' : isDirty ? 'Änderungen speichern' : 'Gespeichert ✓',
     };
   };
 
@@ -178,7 +179,7 @@ export default function Groups() {
   return (
     <div className="container">
       <div className="page-title">
-        <h1>ðŸŒ Gruppenphase</h1>
+        <h1>🌍 Gruppenphase</h1>
         <p>Tabellen und Spiele der WM 2026 Gruppen</p>
       </div>
 
@@ -257,7 +258,7 @@ export default function Groups() {
 
       {/* Group Matches */}
       <div className="groups-matches-section">
-        <h3 className="groups-matches-title">Spiele â€“ Gruppe {activeTab}</h3>
+        <h3 className="groups-matches-title">Spiele – Gruppe {activeTab}</h3>
         <div className="groups-matches-list">
           {groupMatches.map((match) => {
             const deadlinePassed = isDeadlinePassed(match.match_date);
@@ -310,7 +311,7 @@ export default function Groups() {
                   <div className="gm-tip-row">
                     <div className="gm-tip-inputs">
                       <div className="tip-stepper">
-                        <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', -1)} disabled={deadlinePassed}>âˆ’</button>
+                        <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'home_goals', -1)} disabled={deadlinePassed}>−</button>
                         <input type="number" min="0" max="20"
                           value={tip.home_goals}
                           onChange={(e) => handleTipChange(match.id, 'home_goals', e.target.value)}
@@ -321,7 +322,7 @@ export default function Groups() {
                       </div>
                       <span className="gm-colon">:</span>
                       <div className="tip-stepper">
-                        <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', -1)} disabled={deadlinePassed}>âˆ’</button>
+                        <button type="button" className="tip-stepper-btn" onClick={() => handleTipStep(match.id, 'away_goals', -1)} disabled={deadlinePassed}>−</button>
                         <input type="number" min="0" max="20"
                           value={tip.away_goals}
                           onChange={(e) => handleTipChange(match.id, 'away_goals', e.target.value)}
