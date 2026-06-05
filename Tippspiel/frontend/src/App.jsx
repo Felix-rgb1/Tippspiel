@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import MatchInfo from './pages/MatchInfo';
 import Leaderboard from './pages/Leaderboard';
 import Rules from './pages/Rules';
+import Groups from './pages/Groups';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import PageLoader from './components/PageLoader';
@@ -93,6 +94,11 @@ function App() {
             <Route path="/rules" element={
               <ProtectedRoute>
                 <Rules />
+              </ProtectedRoute>
+            } />
+            <Route path="/groups" element={
+              <ProtectedRoute>
+                <Groups />
               </ProtectedRoute>
             } />
             <Route path="/profile" element={

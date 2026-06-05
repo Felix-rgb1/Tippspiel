@@ -22,6 +22,7 @@ function Header({ isDarkMode, onToggleTheme }) {
             <nav className="nav">
               <NavLink to="/" className={({ isActive }) => (isActive ? 'is-active' : '')}>Dashboard</NavLink>
               <NavLink to="/leaderboard" className={({ isActive }) => (isActive ? 'is-active' : '')}>Rangliste</NavLink>
+              <NavLink to="/groups" className={({ isActive }) => (isActive ? 'is-active' : '')}>Gruppen</NavLink>
               <NavLink to="/rules" className={({ isActive }) => (isActive ? 'is-active' : '')}>Regeln</NavLink>
               {user.role === 'admin' && (
                 <NavLink to="/admin" className={({ isActive }) => (isActive ? 'is-active' : '')}>Admin</NavLink>

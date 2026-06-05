@@ -37,7 +37,7 @@ function Login() {
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Benutzername oder E-Mail</label>
+            <label>Benutzername</label>
             <input
               type="text"
               value={identifier}
