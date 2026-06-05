@@ -589,7 +589,7 @@ function Admin() {
 
   const formatDate = (date) => {
     const d = new Date(date);
-    return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) + ' ' + d.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
   };
 
   const allTeams = Array.from(

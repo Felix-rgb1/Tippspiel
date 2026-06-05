@@ -137,7 +137,8 @@ export default function Groups() {
     new Date() > new Date(new Date(matchDate).getTime() - 60 * 60 * 1000);
 
   const formatDate = (date) =>
-    new Date(date).toLocaleDateString('de-DE', {
+    new Date(date).toLocaleString('de-DE', {
+      timeZone: 'Europe/Berlin',
       weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     });
 
@@ -179,7 +180,7 @@ export default function Groups() {
   return (
     <div className="container">
       <div className="page-title">
-        <h1>🌍 Gruppenphase</h1>
+        <h1>🌍 Gruppenphase</h1>
         <p>Tabellen und Spiele der WM 2026 Gruppen</p>
       </div>
 

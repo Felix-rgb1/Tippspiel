@@ -8,7 +8,8 @@ function formatDate(dateValue) {
     return '-';
   }
 
-  return new Date(dateValue).toLocaleDateString('de-DE', {
+  return new Date(dateValue).toLocaleString('de-DE', {
+    timeZone: 'Europe/Berlin',
     weekday: 'short',
     day: '2-digit',
     month: '2-digit',

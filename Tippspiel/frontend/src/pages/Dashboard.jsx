@@ -996,7 +996,8 @@ function Dashboard() {
   };
 
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('de-DE', {
+    return new Date(date).toLocaleString('de-DE', {
+      timeZone: 'Europe/Berlin',
       weekday: 'short',
       day: '2-digit',
       month: '2-digit',
