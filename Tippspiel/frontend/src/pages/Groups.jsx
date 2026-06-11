@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { matchAPI, tipAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import BallLoader from '../components/BallLoader';
+import { formatDateTimeDe, parseDateTimeLocal, toTimestamp } from '../utils/dateTime';
 import './Groups.css';
 
 const TEAM_ISO_MAP = {
@@ -133,14 +134,14 @@ export default function Groups() {
     }
   };
 
-  const isDeadlinePassed = (matchDate) =>
-    new Date() > new Date(new Date(matchDate).getTime() - 60 * 60 * 1000);
+  const isDeadlinePassed = (matchDate) => {
+    const parsedDate = parseDateTimeLocal(matchDate);
+    if (!parsedDate) return false;
+    const deadline = new Date(parsedDate.getTime() - 60 * 60 * 1000);
+    return new Date() > deadline;
+  };
 
-  const formatDate = (date) =>
-    new Date(date).toLocaleString('de-DE', {
-      timeZone: 'Europe/Berlin',
-      weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    });
+  const formatDate = (date) => formatDateTimeDe(date, true);
 
   const getTipSaveState = (matchId) => {
     const current = tips[matchId];
@@ -175,7 +176,7 @@ export default function Groups() {
   // Filter matches for active group using teamToGroup mapping
   const groupMatches = matches
     .filter((m) => teamToGroup[m.home_team] === activeTab || teamToGroup[m.away_team] === activeTab)
-    .sort((a, b) => new Date(a.match_date) - new Date(b.match_date));
+    .sort((a, b) => toTimestamp(a.match_date) - toTimestamp(b.match_date));
 
   return (
     <div className="container">

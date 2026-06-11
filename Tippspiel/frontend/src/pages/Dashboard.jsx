@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { matchAPI, tipAPI, leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { formatDateTimeDe, parseDateTimeLocal, toTimestamp } from '../utils/dateTime';
 import { getMatchThemeStyle } from '../utils/teamTheme';
 import BallLoader from '../components/BallLoader';
 import './Dashboard.css';
@@ -548,7 +549,7 @@ function Dashboard() {
         return true;
       }
 
-      const matchTs = new Date(match.match_date).getTime();
+      const matchTs = toTimestamp(match.match_date);
       if (!Number.isFinite(matchTs)) {
         return false;
       }
@@ -991,23 +992,18 @@ function Dashboard() {
   };
 
   const isDeadlinePassed = (matchDate) => {
-    const deadline = new Date(new Date(matchDate).getTime() - 60 * 60 * 1000);
+    const parsedDate = parseDateTimeLocal(matchDate);
+    if (!parsedDate) return false;
+    const deadline = new Date(parsedDate.getTime() - 60 * 60 * 1000);
     return new Date() > deadline;
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleString('de-DE', {
-      timeZone: 'Europe/Berlin',
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const formatDate = (date) => formatDateTimeDe(date, true);
 
   const getCountdown = (matchDate) => {
-    const deadline = new Date(new Date(matchDate).getTime() - 60 * 60 * 1000);
+    const parsedDate = parseDateTimeLocal(matchDate);
+    if (!parsedDate) return null;
+    const deadline = new Date(parsedDate.getTime() - 60 * 60 * 1000);
     const diff = deadline - now;
     if (diff <= 0 || diff > 2 * 60 * 60 * 1000) return null;
     const h = Math.floor(diff / 3600000);
@@ -1073,7 +1069,7 @@ function Dashboard() {
       return firstMatch.finished ? 1 : -1;
     }
 
-    return new Date(firstMatch.match_date) - new Date(secondMatch.match_date);
+    return toTimestamp(firstMatch.match_date) - toTimestamp(secondMatch.match_date);
   });
 
   const finishedCount = matches.filter((m) => m.finished).length;
@@ -1082,7 +1078,7 @@ function Dashboard() {
   const upcomingMatches = matches
     .filter((match) => !match.finished)
     .slice()
-    .sort((firstMatch, secondMatch) => new Date(firstMatch.match_date) - new Date(secondMatch.match_date))
+    .sort((firstMatch, secondMatch) => toTimestamp(firstMatch.match_date) - toTimestamp(secondMatch.match_date))
     .slice(0, 3);
 
   const missingTipsCount = matches.filter(

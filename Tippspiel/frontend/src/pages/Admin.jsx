@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { adminAPI, matchAPI, tipAPI } from '../api';
+import { formatDateTimeDe, toDateTimeLocalInputValue, toTimestamp } from '../utils/dateTime';
 import { getMatchThemeStyle } from '../utils/teamTheme';
 import { useAuth } from '../context/AuthContext';
 import './Admin.css';
@@ -160,11 +161,7 @@ function Admin() {
     }
   };
 
-  const toDateTimeLocal = (date) => {
-    const parsedDate = new Date(date);
-    const timezoneOffset = parsedDate.getTimezoneOffset() * 60000;
-    return new Date(parsedDate.getTime() - timezoneOffset).toISOString().slice(0, 16);
-  };
+  const toDateTimeLocal = (date) => toDateTimeLocalInputValue(date);
 
   const startEdit = (match) => {
     setEditingId(match.id);
@@ -489,8 +486,8 @@ function Admin() {
     const rows = tipsPerUser
       .flat()
       .sort((a, b) => {
-        const dateA = new Date(a.matchDate).getTime();
-        const dateB = new Date(b.matchDate).getTime();
+        const dateA = toTimestamp(a.matchDate);
+        const dateB = toTimestamp(b.matchDate);
         if (dateA !== dateB) return dateA - dateB;
         return a.username.localeCompare(b.username, 'de');
       })
@@ -587,10 +584,7 @@ function Admin() {
     }
   };
 
-  const formatDate = (date) => {
-    const d = new Date(date);
-    return d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) + ' ' + d.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
-  };
+  const formatDate = (date) => formatDateTimeDe(date, false);
 
   const allTeams = Array.from(
     new Set(matches.flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))

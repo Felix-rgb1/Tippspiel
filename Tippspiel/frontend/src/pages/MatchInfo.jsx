@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { matchAPI } from '../api';
+import { formatDateTimeDe } from '../utils/dateTime';
 import './MatchInfo.css';
 
 function formatDate(dateValue) {
@@ -8,14 +9,7 @@ function formatDate(dateValue) {
     return '-';
   }
 
-  return new Date(dateValue).toLocaleString('de-DE', {
-    timeZone: 'Europe/Berlin',
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  return formatDateTimeDe(dateValue, true);
 }
 
 function outcomeLabel(outcome) {
