@@ -357,10 +357,16 @@ router.get('/:id/live-stats', authMiddleware, async (req, res) => {
 
     // Get current live info to extract sourceMatchId from Flashscore
     const liveInfo = await getLiveScoresForMatches([match], pool);
-    const sourceMatchId = liveInfo?.updates?.[match.id]?.sourceMatchId;
+    const mappedSourceMatchId = liveInfo?.updates?.[match.id]?.sourceMatchId;
+    const externalIdRaw = String(match.external_id || '').trim();
+    const externalIdFallback = /^\d+$/.test(externalIdRaw) ? externalIdRaw : null;
+    const sourceMatchId = mappedSourceMatchId || externalIdFallback;
 
     if (!sourceMatchId) {
-      return res.status(400).json({ error: 'Could not find live match in Flashscore' });
+      return res.status(400).json({
+        error: 'Could not find live match in Flashscore',
+        details: 'No sourceMatchId from live mapping and external_id is not a numeric Flashscore match id.'
+      });
     }
 
     // Fetch stats using the real Flashscore match ID

@@ -738,13 +738,29 @@ function Admin() {
                   </div>
                 </div>
                 <div className="live-health-item">
-                  <div className="live-health-label">WM-Mapping</div>
+                  <div className="live-health-label">WM-Linking (external_id)</div>
                   <div className="live-health-value">
-                    {liveHealth?.checks?.wmMapping?.mappedUpdates ?? 0}
+                    {liveHealth?.checks?.wmMapping?.linkedByExternalId ?? 0}
                     {' / '}
                     {liveHealth?.checks?.wmMapping?.checkedDbMatches ?? 0}
                     {' · Coverage '}
                     {Math.round((Number(liveHealth?.checks?.wmMapping?.mappingCoverage || 0) * 100))}%
+                  </div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">Score-Updates (Live-Service)</div>
+                  <div className="live-health-value">
+                    {liveHealth?.checks?.wmMapping?.scoreUpdates ?? 0}
+                  </div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">Heute WM abgeschlossen</div>
+                  <div className="live-health-value">
+                    {liveHealth?.checks?.wmToday?.finishedWithScoreToday ?? 0}
+                    {' / '}
+                    {liveHealth?.checks?.wmToday?.scheduledToday ?? 0}
+                    {' · ohne Score '}
+                    {liveHealth?.checks?.wmToday?.finishedWithoutScoreToday ?? 0}
                   </div>
                 </div>
                 <div className="live-health-item">

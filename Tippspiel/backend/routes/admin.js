@@ -21,6 +21,33 @@ function isLikelyRateLimitError(error) {
   return error?.statusCode === 429 || message.includes('429') || message.includes('rate-limit') || message.includes('rate limit');
 }
 
+function toDeterministicBigintString(rawMatchId) {
+  const input = String(rawMatchId || '');
+  if (!input) return null;
+
+  let hash = 1469598103934665603n;
+  const prime = 1099511628211n;
+
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash *= prime;
+  }
+
+  const positive63Bit = hash & 0x7fffffffffffffffn;
+  return positive63Bit.toString();
+}
+
+function normalizeExternalIdForHealth(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    return raw.replace(/^0+(?=\d)/, '');
+  }
+
+  return toDeterministicBigintString(raw);
+}
+
 router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
   const startedAt = Date.now();
 
@@ -56,9 +83,16 @@ router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
         wmMapping: {
           ok: false,
           checkedDbMatches: 0,
-          mappedUpdates: 0,
+          linkedByExternalId: 0,
+          scoreUpdates: 0,
           mappingCoverage: 0,
           sampleUnmappedDbIds: []
+        },
+        wmToday: {
+          ok: true,
+          scheduledToday: 0,
+          finishedWithScoreToday: 0,
+          finishedWithoutScoreToday: 0
         }
       },
       status: 'fail',
@@ -109,25 +143,42 @@ router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
     );
 
     const wmCandidates = wmDbResult.rows;
-    let mappedUpdates = 0;
+    const liveExternalIds = new Set(
+      (Array.isArray(liveMatches) ? liveMatches : [])
+        .map((m) => normalizeExternalIdForHealth(m?.match_id || m?.id || m?.event_id))
+        .filter(Boolean)
+    );
+
+    let linkedByExternalId = 0;
+    let scoreUpdates = 0;
     let sampleUnmappedDbIds = [];
 
     if (wmCandidates.length > 0) {
       try {
         const mapping = await getLiveScoresForMatches(wmCandidates, pool, { forceCheckAll: true });
         const updates = mapping?.updates || {};
-        mappedUpdates = Object.keys(updates).length;
+        scoreUpdates = Object.keys(updates).length;
+
+        linkedByExternalId = wmCandidates.filter((match) => {
+          const normalized = normalizeExternalIdForHealth(match?.external_id);
+          return normalized && liveExternalIds.has(normalized);
+        }).length;
+
         sampleUnmappedDbIds = wmCandidates
-          .filter((match) => !Object.prototype.hasOwnProperty.call(updates, String(match.id)))
+          .filter((match) => {
+            const normalized = normalizeExternalIdForHealth(match?.external_id);
+            return !(normalized && liveExternalIds.has(normalized));
+          })
           .map((match) => match.id)
           .slice(0, 8);
 
         payload.checks.wmMapping = {
           ok: true,
           checkedDbMatches: wmCandidates.length,
-          mappedUpdates,
+          linkedByExternalId,
+          scoreUpdates,
           mappingCoverage: wmCandidates.length > 0
-            ? Number((mappedUpdates / wmCandidates.length).toFixed(3))
+            ? Number((linkedByExternalId / wmCandidates.length).toFixed(3))
             : 0,
           sampleUnmappedDbIds
         };
@@ -135,7 +186,8 @@ router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
         payload.checks.wmMapping = {
           ok: false,
           checkedDbMatches: wmCandidates.length,
-          mappedUpdates: 0,
+          linkedByExternalId: 0,
+          scoreUpdates: 0,
           mappingCoverage: 0,
           sampleUnmappedDbIds: wmCandidates.map((match) => match.id).slice(0, 8),
           error: error?.message || 'WM mapping check failed'
@@ -145,12 +197,32 @@ router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
       payload.checks.wmMapping = {
         ok: true,
         checkedDbMatches: 0,
-        mappedUpdates: 0,
+        linkedByExternalId: 0,
+        scoreUpdates: 0,
         mappingCoverage: 0,
         sampleUnmappedDbIds: []
       };
       payload.recommendations.push('Keine unverarbeiteten WM-Spiele im 72h-Fenster gefunden.');
     }
+
+    const wmTodayResult = await pool.query(
+      `SELECT
+         COUNT(*)::int AS scheduled_today,
+         COUNT(*) FILTER (WHERE finished = true AND home_goals IS NOT NULL AND away_goals IS NOT NULL)::int AS finished_with_score_today,
+         COUNT(*) FILTER (WHERE finished = true AND (home_goals IS NULL OR away_goals IS NULL))::int AS finished_without_score_today
+       FROM matches
+       WHERE external_source = 'flashscore-wm'
+         AND (match_date AT TIME ZONE $1)::date = (NOW() AT TIME ZONE $1)::date`,
+      [timezone]
+    );
+
+    const wmToday = wmTodayResult.rows[0] || {};
+    payload.checks.wmToday = {
+      ok: true,
+      scheduledToday: Number(wmToday.scheduled_today || 0),
+      finishedWithScoreToday: Number(wmToday.finished_with_score_today || 0),
+      finishedWithoutScoreToday: Number(wmToday.finished_without_score_today || 0)
+    };
 
     const endpointFailed = !payload.checks.liveEndpoint.ok;
     const rateLimited = Boolean(payload.checks.liveEndpoint.rateLimited);
@@ -161,17 +233,31 @@ router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
       payload.ok = false;
     } else {
       const lowCoverage = payload.checks.wmMapping.checkedDbMatches > 0
-        && payload.checks.wmMapping.mappedUpdates === 0
+        && payload.checks.wmMapping.linkedByExternalId === 0
         && payload.checks.liveEndpoint.liveMatchCount > 0;
+      const missingFinishedScoresToday = payload.checks.wmToday.scheduledToday > 0
+        && payload.checks.wmToday.finishedWithScoreToday === 0;
 
       if (lowCoverage) {
         payload.status = 'warn';
         payload.ok = true;
-        payload.recommendations.push('Live-Daten vorhanden, aber kein WM-Mapping. Prüfe external_id und Teamschreibweise in der DB.');
+        payload.recommendations.push('Live-Daten vorhanden, aber kein WM-Linking via external_id. Prüfe external_id und Import-Konsistenz.');
+      } else if (missingFinishedScoresToday) {
+        payload.status = 'warn';
+        payload.ok = true;
+        payload.recommendations.push('Heute sind WM-Spiele angesetzt, aber noch kein abgeschlossenes WM-Ergebnis mit Score in der DB vorhanden.');
       } else {
         payload.status = 'ok';
         payload.ok = true;
       }
+    }
+
+    if (
+      payload.checks.wmToday.scheduledToday > 0
+      && payload.checks.wmToday.finishedWithScoreToday === 0
+      && payload.checks.liveEndpoint.liveMatchCount === 0
+    ) {
+      payload.recommendations.push('Heute gab es WM-Spiele, aber derzeit kein Live-Spiel und kein abgeschlossenes Ergebnis mit Score in der DB. Falls das Spiel beendet ist, WM-Ergebnisse synchronisieren.');
     }
 
     if (payload.checks.liveEndpoint.rateLimited) {

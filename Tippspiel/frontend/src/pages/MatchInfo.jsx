@@ -324,11 +324,14 @@ function MatchInfo() {
     };
   }, [id, insights]);
 
-  // Load live stats when match is live or just finished (load on demand, not on every update)
+  // Load stats for live matches and also for already finished Flashscore matches.
   useEffect(() => {
-    // Only load stats if match is live or was just finished; don't load for matches that finished long ago
-    const isLiveOrJustFinished = liveUpdate?.isLive || liveUpdate?.isFinished;
-    if (!isLiveOrJustFinished) {
+    const source = String(insights?.match?.external_source || '').toLowerCase();
+    const isFlashscoreMatch = source.includes('flashscore');
+    const isLive = Boolean(liveUpdate?.isLive);
+    const isFinished = Boolean(liveUpdate?.isFinished || insights?.match?.finished);
+
+    if (!isFlashscoreMatch || (!isLive && !isFinished)) {
       return undefined;
     }
 
@@ -355,8 +358,11 @@ function MatchInfo() {
 
     const scheduleNextFetch = () => {
       if (stopped) return;
-      // Update less frequently once match is finished (every 90s)
-      const interval = liveUpdate?.isLive ? 60000 : 90000;
+      // Keep polling while live; for finished matches one fetch is enough.
+      const interval = isLive ? 60000 : null;
+      if (!interval) {
+        return;
+      }
       timer = setTimeout(fetchStats, interval);
     };
 
@@ -368,7 +374,7 @@ function MatchInfo() {
       stopped = true;
       if (timer) clearTimeout(timer);
     };
-  }, [id, liveUpdate?.isLive, liveUpdate?.isFinished]);
+  }, [id, insights?.match?.external_source, insights?.match?.finished, liveUpdate?.isLive, liveUpdate?.isFinished]);
 
   const sourceLabel = useMemo(() => {
     if (!insights?.source) return 'lokale Daten';
