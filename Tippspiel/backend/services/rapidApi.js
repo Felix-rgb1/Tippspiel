@@ -306,12 +306,58 @@ function isLikelyTeamMatch(teamData, eventTeamName) {
 }
 
 function listFlashscoreMatches(payload) {
-  const entries = Array.isArray(payload) ? payload : [];
-  if (entries.some((entry) => Array.isArray(entry?.matches))) {
-    return entries.flatMap((entry) => Array.isArray(entry?.matches) ? entry.matches : []);
+  const collected = [];
+  const visited = new Set();
+
+  function looksLikeMatch(entry) {
+    if (!entry || typeof entry !== 'object') return false;
+    const hasId = entry.match_id || entry.id || entry.event_id || entry.eventId;
+    const hasTeams = Boolean(
+      (entry.home_team || entry.homeTeam || entry.home)
+      && (entry.away_team || entry.awayTeam || entry.away)
+    );
+    return Boolean(hasId && hasTeams);
   }
 
-  return entries;
+  function walk(value) {
+    if (!value || typeof value !== 'object') return;
+    if (visited.has(value)) return;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => walk(entry));
+      return;
+    }
+
+    if (looksLikeMatch(value)) {
+      collected.push(value);
+    }
+
+    if (Array.isArray(value.matches)) {
+      value.matches.forEach((entry) => walk(entry));
+    }
+
+    Object.values(value).forEach((child) => {
+      if (child && typeof child === 'object') {
+        walk(child);
+      }
+    });
+  }
+
+  walk(payload);
+
+  if (collected.length > 0) {
+    const uniqueById = new Map();
+    collected.forEach((entry) => {
+      const id = entry?.match_id || entry?.id || entry?.event_id || entry?.eventId;
+      if (id !== undefined && id !== null) {
+        uniqueById.set(String(id), entry);
+      }
+    });
+    return Array.from(uniqueById.values());
+  }
+
+  return Array.isArray(payload) ? payload : [];
 }
 
 function findBestFlashscoreMatch(tournaments, homeTeam, awayTeam, matchDate) {
@@ -454,7 +500,7 @@ async function fetchFlashscoreTournamentFixtures(tournamentUrl = getConfiguredFl
     season_id: ids.season_id
   });
 
-  return Array.isArray(payload) ? payload : [];
+  return listFlashscoreMatches(payload);
 }
 
 async function findFlashscoreFixture(homeTeam, awayTeam, matchDate, options = {}) {
@@ -1457,7 +1503,7 @@ async function fetchFlashscoreTournamentResults(tournamentUrl = getConfiguredFla
     season_id: ids.season_id
   });
 
-  return Array.isArray(payload) ? payload : [];
+  return listFlashscoreMatches(payload);
 }
 
 async function fetchFlashscoreLiveMatches(options = {}) {
@@ -1484,7 +1530,7 @@ async function fetchFlashscoreMatchesByDate(dateOnly, options = {}) {
     timezone: options.timezone || process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin'
   });
 
-  return Array.isArray(payload) ? payload : [];
+  return listFlashscoreMatches(payload);
 }
 
 async function fetchFlashscoreMatchDetails(matchId) {

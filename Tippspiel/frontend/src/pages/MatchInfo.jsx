@@ -116,8 +116,15 @@ function getTickerStatusText(rawStatus) {
 function extractKeyStats(statsData) {
   if (!statsData || typeof statsData !== 'object') return null;
 
-  // Extract "match" (full-game) stats
-  const matchStats = Array.isArray(statsData.match) ? statsData.match : [];
+  // Prefer full match stats, fallback to half stats if provider has no aggregated block.
+  const matchStats = Array.isArray(statsData.match)
+    ? statsData.match
+    : Array.isArray(statsData['2nd-half'])
+    ? statsData['2nd-half']
+    : Array.isArray(statsData['1st-half'])
+    ? statsData['1st-half']
+    : [];
+
   const stats = {};
 
   for (const item of matchStats) {
@@ -125,15 +132,17 @@ function extractKeyStats(statsData) {
     const homeVal = item.home_team;
     const awayVal = item.away_team;
 
-    if (name.includes('possession')) {
+    if (name.includes('expected goals') || name === 'xg') {
+      stats.xg = { home: homeVal, away: awayVal };
+    } else if (name.includes('possession')) {
       stats.possession = { home: homeVal, away: awayVal };
-    } else if (name === 'total shots') {
+    } else if (name.includes('total shots')) {
       stats.shots = { home: homeVal, away: awayVal };
-    } else if (name === 'shots on target') {
+    } else if (name.includes('shots on target')) {
       stats.shotsOnTarget = { home: homeVal, away: awayVal };
     } else if (name.includes('corner')) {
       stats.corners = { home: homeVal, away: awayVal };
-    } else if (name === 'fouls') {
+    } else if (name.includes('fouls')) {
       stats.fouls = { home: homeVal, away: awayVal };
     }
   }
@@ -594,6 +603,17 @@ function MatchInfo() {
             </div>
 
             <div className="live-stats-grid">
+              {keyStats.xg && (
+                <div className="stat-panel">
+                  <div className="stat-label">xG</div>
+                  <div className="stat-values-simple">
+                    <span className="home-val">{keyStats.xg.home}</span>
+                    <span className="divider">:</span>
+                    <span className="away-val">{keyStats.xg.away}</span>
+                  </div>
+                </div>
+              )}
+
               {keyStats.possession && (
                 <div className="stat-panel">
                   <div className="stat-label">Ballbesitz</div>

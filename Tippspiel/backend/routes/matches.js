@@ -4,7 +4,13 @@ const { authMiddleware } = require('../middleware/auth');
 const { getMatchInsights } = require('../services/footballData');
 const { getLiveScoresForMatches, getMatchStatsWithCache } = require('../services/liveScores');
 const { syncWMResults } = require('../services/flashscoreBundesligaImport');
-const { fetchFlashscoreGroupStandings, fetchFlashscoreTournamentFixtures, isRapidApiConfigured } = require('../services/rapidApi');
+const {
+  fetchFlashscoreGroupStandings,
+  fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreTournamentResults,
+  fetchFlashscoreMatchesByDate,
+  isRapidApiConfigured
+} = require('../services/rapidApi');
 
 const router = express.Router();
 
@@ -101,10 +107,13 @@ function scoreFixtureCandidate(targetMatch, fixture) {
   const awayName = normalizeName(fixture?.away_team?.name);
 
   let score = 0;
-  if (homeTarget && homeName && (homeTarget === homeName || homeTarget.includes(homeName) || homeName.includes(homeTarget))) {
+  const homeMatch = Boolean(homeTarget && homeName && (homeTarget === homeName || homeTarget.includes(homeName) || homeName.includes(homeTarget)));
+  const awayMatch = Boolean(awayTarget && awayName && (awayTarget === awayName || awayTarget.includes(awayName) || awayName.includes(awayTarget)));
+
+  if (homeMatch) {
     score += 2;
   }
-  if (awayTarget && awayName && (awayTarget === awayName || awayTarget.includes(awayName) || awayName.includes(awayTarget))) {
+  if (awayMatch) {
     score += 2;
   }
 
@@ -116,11 +125,38 @@ function scoreFixtureCandidate(targetMatch, fixture) {
 
   if (timeDiff <= 30 * 60 * 1000) {
     score += 1;
-  } else if (timeDiff > 120 * 60 * 1000) {
-    score = -1;
+  } else if (timeDiff <= 6 * 60 * 60 * 1000) {
+    score += 0;
+  } else if (timeDiff <= 24 * 60 * 60 * 1000) {
+    score -= 1;
+  } else {
+    score -= 2;
   }
 
-  return { score, timeDiff };
+  return {
+    score,
+    timeDiff,
+    exactTeamPair: homeMatch && awayMatch
+  };
+}
+
+function toMatchEntries(payload) {
+  const entries = Array.isArray(payload) ? payload : [];
+  if (entries.some((entry) => Array.isArray(entry?.matches))) {
+    return entries.flatMap((entry) => (Array.isArray(entry?.matches) ? entry.matches : []));
+  }
+  return entries;
+}
+
+function dedupeBySourceMatchId(matches) {
+  const byId = new Map();
+  for (const fixture of matches) {
+    const id = fixture?.match_id || fixture?.id || fixture?.event_id;
+    if (id) {
+      byId.set(String(id), fixture);
+    }
+  }
+  return Array.from(byId.values());
 }
 
 async function resolveFlashscoreMatchIdForStats(match, liveInfo = null, options = {}) {
@@ -147,13 +183,56 @@ async function resolveFlashscoreMatchIdForStats(match, liveInfo = null, options 
     };
   }
 
-  const tournamentUrl = process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
-  const fixturesPayload = await fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false });
-  const fixtures = Array.isArray(fixturesPayload)
-    ? (fixturesPayload.some((entry) => Array.isArray(entry?.matches))
-      ? fixturesPayload.flatMap((entry) => (Array.isArray(entry?.matches) ? entry.matches : []))
-      : fixturesPayload)
+  const configuredTournamentUrl = process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
+  const tournamentUrls = Array.from(new Set([
+    configuredTournamentUrl,
+    '/football/world/world-cup/',
+    '/football/world/world-cup-2026/'
+  ]));
+
+  const tournamentPayloads = await Promise.all(
+    tournamentUrls.map(async (url) => {
+      const [fixtures, results] = await Promise.all([
+        fetchFlashscoreTournamentFixtures(url, { useConfiguredIds: false }).catch(() => []),
+        fetchFlashscoreTournamentResults(url, { useConfiguredIds: false }).catch(() => [])
+      ]);
+
+      return { url, fixtures, results };
+    })
+  );
+
+  const fixturesPayload = tournamentPayloads.flatMap((entry) => toMatchEntries(entry.fixtures));
+  const resultsPayload = tournamentPayloads.flatMap((entry) => toMatchEntries(entry.results));
+
+  const matchDate = new Date(match.match_date);
+  const timezone = process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin';
+  const baseDateBerlin = Number.isNaN(matchDate.getTime())
+    ? null
+    : matchDate.toLocaleDateString('en-CA', { timeZone: timezone });
+
+  const dateVariants = [];
+  if (baseDateBerlin) {
+    const baseDate = new Date(`${baseDateBerlin}T00:00:00Z`);
+    const prev = new Date(baseDate.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const curr = baseDate.toISOString().slice(0, 10);
+    const next = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    dateVariants.push(prev, curr, next);
+  }
+
+  const uniqueDateVariants = Array.from(new Set(dateVariants));
+  const byDatePayloads = uniqueDateVariants.length
+    ? await Promise.all(
+        uniqueDateVariants.map((dateOnly) =>
+          fetchFlashscoreMatchesByDate(dateOnly, { timezone }).catch(() => [])
+        )
+      )
     : [];
+
+  const fixtures = dedupeBySourceMatchId([
+    ...fixturesPayload,
+    ...resultsPayload,
+    ...byDatePayloads.flatMap((payload) => toMatchEntries(payload))
+  ]);
 
   const candidates = fixtures
     .map((fixture) => {
@@ -164,7 +243,17 @@ async function resolveFlashscoreMatchIdForStats(match, liveInfo = null, options 
         matchId: fixture?.match_id || fixture?.id || fixture?.event_id || null
       };
     })
-    .filter((entry) => entry.matchId && entry.score >= 4)
+    .filter((entry) => {
+      if (!entry.matchId) return false;
+      if (entry.score >= 3) return true;
+
+      // Fallback for timezone-shifted but clearly matching fixtures.
+      if (entry.exactTeamPair && Number.isFinite(entry.timeDiff) && entry.timeDiff <= 48 * 60 * 60 * 1000) {
+        return true;
+      }
+
+      return false;
+    })
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return a.timeDiff - b.timeDiff;
@@ -186,12 +275,21 @@ async function resolveFlashscoreMatchIdForStats(match, liveInfo = null, options 
         ...(debugEnabled
           ? {
               candidateCount: candidates.length,
+              searchedDates: uniqueDateVariants,
+              tournamentUrlsTried: tournamentUrls,
+              sourcePoolSizes: {
+                fixtures: fixturesPayload.length,
+                results: resultsPayload.length,
+                byDate: byDatePayloads.reduce((sum, payload) => sum + toMatchEntries(payload).length, 0),
+                mergedUnique: fixtures.length
+              },
               topCandidates: candidates.slice(0, 3).map((entry) => ({
                 matchId: entry.matchId,
                 score: entry.score,
                 timeDiffMinutes: Number.isFinite(entry.timeDiff)
                   ? Number((entry.timeDiff / 60000).toFixed(1))
                   : null,
+                exactTeamPair: entry.exactTeamPair,
                 homeTeam: entry.fixture?.home_team?.name || null,
                 awayTeam: entry.fixture?.away_team?.name || null,
                 timestamp: entry.fixture?.timestamp || null
@@ -207,7 +305,15 @@ async function resolveFlashscoreMatchIdForStats(match, liveInfo = null, options 
     resolution: {
       method: 'not-found',
       candidateCount: candidates.length,
-      reason: 'No fixture candidate passed score/time thresholds.'
+      reason: 'No fixture candidate passed score/time thresholds.',
+      searchedDates: uniqueDateVariants,
+      tournamentUrlsTried: tournamentUrls,
+      sourcePoolSizes: {
+        fixtures: fixturesPayload.length,
+        results: resultsPayload.length,
+        byDate: byDatePayloads.reduce((sum, payload) => sum + toMatchEntries(payload).length, 0),
+        mergedUnique: fixtures.length
+      }
     }
   };
 }
