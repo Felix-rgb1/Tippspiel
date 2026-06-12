@@ -1,5 +1,6 @@
 const {
   fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreLiveMatches,
   fetchFlashscoreMatchesByDate,
   fetchFlashscoreMatchDetails,
   fetchFlashscoreMatchStats
@@ -423,6 +424,17 @@ function findBestCandidateForMatch(targetMatch, fixtures) {
 function getRapidOptionsForMatch(match) {
   const externalSource = String(match?.external_source || '').toLowerCase();
 
+  if (externalSource === 'flashscore-wm') {
+    return {
+      mode: 'live',
+      sportId: 1,
+      timezone: process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin',
+      tournamentUrl: process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/',
+      useConfiguredIds: false,
+      cacheKey: 'flashscore:wm-live'
+    };
+  }
+
   if (externalSource === 'flashscore-live-test-day') {
     const matchDate = new Date(match?.match_date || Date.now());
     const dateOnlyBerlin = Number.isNaN(matchDate.getTime())
@@ -433,15 +445,6 @@ function getRapidOptionsForMatch(match) {
       mode: 'by-date',
       dateOnly: dateOnlyBerlin,
       cacheKey: `flashscore:by-date:${dateOnlyBerlin}`
-    };
-  }
-
-  if (externalSource === 'flashscore-bundesliga') {
-    return {
-      mode: 'tournament',
-      tournamentUrl: process.env.FLASHSCORE_BUNDESLIGA_TOURNAMENT_URL || '/football/germany/bundesliga/',
-      useConfiguredIds: false,
-      cacheKey: 'flashscore:bundesliga'
     };
   }
 
@@ -469,11 +472,29 @@ async function getTournamentFixturesCached(rapidOptions) {
 
   const fetchPromise = (async () => {
     const fetchStartedAt = Date.now();
-    const fixturesPayload = rapidOptions.mode === 'by-date'
-      ? await fetchFlashscoreMatchesByDate(rapidOptions.dateOnly)
-      : await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
+    let fixturesPayload = [];
+
+    if (rapidOptions.mode === 'by-date') {
+      fixturesPayload = await fetchFlashscoreMatchesByDate(rapidOptions.dateOnly);
+    } else if (rapidOptions.mode === 'live') {
+      const livePayload = await fetchFlashscoreLiveMatches({
+        sportId: rapidOptions.sportId,
+        timezone: rapidOptions.timezone
+      });
+
+      // When live endpoint is empty (e.g. provider lag), fallback to tournament fixtures.
+      if (Array.isArray(livePayload) && livePayload.length > 0) {
+        fixturesPayload = livePayload;
+      } else {
+        fixturesPayload = await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
           useConfiguredIds: rapidOptions.useConfiguredIds
         });
+      }
+    } else {
+      fixturesPayload = await fetchFlashscoreTournamentFixtures(rapidOptions.tournamentUrl, {
+        useConfiguredIds: rapidOptions.useConfiguredIds
+      });
+    }
 
     const fixtures = toMatchEntries(fixturesPayload);
     const data = {
@@ -577,10 +598,15 @@ function shouldCheckLiveForMatch(match, options = {}) {
   if (!match || match.finished) return false;
 
   const source = String(match.external_source || '').toLowerCase();
-  if (!source.includes('flashscore')) return false;
+  if (!source.startsWith('flashscore')) return false;
 
-  // For core competitions, do not gate by time window to prevent missed live updates.
-  if (source === 'flashscore-wm' || source === 'flashscore-bundesliga') {
+  // Live polling is WM-only now.
+  if (source !== 'flashscore-wm' && source !== 'flashscore-live-test-day') {
+    return false;
+  }
+
+  // WM stays always eligible to avoid missing live windows.
+  if (source === 'flashscore-wm') {
     return true;
   }
 
@@ -776,6 +802,13 @@ async function getLiveScoresForMatches(matches, pool = null, options = {}) {
 
       patchCacheLiveness(group.options, hasLiveMatch, group.matches);
     } catch (error) {
+      console.warn('[LIVE-SCORES] Provider group failed', {
+        cacheKey: group?.options?.cacheKey || null,
+        mode: group?.options?.mode || null,
+        sourceHints: group?.matches?.map((m) => m?.external_source).filter(Boolean),
+        error: error?.message || String(error)
+      });
+
       // Provider is optional; continue with other groups.
     }
   }

@@ -74,6 +74,8 @@ function Admin() {
   const [savingUser, setSavingUser] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [savingBonusResult, setSavingBonusResult] = useState(false);
+  const [liveHealth, setLiveHealth] = useState(null);
+  const [checkingLiveHealth, setCheckingLiveHealth] = useState(false);
   const adminAvatarFileRef = useRef(null);
   const [adminAvatarUploadError, setAdminAvatarUploadError] = useState('');
 
@@ -444,6 +446,32 @@ function Admin() {
     }
   };
 
+  const handleCheckLiveHealth = async () => {
+    try {
+      setCheckingLiveHealth(true);
+      setError('');
+      const response = await adminAPI.getLiveHealth();
+      setLiveHealth(response.data || null);
+      setSuccess('Live-Healthcheck aktualisiert');
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (err) {
+      const data = err?.response?.data;
+      setLiveHealth(data || null);
+      setError(data?.error || 'Live-Healthcheck fehlgeschlagen');
+    } finally {
+      setCheckingLiveHealth(false);
+    }
+  };
+
+  const liveHealthStatus = String(liveHealth?.status || 'unknown').toLowerCase();
+  const liveHealthStatusLabel = liveHealthStatus === 'ok'
+    ? 'OK'
+    : liveHealthStatus === 'warn'
+    ? 'Warnung'
+    : liveHealthStatus === 'fail'
+    ? 'Fehler'
+    : 'Unbekannt';
+
   const extractApiErrorMessage = async (err, fallbackMessage) => {
     const responseData = err?.response?.data;
 
@@ -659,12 +687,80 @@ function Admin() {
             </button>
             <button
               type="button"
+              className="btn-secondary"
+              onClick={handleCheckLiveHealth}
+              disabled={checkingLiveHealth}
+            >
+              {checkingLiveHealth ? '⏳ Prüft Live-Health...' : '🩺 Live-Healthcheck prüfen'}
+            </button>
+            <button
+              type="button"
               className="btn-success"
               onClick={handleExportTipsExcel}
               disabled={exportingTips}
             >
               {exportingTips ? '⏳ Export läuft...' : '📥 Tipps als Excel herunterladen'}
             </button>
+          </div>
+
+          <div className="card live-health-card">
+            <div className="live-health-header">
+              <h2>Live-Healthcheck (WM)</h2>
+              <span className={`live-health-pill live-health-pill--${liveHealthStatus}`}>
+                {liveHealthStatusLabel}
+              </span>
+            </div>
+
+            {!liveHealth ? (
+              <p className="live-health-empty">Noch nicht geprüft. Klicke auf "Live-Healthcheck prüfen".</p>
+            ) : (
+              <div className="live-health-grid">
+                <div className="live-health-item">
+                  <div className="live-health-label">Host</div>
+                  <div className="live-health-value">{liveHealth?.checks?.configuration?.host || '-'}</div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">Provider</div>
+                  <div className="live-health-value">{liveHealth?.checks?.configuration?.provider || '-'}</div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">Live Endpoint</div>
+                  <div className="live-health-value">
+                    {liveHealth?.checks?.liveEndpoint?.ok ? 'Erreichbar' : 'Fehler'}
+                    {' · '}
+                    {liveHealth?.checks?.liveEndpoint?.liveMatchCount ?? 0} Live-Spiele
+                  </div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">Rate Limit</div>
+                  <div className="live-health-value">
+                    {liveHealth?.checks?.liveEndpoint?.rateLimited ? 'Aktiv (429)' : 'Nicht erkannt'}
+                  </div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">WM-Mapping</div>
+                  <div className="live-health-value">
+                    {liveHealth?.checks?.wmMapping?.mappedUpdates ?? 0}
+                    {' / '}
+                    {liveHealth?.checks?.wmMapping?.checkedDbMatches ?? 0}
+                    {' · Coverage '}
+                    {Math.round((Number(liveHealth?.checks?.wmMapping?.mappingCoverage || 0) * 100))}%
+                  </div>
+                </div>
+                <div className="live-health-item">
+                  <div className="live-health-label">Dauer</div>
+                  <div className="live-health-value">{liveHealth?.durationMs ?? '-'} ms</div>
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(liveHealth?.recommendations) && liveHealth.recommendations.length > 0 && (
+              <div className="live-health-recommendations">
+                {liveHealth.recommendations.map((rec, index) => (
+                  <div key={`live-health-rec-${index}`} className="live-health-recommendation">• {rec}</div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="card">

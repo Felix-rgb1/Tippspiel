@@ -5,6 +5,12 @@ const { areBonusFeaturesAvailable, isMissingRelationError } = require('../servic
 
 const router = express.Router();
 
+function isMatchLocked(matchDateValue) {
+  const matchDate = new Date(matchDateValue);
+  const deadline = new Date(matchDate.getTime() - 60 * 60 * 1000);
+  return new Date() >= deadline;
+}
+
 // Submit a tip
 router.post('/', authMiddleware, async (req, res) => {
   try {
@@ -22,10 +28,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     // Check if deadline passed (1 hour before match)
-    const matchDate = new Date(matchResult.rows[0].match_date);
-    const deadline = new Date(matchDate.getTime() - 60 * 60 * 1000);
-    
-    if (new Date() > deadline) {
+    if (isMatchLocked(matchResult.rows[0].match_date)) {
       return res.status(400).json({ error: 'Deadline for this match has passed' });
     }
 
@@ -88,15 +91,16 @@ router.get('/visible', authMiddleware, async (req, res) => {
          t.home_goals,
          t.away_goals,
          t.created_at,
-         t.updated_at
+         t.updated_at,
+         m.match_date
        FROM tips t
        JOIN users u ON u.id = t.user_id
        JOIN matches m ON m.id = t.match_id
-       WHERE NOW() > (m.match_date - INTERVAL '1 hour')
        ORDER BY m.match_date ASC, u.username ASC`
     );
 
-    res.json(result.rows);
+    const visibleTips = result.rows.filter((row) => isMatchLocked(row.match_date));
+    res.json(visibleTips);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch visible tips' });

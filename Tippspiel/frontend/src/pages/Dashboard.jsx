@@ -1523,7 +1523,7 @@ function Dashboard() {
                 </div>
               )}
 
-              {deadlinePasssed && visibleTips.length > 0 && (
+              {visibleTips.length > 0 && (
                 <div className="visible-tips-panel">
                   <button
                     type="button"

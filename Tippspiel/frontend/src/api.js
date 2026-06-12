@@ -144,6 +144,7 @@ export const adminAPI = {
     apiPost(`/admin/users/${userId}/reset-password`, { newPassword }),
   deleteUser: (userId) => apiDelete(`/admin/users/${userId}`),
   exportTipsExcel: () => apiGet('/admin/tips/export', { responseType: 'blob' }),
+  getLiveHealth: () => apiGet('/admin/integrations/live/health'),
   getBonusResult: () => apiGet('/admin/bonus-result'),
   updateBonusResult: (championTeam, runnerUpTeam, championPoints, runnerUpPoints) =>
     apiPut('/admin/bonus-result', {

@@ -4,7 +4,8 @@ const pool = require('../db');
 const ExcelJS = require('exceljs');
 const { adminMiddleware } = require('../middleware/auth');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
-const { testRapidApi, isRapidApiConfigured } = require('../services/rapidApi');
+const { testRapidApi, isRapidApiConfigured, fetchFlashscoreLiveMatches } = require('../services/rapidApi');
+const { getLiveScoresForMatches } = require('../services/liveScores');
 const {
   importFlashscoreBundesligaMatches,
   importFlashscoreWMMatches,
@@ -14,6 +15,183 @@ const {
 const { importLiveTodayMatches } = require('../importLiveToday');
 
 const router = express.Router();
+
+function isLikelyRateLimitError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.statusCode === 429 || message.includes('429') || message.includes('rate-limit') || message.includes('rate limit');
+}
+
+router.get('/integrations/live/health', adminMiddleware, async (req, res) => {
+  const startedAt = Date.now();
+
+  try {
+    const host = String(process.env.RAPIDAPI_HOST || '').trim();
+    const provider = String(process.env.RAPIDAPI_PROVIDER || 'rapidapi').trim().toLowerCase();
+    const timezone = String(process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin').trim();
+    const tournamentUrl = String(process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/').trim();
+
+    const hostLooksFlashscore = host.includes('flashscore');
+    const configured = isRapidApiConfigured();
+
+    const payload = {
+      ok: false,
+      timestamp: new Date().toISOString(),
+      durationMs: null,
+      checks: {
+        configuration: {
+          configured,
+          host: host || null,
+          provider,
+          timezone,
+          tournamentUrl,
+          hostLooksFlashscore
+        },
+        liveEndpoint: {
+          ok: false,
+          statusCode: null,
+          rateLimited: false,
+          liveMatchCount: 0,
+          sampleMatchIds: []
+        },
+        wmMapping: {
+          ok: false,
+          checkedDbMatches: 0,
+          mappedUpdates: 0,
+          mappingCoverage: 0,
+          sampleUnmappedDbIds: []
+        }
+      },
+      status: 'fail',
+      recommendations: []
+    };
+
+    if (!configured) {
+      payload.recommendations.push('Setze RAPIDAPI_KEY und RAPIDAPI_HOST.');
+    }
+
+    if (!hostLooksFlashscore) {
+      payload.recommendations.push('Setze RAPIDAPI_HOST auf einen Flashscore-Host (z.B. flashscore4.p.rapidapi.com).');
+    }
+
+    let liveMatches = [];
+    try {
+      liveMatches = await fetchFlashscoreLiveMatches({ sportId: 1, timezone });
+      payload.checks.liveEndpoint = {
+        ok: true,
+        statusCode: 200,
+        rateLimited: false,
+        liveMatchCount: Array.isArray(liveMatches) ? liveMatches.length : 0,
+        sampleMatchIds: (Array.isArray(liveMatches) ? liveMatches : [])
+          .map((m) => m?.match_id || m?.id || m?.event_id)
+          .filter(Boolean)
+          .slice(0, 8)
+      };
+    } catch (error) {
+      payload.checks.liveEndpoint = {
+        ok: false,
+        statusCode: error?.statusCode || null,
+        rateLimited: isLikelyRateLimitError(error),
+        liveMatchCount: 0,
+        sampleMatchIds: [],
+        error: error?.message || 'Live endpoint failed'
+      };
+    }
+
+    const wmDbResult = await pool.query(
+      `SELECT id, home_team, away_team, match_date, finished, external_source, external_id
+       FROM matches
+       WHERE external_source = 'flashscore-wm'
+         AND (finished = false OR finished IS NULL)
+         AND match_date >= NOW() - INTERVAL '6 hours'
+         AND match_date <= NOW() + INTERVAL '72 hours'
+       ORDER BY match_date ASC
+       LIMIT 30`
+    );
+
+    const wmCandidates = wmDbResult.rows;
+    let mappedUpdates = 0;
+    let sampleUnmappedDbIds = [];
+
+    if (wmCandidates.length > 0) {
+      try {
+        const mapping = await getLiveScoresForMatches(wmCandidates, pool, { forceCheckAll: true });
+        const updates = mapping?.updates || {};
+        mappedUpdates = Object.keys(updates).length;
+        sampleUnmappedDbIds = wmCandidates
+          .filter((match) => !Object.prototype.hasOwnProperty.call(updates, String(match.id)))
+          .map((match) => match.id)
+          .slice(0, 8);
+
+        payload.checks.wmMapping = {
+          ok: true,
+          checkedDbMatches: wmCandidates.length,
+          mappedUpdates,
+          mappingCoverage: wmCandidates.length > 0
+            ? Number((mappedUpdates / wmCandidates.length).toFixed(3))
+            : 0,
+          sampleUnmappedDbIds
+        };
+      } catch (error) {
+        payload.checks.wmMapping = {
+          ok: false,
+          checkedDbMatches: wmCandidates.length,
+          mappedUpdates: 0,
+          mappingCoverage: 0,
+          sampleUnmappedDbIds: wmCandidates.map((match) => match.id).slice(0, 8),
+          error: error?.message || 'WM mapping check failed'
+        };
+      }
+    } else {
+      payload.checks.wmMapping = {
+        ok: true,
+        checkedDbMatches: 0,
+        mappedUpdates: 0,
+        mappingCoverage: 0,
+        sampleUnmappedDbIds: []
+      };
+      payload.recommendations.push('Keine unverarbeiteten WM-Spiele im 72h-Fenster gefunden.');
+    }
+
+    const endpointFailed = !payload.checks.liveEndpoint.ok;
+    const rateLimited = Boolean(payload.checks.liveEndpoint.rateLimited);
+    const mappingFailed = !payload.checks.wmMapping.ok;
+
+    if (endpointFailed || rateLimited || mappingFailed || !configured || !hostLooksFlashscore) {
+      payload.status = 'fail';
+      payload.ok = false;
+    } else {
+      const lowCoverage = payload.checks.wmMapping.checkedDbMatches > 0
+        && payload.checks.wmMapping.mappedUpdates === 0
+        && payload.checks.liveEndpoint.liveMatchCount > 0;
+
+      if (lowCoverage) {
+        payload.status = 'warn';
+        payload.ok = true;
+        payload.recommendations.push('Live-Daten vorhanden, aber kein WM-Mapping. Prüfe external_id und Teamschreibweise in der DB.');
+      } else {
+        payload.status = 'ok';
+        payload.ok = true;
+      }
+    }
+
+    if (payload.checks.liveEndpoint.rateLimited) {
+      payload.recommendations.push('Rate-Limit aktiv: Polling-Intervall erhöhen oder später erneut pruefen.');
+    }
+
+    payload.durationMs = Date.now() - startedAt;
+    const statusCode = payload.status === 'fail' ? 503 : 200;
+    return res.status(statusCode).json(payload);
+  } catch (err) {
+    console.error('[LIVE-HEALTHCHECK]', err.message || err);
+    return res.status(500).json({
+      ok: false,
+      status: 'fail',
+      error: err.message || 'Live healthcheck failed',
+      timestamp: new Date().toISOString(),
+      durationMs: Date.now() - startedAt
+    });
+  }
+});
 
 router.get('/integrations/rapidapi/test', adminMiddleware, async (req, res) => {
   try {

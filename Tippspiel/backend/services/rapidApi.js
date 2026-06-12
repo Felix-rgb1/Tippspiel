@@ -1460,6 +1460,18 @@ async function fetchFlashscoreTournamentResults(tournamentUrl = getConfiguredFla
   return Array.isArray(payload) ? payload : [];
 }
 
+async function fetchFlashscoreLiveMatches(options = {}) {
+  const sportId = Number.parseInt(String(options.sportId || '1'), 10) || 1;
+  const timezone = options.timezone || process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin';
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/matches/live', {
+    sport_id: sportId,
+    timezone
+  });
+
+  return listFlashscoreMatches(payload);
+}
+
 async function fetchFlashscoreMatchesByDate(dateOnly, options = {}) {
   const resolvedDate = dateOnly || toDateOnly(new Date());
   if (!resolvedDate) {
@@ -1557,6 +1569,7 @@ module.exports = {
   fetchRapidApiProbabilities,
   fetchRapidApiMatchInsights,
   fetchFlashscoreTournamentFixtures,
+  fetchFlashscoreLiveMatches,
   fetchFlashscoreMatchesByDate,
   fetchFlashscoreTournamentResults,
   fetchFlashscoreMatchDetails,

@@ -3,7 +3,7 @@ const pool = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getMatchInsights } = require('../services/footballData');
 const { getLiveScoresForMatches, getMatchStatsWithCache } = require('../services/liveScores');
-const { syncWMResults, syncBundesligaResults } = require('../services/flashscoreBundesligaImport');
+const { syncWMResults } = require('../services/flashscoreBundesligaImport');
 const { fetchFlashscoreGroupStandings, isRapidApiConfigured } = require('../services/rapidApi');
 
 const router = express.Router();
@@ -47,18 +47,19 @@ async function runResultSyncJob() {
     (entry) => Boolean(entry?.isFinished) && Number.isFinite(Number(entry?.homeGoals)) && Number.isFinite(Number(entry?.awayGoals))
   ).length;
 
-  const [wmResult, bundesligaResult] = await Promise.allSettled([
-    syncWMResults(pool),
-    syncBundesligaResults(pool)
+  const [wmResult] = await Promise.allSettled([
+    syncWMResults(pool)
   ]);
 
   const wm = wmResult.status === 'fulfilled'
     ? { ok: true, ...wmResult.value }
     : { ok: false, error: wmResult.reason?.message || 'WM Sync fehlgeschlagen' };
 
-  const bundesliga = bundesligaResult.status === 'fulfilled'
-    ? { ok: true, ...bundesligaResult.value }
-    : { ok: false, error: bundesligaResult.reason?.message || 'Bundesliga Sync fehlgeschlagen' };
+  const bundesliga = {
+    ok: false,
+    skipped: true,
+    reason: 'Bundesliga Sync deaktiviert (WM-only Betrieb).'
+  };
 
   const now = Date.now();
 
