@@ -123,15 +123,28 @@ function scoreFixtureCandidate(targetMatch, fixture) {
   return { score, timeDiff };
 }
 
-async function resolveFlashscoreMatchIdForStats(match, liveInfo = null) {
+async function resolveFlashscoreMatchIdForStats(match, liveInfo = null, options = {}) {
+  const debugEnabled = options.debug === true;
   const mappedSourceMatchId = liveInfo?.updates?.[match.id]?.sourceMatchId;
   if (mappedSourceMatchId) {
-    return String(mappedSourceMatchId);
+    return {
+      sourceMatchId: String(mappedSourceMatchId),
+      resolution: {
+        method: 'live-mapping',
+        timeDiffMinutes: null
+      }
+    };
   }
 
   const externalIdRaw = String(match.external_id || '').trim();
   if (/^\d+$/.test(externalIdRaw) && externalIdRaw.length <= 11) {
-    return externalIdRaw;
+    return {
+      sourceMatchId: externalIdRaw,
+      resolution: {
+        method: 'external-id-direct',
+        timeDiffMinutes: null
+      }
+    };
   }
 
   const tournamentUrl = process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
@@ -157,7 +170,46 @@ async function resolveFlashscoreMatchIdForStats(match, liveInfo = null) {
       return a.timeDiff - b.timeDiff;
     });
 
-  return candidates[0]?.matchId ? String(candidates[0].matchId) : null;
+  if (candidates[0]?.matchId) {
+    const best = candidates[0];
+    return {
+      sourceMatchId: String(best.matchId),
+      resolution: {
+        method: 'fixture-fallback',
+        score: best.score,
+        timeDiffMinutes: Number.isFinite(best.timeDiff)
+          ? Number((best.timeDiff / 60000).toFixed(1))
+          : null,
+        fixtureTimestamp: best.fixture?.timestamp || null,
+        fixtureHomeTeam: best.fixture?.home_team?.name || null,
+        fixtureAwayTeam: best.fixture?.away_team?.name || null,
+        ...(debugEnabled
+          ? {
+              candidateCount: candidates.length,
+              topCandidates: candidates.slice(0, 3).map((entry) => ({
+                matchId: entry.matchId,
+                score: entry.score,
+                timeDiffMinutes: Number.isFinite(entry.timeDiff)
+                  ? Number((entry.timeDiff / 60000).toFixed(1))
+                  : null,
+                homeTeam: entry.fixture?.home_team?.name || null,
+                awayTeam: entry.fixture?.away_team?.name || null,
+                timestamp: entry.fixture?.timestamp || null
+              }))
+            }
+          : {})
+      }
+    };
+  }
+
+  return {
+    sourceMatchId: null,
+    resolution: {
+      method: 'not-found',
+      candidateCount: candidates.length,
+      reason: 'No fixture candidate passed score/time thresholds.'
+    }
+  };
 }
 
 async function buildLivePayload(rawIds) {
@@ -416,6 +468,8 @@ router.get('/:id/debug-flashscore', async (req, res) => {
 // Get live stats for a match (only on demand from MatchInfo page)
 router.get('/:id/live-stats', authMiddleware, async (req, res) => {
   try {
+    const debug = ['1', 'true', 'yes', 'on'].includes(String(req.query.debug || '').toLowerCase());
+
     const matchResult = await pool.query(
       'SELECT id, home_team, away_team, match_date, finished, external_source, external_id FROM matches WHERE id = $1',
       [req.params.id]
@@ -432,12 +486,28 @@ router.get('/:id/live-stats', authMiddleware, async (req, res) => {
 
     // Get current live info to extract sourceMatchId from Flashscore
     const liveInfo = await getLiveScoresForMatches([match], pool);
-    const sourceMatchId = await resolveFlashscoreMatchIdForStats(match, liveInfo);
+    const resolved = await resolveFlashscoreMatchIdForStats(match, liveInfo, { debug });
+    const sourceMatchId = resolved?.sourceMatchId;
 
     if (!sourceMatchId) {
       return res.status(400).json({
         error: 'Could not find live match in Flashscore',
-        details: 'No sourceMatchId from live mapping, external_id is not a direct provider id, and fixture fallback could not resolve a match id.'
+        details: 'No sourceMatchId from live mapping, external_id is not a direct provider id, and fixture fallback could not resolve a match id.',
+        ...(debug
+          ? {
+              debug: {
+                match: {
+                  id: match.id,
+                  home_team: match.home_team,
+                  away_team: match.away_team,
+                  match_date: match.match_date,
+                  external_source: match.external_source,
+                  external_id: match.external_id
+                },
+                resolution: resolved?.resolution || null
+              }
+            }
+          : {})
       });
     }
 
@@ -449,7 +519,23 @@ router.get('/:id/live-stats', authMiddleware, async (req, res) => {
     res.set('Expires', '0');
     res.json({
       stats,
-      fetchedAt: new Date().toISOString()
+      fetchedAt: new Date().toISOString(),
+      ...(debug
+        ? {
+            debug: {
+              match: {
+                id: match.id,
+                home_team: match.home_team,
+                away_team: match.away_team,
+                match_date: match.match_date,
+                external_source: match.external_source,
+                external_id: match.external_id
+              },
+              sourceMatchId,
+              resolution: resolved?.resolution || null
+            }
+          }
+        : {})
     });
   } catch (err) {
     console.error(err);
