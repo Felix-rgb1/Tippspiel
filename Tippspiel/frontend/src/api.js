@@ -133,6 +133,8 @@ export const adminAPI = {
   importBundesliga: () => apiPost('/admin/matches/import/bundesliga', {}),
   importLiveToday: (source = 'any', max = 1, tournamentUrl = '') =>
     apiPost('/admin/matches/import/live-today', { source, max, tournamentUrl }),
+  backfillWMProviderIds: (limit = 100) =>
+    apiPost('/admin/matches/backfill/wm-provider-ids', { limit }),
   syncWMResults: () => apiPost('/admin/matches/sync-results/wm', {}),
   syncBundesligaResults: () => apiPost('/admin/matches/sync-results/bundesliga', {}),
   updateMatchResult: (matchId, homeGoals, awayGoals) =>

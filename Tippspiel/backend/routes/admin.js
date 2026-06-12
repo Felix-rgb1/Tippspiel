@@ -7,6 +7,11 @@ const { areBonusFeaturesAvailable, isMissingRelationError } = require('../servic
 const { testRapidApi, isRapidApiConfigured, fetchFlashscoreLiveMatches } = require('../services/rapidApi');
 const { getLiveScoresForMatches } = require('../services/liveScores');
 const {
+  ensureFlashscoreMatchIdColumn,
+  resolveFlashscoreMatchIdForMatch,
+  persistFlashscoreMatchId
+} = require('../services/flashscoreMatchIds');
+const {
   importFlashscoreBundesligaMatches,
   importFlashscoreWMMatches,
   syncWMResults,
@@ -15,6 +20,61 @@ const {
 const { importLiveTodayMatches } = require('../importLiveToday');
 
 const router = express.Router();
+
+router.post('/matches/backfill/wm-provider-ids', adminMiddleware, async (req, res) => {
+  try {
+    await ensureFlashscoreMatchIdColumn(pool);
+
+    const limitRaw = Number.parseInt(String(req.body?.limit || '100'), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, limitRaw)) : 100;
+
+    const result = await pool.query(
+      `SELECT id, home_team, away_team, match_date, finished, external_source, external_id, flashscore_match_id
+       FROM matches
+       WHERE external_source = 'flashscore-wm'
+         AND (flashscore_match_id IS NULL OR flashscore_match_id = '')
+       ORDER BY match_date ASC
+       LIMIT $1`,
+      [limit]
+    );
+
+    let updatedCount = 0;
+    let unresolvedCount = 0;
+    const samples = [];
+
+    for (const match of result.rows) {
+      const resolved = await resolveFlashscoreMatchIdForMatch(match, { debug: true });
+      if (resolved?.sourceMatchId) {
+        const changed = await persistFlashscoreMatchId(pool, match.id, resolved.sourceMatchId);
+        if (changed) {
+          updatedCount += 1;
+        }
+        if (samples.length < 5) {
+          samples.push({
+            id: match.id,
+            home_team: match.home_team,
+            away_team: match.away_team,
+            flashscore_match_id: resolved.sourceMatchId,
+            method: resolved?.resolution?.method || null
+          });
+        }
+      } else {
+        unresolvedCount += 1;
+      }
+    }
+
+    res.json({
+      message: `WM-Provider-IDs backfilled: ${updatedCount} aktualisiert, ${unresolvedCount} nicht aufgeloest.`,
+      checkedCount: result.rows.length,
+      updatedCount,
+      unresolvedCount,
+      samples
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'WM Provider-ID Backfill fehlgeschlagen' });
+  }
+});
 
 function isLikelyRateLimitError(error) {
   const message = String(error?.message || '').toLowerCase();

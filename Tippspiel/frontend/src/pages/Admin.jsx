@@ -66,6 +66,7 @@ function Admin() {
   const [importingBundesliga, setImportingBundesliga] = useState(false);
   const [importingLiveToday, setImportingLiveToday] = useState(false);
   const [syncingBundesligaResults, setSyncingBundesligaResults] = useState(false);
+  const [backfillingWMProviderIds, setBackfillingWMProviderIds] = useState(false);
   const [exportingTips, setExportingTips] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -427,6 +428,25 @@ function Admin() {
     }
   };
 
+  const handleBackfillWMProviderIds = async () => {
+    try {
+      setBackfillingWMProviderIds(true);
+      setError('');
+      const response = await adminAPI.backfillWMProviderIds(150);
+      const data = response.data || {};
+      setSuccess(
+        data.message
+        || `WM Provider-IDs nachgepflegt: ${data.updatedCount || 0} aktualisiert, ${data.unresolvedCount || 0} nicht aufgeloest.`
+      );
+      setTimeout(() => setSuccess(''), 6000);
+      fetchMatches();
+    } catch (err) {
+      setError(err.response?.data?.error || 'WM Provider-ID Backfill fehlgeschlagen');
+    } finally {
+      setBackfillingWMProviderIds(false);
+    }
+  };
+
   const handleSyncBundesligaResults = async () => {
     try {
       setSyncingBundesligaResults(true);
@@ -676,6 +696,14 @@ function Admin() {
               disabled={syncingWMResults}
             >
               {syncingWMResults ? '⏳ Aktualisiert...' : '🌍 WM-Ergebnisse aktualisieren'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleBackfillWMProviderIds}
+              disabled={backfillingWMProviderIds}
+            >
+              {backfillingWMProviderIds ? '⏳ Provider-IDs werden gesucht...' : '🆔 WM Provider-IDs nachpflegen'}
             </button>
             <button
               type="button"
