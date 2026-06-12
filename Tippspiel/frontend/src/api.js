@@ -3,7 +3,7 @@ import axios from 'axios';
 const runtimeHostname = typeof window !== 'undefined' ? window.location.hostname : '';
 const isLocalDevelopmentHost = runtimeHostname === 'localhost' || runtimeHostname === '127.0.0.1';
 const configuredApiUrl = import.meta.env.VITE_API_URL;
-const API_URL = configuredApiUrl || (isLocalDevelopmentHost ? 'http://localhost:5000/api' : '');
+const API_URL = configuredApiUrl || (isLocalDevelopmentHost ? 'http://localhost:3000/api' : '');
 
 function buildApiPath(path) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -83,7 +83,9 @@ export const matchAPI = {
   getLiveStreamUrl: (ids = []) => buildApiPath(`/matches/live/stream?ids=${encodeURIComponent(ids.join(','))}`),
   getById: (id) => apiGet(`/matches/${id}`),
   getInsights: (id) => apiGet(`/matches/${id}/insights`),
-  getLiveStats: (id) => apiGet(`/matches/${id}/live-stats`),
+  getLiveStats: (id, options = {}) => apiGet(`/matches/${id}/live-stats`, {
+    params: options.debug ? { debug: 1 } : undefined
+  }),
   getGroupStandings: () => apiGet('/matches/group-standings'),
 };
 

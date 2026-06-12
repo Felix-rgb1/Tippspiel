@@ -113,19 +113,70 @@ function getTickerStatusText(rawStatus) {
   return map[rawStatus] || null;
 }
 
+function parseStatNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const cleaned = value.trim().replace(',', '.');
+    const parsed = Number.parseFloat(cleaned);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function formatStatValue(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toLocaleString('de-DE', {
+      minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+      maximumFractionDigits: 2
+    });
+  }
+  return String(value);
+}
+
+function findStatEntry(entries, predicate) {
+  return (Array.isArray(entries) ? entries : []).find((item) => predicate(String(item?.name || '').toLowerCase()));
+}
+
 function extractKeyStats(statsData) {
   if (!statsData || typeof statsData !== 'object') return null;
+
+  const firstHalfStats = Array.isArray(statsData['1st-half']) ? statsData['1st-half'] : [];
+  const secondHalfStats = Array.isArray(statsData['2nd-half']) ? statsData['2nd-half'] : [];
 
   // Prefer full match stats, fallback to half stats if provider has no aggregated block.
   const matchStats = Array.isArray(statsData.match)
     ? statsData.match
-    : Array.isArray(statsData['2nd-half'])
-    ? statsData['2nd-half']
-    : Array.isArray(statsData['1st-half'])
-    ? statsData['1st-half']
+    : secondHalfStats.length > 0
+    ? secondHalfStats
+    : firstHalfStats.length > 0
+    ? firstHalfStats
     : [];
 
   const stats = {};
+
+  const fullXg = findStatEntry(matchStats, (name) => name.includes('expected goals') || name === 'xg');
+  const firstHalfXg = findStatEntry(firstHalfStats, (name) => name.includes('expected goals') || name === 'xg');
+  const secondHalfXg = findStatEntry(secondHalfStats, (name) => name.includes('expected goals') || name === 'xg');
+  const firstHalfHomeXg = parseStatNumber(firstHalfXg?.home_team);
+  const firstHalfAwayXg = parseStatNumber(firstHalfXg?.away_team);
+  const secondHalfHomeXg = parseStatNumber(secondHalfXg?.home_team);
+  const secondHalfAwayXg = parseStatNumber(secondHalfXg?.away_team);
+
+  if (
+    firstHalfHomeXg !== null
+    && firstHalfAwayXg !== null
+    && secondHalfHomeXg !== null
+    && secondHalfAwayXg !== null
+  ) {
+    stats.xg = {
+      home: Number((firstHalfHomeXg + secondHalfHomeXg).toFixed(2)),
+      away: Number((firstHalfAwayXg + secondHalfAwayXg).toFixed(2))
+    };
+  } else if (fullXg) {
+    stats.xg = { home: fullXg.home_team, away: fullXg.away_team };
+  }
 
   for (const item of matchStats) {
     const name = String(item.name || '').toLowerCase();
@@ -133,7 +184,7 @@ function extractKeyStats(statsData) {
     const awayVal = item.away_team;
 
     if (name.includes('expected goals') || name === 'xg') {
-      stats.xg = { home: homeVal, away: awayVal };
+      continue;
     } else if (name.includes('possession')) {
       stats.possession = { home: homeVal, away: awayVal };
     } else if (name.includes('total shots')) {
@@ -163,6 +214,8 @@ function MatchInfo() {
   const [liveConnectionMode, setLiveConnectionMode] = useState('idle');
   const [lastLiveEventAt, setLastLiveEventAt] = useState(null);
   const [liveStats, setLiveStats] = useState(null);
+  const [liveStatsDebug, setLiveStatsDebug] = useState(null);
+  const [liveStatsError, setLiveStatsError] = useState('');
   const [liveStatsLoading, setLiveStatsLoading] = useState(false);
   const previousLiveRef = useRef(null);
   // Pre-fill basic match data passed via navigation state for instant display
@@ -351,16 +404,22 @@ function MatchInfo() {
       if (stopped) return;
       try {
         setLiveStatsLoading(true);
-        const response = await matchAPI.getLiveStats(id);
+        setLiveStatsError('');
+        const response = await matchAPI.getLiveStats(id, { debug: true });
         if (!stopped) {
           setLiveStats(response.data?.stats || null);
+          setLiveStatsDebug(response.data?.debug || null);
         }
       } catch (err) {
         console.warn('Failed to fetch live stats:', err.message);
-        // Don't show error, just silently fail for stats
+        if (!stopped) {
+          setLiveStatsError(err.response?.data?.error || 'Live-Statistiken konnten nicht geladen werden.');
+          setLiveStatsDebug(err.response?.data?.debug || null);
+        }
       } finally {
         if (!stopped) {
           setLiveStatsLoading(false);
+          scheduleNextFetch();
         }
       }
     };
@@ -377,7 +436,6 @@ function MatchInfo() {
 
     // Initial fetch
     fetchStats();
-    scheduleNextFetch();
 
     return () => {
       stopped = true;
@@ -413,7 +471,10 @@ function MatchInfo() {
     }
   ]), [insights]);
 
-  const showLiveTicker = Boolean(liveUpdate?.isLive || liveUpdate?.isFinished || tickerEvents.length > 0);
+  const fallbackFinishedScore = Number.isFinite(Number(insights?.match?.home_goals)) && Number.isFinite(Number(insights?.match?.away_goals))
+    ? `${Number(insights.match.home_goals)}:${Number(insights.match.away_goals)}`
+    : '-:-';
+  const showLiveTicker = Boolean(liveUpdate?.isLive || liveUpdate?.isFinished || insights?.match?.finished || tickerEvents.length > 0);
   const LIVE_SPECIAL_STAGES = ['HT', 'ET', 'PEN', 'BREAK', 'INT', 'AET'];
   const rawLiveStatus = normalizeLiveStatus(liveUpdate?.statusText);
   const isHalfTime = ['HT', 'HALF TIME', 'HALFTIME', 'PAUSE', 'BREAK'].includes(rawLiveStatus);
@@ -422,7 +483,7 @@ function MatchInfo() {
     : (Number.isFinite(Number(liveUpdate?.minute)) && Number(liveUpdate.minute) > 0 ? `${Number(liveUpdate.minute)}'` : '');
   const liveBadgeText = liveUpdate?.isLive
     ? getLiveStageLabel(rawLiveStatus, liveUpdate?.minute)
-    : (liveUpdate?.isFinished ? 'Abgeschlossen' : 'Aktualisierung laeuft');
+    : ((liveUpdate?.isFinished || insights?.match?.finished) ? 'Abgeschlossen' : 'Aktualisierung laeuft');
   const liveConnectionText = (() => {
     if (liveConnectionMode === 'sse') return 'Live verbunden (SSE)';
     if (liveConnectionMode === 'polling') return 'Live verbunden (Fallback)';
@@ -431,7 +492,7 @@ function MatchInfo() {
   })();
   const liveScore = Number.isFinite(Number(liveUpdate?.homeGoals)) && Number.isFinite(Number(liveUpdate?.awayGoals))
     ? `${Number(liveUpdate.homeGoals)}:${Number(liveUpdate.awayGoals)}`
-    : '-:-';
+    : fallbackFinishedScore;
 
   if (loading) {
     return (
@@ -497,7 +558,7 @@ function MatchInfo() {
               <span className="section-eyebrow">Live</span>
               <h2>Liveticker</h2>
             </div>
-            <div className={`live-badge ${liveUpdate?.isLive ? 'is-live' : (liveUpdate?.isFinished ? 'is-finished' : '')}`}>
+            <div className={`live-badge ${liveUpdate?.isLive ? 'is-live' : ((liveUpdate?.isFinished || insights?.match?.finished) ? 'is-finished' : '')}`}>
               {liveBadgeText}
             </div>
           </div>
@@ -607,9 +668,9 @@ function MatchInfo() {
                 <div className="stat-panel">
                   <div className="stat-label">xG</div>
                   <div className="stat-values-simple">
-                    <span className="home-val">{keyStats.xg.home}</span>
+                    <span className="home-val">{formatStatValue(keyStats.xg.home)}</span>
                     <span className="divider">:</span>
-                    <span className="away-val">{keyStats.xg.away}</span>
+                    <span className="away-val">{formatStatValue(keyStats.xg.away)}</span>
                   </div>
                 </div>
               )}
