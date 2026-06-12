@@ -4,7 +4,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { getMatchInsights } = require('../services/footballData');
 const { getLiveScoresForMatches, getMatchStatsWithCache } = require('../services/liveScores');
 const { syncWMResults } = require('../services/flashscoreBundesligaImport');
-const { fetchFlashscoreGroupStandings, isRapidApiConfigured } = require('../services/rapidApi');
+const { fetchFlashscoreGroupStandings, fetchFlashscoreTournamentFixtures, isRapidApiConfigured } = require('../services/rapidApi');
 
 const router = express.Router();
 
@@ -83,6 +83,81 @@ function parseLiveMatchIds(rawIdsValue) {
     .split(',')
     .map((value) => Number.parseInt(value, 10))
     .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function scoreFixtureCandidate(targetMatch, fixture) {
+  const homeTarget = normalizeName(targetMatch.home_team);
+  const awayTarget = normalizeName(targetMatch.away_team);
+
+  const homeName = normalizeName(fixture?.home_team?.name);
+  const awayName = normalizeName(fixture?.away_team?.name);
+
+  let score = 0;
+  if (homeTarget && homeName && (homeTarget === homeName || homeTarget.includes(homeName) || homeName.includes(homeTarget))) {
+    score += 2;
+  }
+  if (awayTarget && awayName && (awayTarget === awayName || awayTarget.includes(awayName) || awayName.includes(awayTarget))) {
+    score += 2;
+  }
+
+  const targetTs = new Date(targetMatch.match_date).getTime();
+  const fixtureTs = typeof fixture?.timestamp === 'number' ? fixture.timestamp * 1000 : Number.NaN;
+  const timeDiff = Number.isFinite(targetTs) && Number.isFinite(fixtureTs)
+    ? Math.abs(targetTs - fixtureTs)
+    : Number.MAX_SAFE_INTEGER;
+
+  if (timeDiff <= 30 * 60 * 1000) {
+    score += 1;
+  } else if (timeDiff > 120 * 60 * 1000) {
+    score = -1;
+  }
+
+  return { score, timeDiff };
+}
+
+async function resolveFlashscoreMatchIdForStats(match, liveInfo = null) {
+  const mappedSourceMatchId = liveInfo?.updates?.[match.id]?.sourceMatchId;
+  if (mappedSourceMatchId) {
+    return String(mappedSourceMatchId);
+  }
+
+  const externalIdRaw = String(match.external_id || '').trim();
+  if (/^\d+$/.test(externalIdRaw) && externalIdRaw.length <= 11) {
+    return externalIdRaw;
+  }
+
+  const tournamentUrl = process.env.FLASHSCORE_TOURNAMENT_URL || '/football/world/world-cup/';
+  const fixturesPayload = await fetchFlashscoreTournamentFixtures(tournamentUrl, { useConfiguredIds: false });
+  const fixtures = Array.isArray(fixturesPayload)
+    ? (fixturesPayload.some((entry) => Array.isArray(entry?.matches))
+      ? fixturesPayload.flatMap((entry) => (Array.isArray(entry?.matches) ? entry.matches : []))
+      : fixturesPayload)
+    : [];
+
+  const candidates = fixtures
+    .map((fixture) => {
+      const metrics = scoreFixtureCandidate(match, fixture);
+      return {
+        fixture,
+        ...metrics,
+        matchId: fixture?.match_id || fixture?.id || fixture?.event_id || null
+      };
+    })
+    .filter((entry) => entry.matchId && entry.score >= 4)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.timeDiff - b.timeDiff;
+    });
+
+  return candidates[0]?.matchId ? String(candidates[0].matchId) : null;
 }
 
 async function buildLivePayload(rawIds) {
@@ -357,15 +432,12 @@ router.get('/:id/live-stats', authMiddleware, async (req, res) => {
 
     // Get current live info to extract sourceMatchId from Flashscore
     const liveInfo = await getLiveScoresForMatches([match], pool);
-    const mappedSourceMatchId = liveInfo?.updates?.[match.id]?.sourceMatchId;
-    const externalIdRaw = String(match.external_id || '').trim();
-    const externalIdFallback = /^\d+$/.test(externalIdRaw) ? externalIdRaw : null;
-    const sourceMatchId = mappedSourceMatchId || externalIdFallback;
+    const sourceMatchId = await resolveFlashscoreMatchIdForStats(match, liveInfo);
 
     if (!sourceMatchId) {
       return res.status(400).json({
         error: 'Could not find live match in Flashscore',
-        details: 'No sourceMatchId from live mapping and external_id is not a numeric Flashscore match id.'
+        details: 'No sourceMatchId from live mapping, external_id is not a direct provider id, and fixture fallback could not resolve a match id.'
       });
     }
 
