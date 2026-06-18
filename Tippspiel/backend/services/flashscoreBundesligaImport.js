@@ -7,6 +7,47 @@ const {
 
 const DEFAULT_TOURNAMENT_URL = '/football/germany/bundesliga/';
 const EXTERNAL_SOURCE = 'flashscore-bundesliga';
+const IMPORT_TIMEZONE = process.env.FLASHSCORE_TIMEZONE || process.env.APP_TIMEZONE || 'Europe/Berlin';
+
+function toBerlinSqlTimestamp(date) {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IMPORT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  });
+
+  const parts = formatter.formatToParts(date);
+  const findPart = (type) => parts.find((part) => part.type === type)?.value;
+
+  const year = findPart('year');
+  const month = findPart('month');
+  const day = findPart('day');
+  const hour = findPart('hour');
+  const minute = findPart('minute');
+  const second = findPart('second');
+
+  if (!year || !month || !day || !hour || !minute || !second) {
+    return null;
+  }
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function normalizeLocalDateTimeString(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day, hour, minute, second = '00'] = match;
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
 
 function normalizeName(value) {
   return String(value || '')
@@ -96,9 +137,14 @@ function toMatchList(payload) {
 
 function toTimestampDate(value) {
   if (typeof value === 'string') {
+    const localDateTime = normalizeLocalDateTimeString(value);
+    if (localDateTime) {
+      return localDateTime;
+    }
+
     const parsed = new Date(value);
     if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString();
+      return toBerlinSqlTimestamp(parsed);
     }
   }
 
@@ -107,7 +153,7 @@ function toTimestampDate(value) {
   }
 
   const milliseconds = value > 10_000_000_000 ? value : value * 1000;
-  return new Date(milliseconds).toISOString();
+  return toBerlinSqlTimestamp(new Date(milliseconds));
 }
 
 function parseGoals(value) {
