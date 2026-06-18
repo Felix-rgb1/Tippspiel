@@ -4,12 +4,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { areBonusFeaturesAvailable, isMissingRelationError } = require('../services/bonusFeatures');
 
 const router = express.Router();
-
-function isMatchLocked(matchDateValue) {
-  const matchDate = new Date(matchDateValue);
-  const deadline = new Date(matchDate.getTime() - 60 * 60 * 1000);
-  return new Date() >= deadline;
-}
+const APP_TIMEZONE = process.env.APP_TIMEZONE || process.env.FLASHSCORE_TIMEZONE || 'Europe/Berlin';
 
 // Submit a tip
 router.post('/', authMiddleware, async (req, res) => {
@@ -19,8 +14,12 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // Check if match exists
     const matchResult = await pool.query(
-      'SELECT match_date FROM matches WHERE id = $1',
-      [match_id]
+      `SELECT
+         match_date,
+         (match_date - INTERVAL '1 hour') <= (NOW() AT TIME ZONE $2) AS is_locked
+       FROM matches
+       WHERE id = $1`,
+      [match_id, APP_TIMEZONE]
     );
 
     if (matchResult.rows.length === 0) {
@@ -28,7 +27,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     // Check if deadline passed (1 hour before match)
-    if (isMatchLocked(matchResult.rows[0].match_date)) {
+    if (Boolean(matchResult.rows[0].is_locked)) {
       return res.status(400).json({ error: 'Deadline for this match has passed' });
     }
 
@@ -96,11 +95,12 @@ router.get('/visible', authMiddleware, async (req, res) => {
        FROM tips t
        JOIN users u ON u.id = t.user_id
        JOIN matches m ON m.id = t.match_id
+       WHERE (m.match_date - INTERVAL '1 hour') <= (NOW() AT TIME ZONE $1)
        ORDER BY m.match_date ASC, u.username ASC`
+      [APP_TIMEZONE]
     );
 
-    const visibleTips = result.rows.filter((row) => isMatchLocked(row.match_date));
-    res.json(visibleTips);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch visible tips' });
