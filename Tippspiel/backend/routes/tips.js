@@ -97,6 +97,7 @@ router.get('/visible', authMiddleware, async (req, res) => {
        JOIN matches m ON m.id = t.match_id
        WHERE (m.match_date - INTERVAL '1 hour') <= (NOW() AT TIME ZONE $1)
        ORDER BY m.match_date ASC, u.username ASC`
+      ,
       [APP_TIMEZONE]
     );
 
