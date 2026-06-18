@@ -119,6 +119,15 @@ function Leaderboard() {
   const lastPlaceEntry = leaderboard.length > 0 ? leaderboard[leaderboard.length - 1] : null;
   const ownRankIndex = leaderboard.findIndex((entry) => String(entry.id) === String(user?.id));
   const ownRankEntry = ownRankIndex >= 0 ? leaderboard[ownRankIndex] : null;
+  const leaderEntry = leaderboard.length > 0 ? leaderboard[0] : null;
+  const ownPosition = ownRankIndex >= 0 ? ownRankIndex + 1 : null;
+  const leaderPoints = leaderEntry?.total_points || 0;
+  const ownPoints = ownRankEntry?.total_points || 0;
+  const gapToLeader = ownRankEntry && leaderEntry ? Math.max(0, leaderPoints - ownPoints) : null;
+  const nextAheadEntry = ownRankIndex > 0 ? leaderboard[ownRankIndex - 1] : null;
+  const gapToNextAhead = ownRankEntry && nextAheadEntry ? Math.max(0, nextAheadEntry.total_points - ownPoints) : null;
+  const nextBehindEntry = ownRankIndex >= 0 && ownRankIndex < leaderboard.length - 1 ? leaderboard[ownRankIndex + 1] : null;
+  const podiumLeadGap = topThree.length > 1 ? Math.max(0, (topThree[0]?.total_points || 0) - (topThree[1]?.total_points || 0)) : null;
 
   const matchdayRankMap = {};
   matchdayEntries.forEach((entry, idx) => {
@@ -131,6 +140,45 @@ function Leaderboard() {
       <div className="page-title">
         <h1>🏆 Rangliste</h1>
         <p>Aktuelle Punktestand</p>
+      </div>
+
+      <div className="leaderboard-hero">
+        <div className="leaderboard-hero-stats">
+          <div className="hero-stat hero-stat-primary">
+            <span className="hero-stat-label">Im Rennen</span>
+            <strong>{leaderboard.length}</strong>
+            <span className="hero-stat-note">aktive Spieler</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">Spitze</span>
+            <strong>{leaderEntry?.username || '—'}</strong>
+            <span className="hero-stat-note">{leaderPoints} Punkte</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">Dein Platz</span>
+            <strong>{ownPosition || '—'}</strong>
+            <span className="hero-stat-note">
+              {ownRankEntry ? `${ownPoints} Punkte` : 'Noch kein Rang'}
+            </span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">Top 1 vs Top 2</span>
+            <strong>{podiumLeadGap !== null ? `${podiumLeadGap}` : '—'}</strong>
+            <span className="hero-stat-note">Punkte Abstand</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">Abstand nach vorn</span>
+            <strong>{gapToLeader !== null ? `${gapToLeader}` : '—'}</strong>
+            <span className="hero-stat-note">bis Platz 1</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">Abstand nach hinten</span>
+            <strong>{nextBehindEntry && ownRankEntry ? `${Math.max(0, ownPoints - (nextBehindEntry.total_points || 0))}` : '—'}</strong>
+            <span className="hero-stat-note">
+              {nextBehindEntry && ownRankEntry ? `vor ${nextBehindEntry.username}` : 'keine Daten'}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="tie-breaker-box">
@@ -162,8 +210,30 @@ function Leaderboard() {
       )}
 
       {ownRankEntry && (
-        <div className="my-rank-box">
-          Dein Rang: <strong>{ownRankIndex + 1}</strong> · {ownRankEntry.total_points || 0} Punkte · {ownRankEntry.bonus_points || 0} Bonus
+        <div className="my-rank-box leaderboard-race-box">
+          <div className="race-box-head">
+            <span className="race-box-label">Dein Rennen</span>
+            <strong>Platz {ownPosition}</strong>
+          </div>
+          <div className="race-box-body">
+            <span>{ownRankEntry.total_points || 0} Punkte</span>
+            <span>·</span>
+            <span>{ownRankEntry.bonus_points || 0} Bonus</span>
+            <span>·</span>
+            <span>{gapToLeader !== null ? `${gapToLeader} hinter Platz 1` : '—'}</span>
+            {nextAheadEntry && gapToNextAhead !== null && gapToNextAhead > 0 && (
+              <>
+                <span>·</span>
+                <span>{gapToNextAhead} hinter {nextAheadEntry.username}</span>
+              </>
+            )}
+            {nextBehindEntry && (
+              <>
+                <span>·</span>
+                <span>{Math.max(0, ownPoints - (nextBehindEntry.total_points || 0))} vor {nextBehindEntry.username}</span>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -190,6 +260,7 @@ function Leaderboard() {
           const isLastRow = index === leaderboard.length - 1;
           const overallRank = index + 1;
           const matchdayRank = matchdayRankMap[String(entry.id)];
+          const pointsToLeader = leaderEntry ? Math.max(0, (leaderEntry.total_points || 0) - (entry.total_points || 0)) : null;
           let trendEl = null;
           if (matchdayRank !== undefined) {
             if (matchdayRank < overallRank) trendEl = <span className="trend-up" title="Im letzten Spieltag besser">↑</span>;
@@ -209,6 +280,7 @@ function Leaderboard() {
               {index === 1 && '🥈'}
               {index === 2 && '🥉'}
               {index > 2 && `${index + 1}.`}
+              {isOwnRow && <span className="rank-chip rank-chip-own">Du</span>}
               {trendEl}
             </div>
             <div className="col-name">
@@ -222,6 +294,7 @@ function Leaderboard() {
             <div className="col-points">{entry.bonus_points || 0}</div>
             <div className="col-points">
               <strong>{entry.total_points || 0}</strong>
+              {isOwnRow && <span className="points-badge points-badge-own">Du</span>}
             </div>
           </div>
           );
@@ -254,9 +327,12 @@ function Leaderboard() {
             </div>
             {matchdayEntries.map((entry, index) => (
               <div key={`matchday-${entry.id}`} className="table-row matchday-grid">
-                <div className="col-rank">{index + 1}.</div>
+                <div className="col-rank">
+                  {index + 1}.
+                  {index === 0 && <span className="rank-chip rank-chip-podium">MVP</span>}
+                </div>
                 <div className="col-name"><AvatarDisplay value={entry.avatar} />{entry.username}</div>
-                <div className="col-points">{entry.tips_count || 0}</div>
+                <div className="col-points"><span className="metric-pill">{entry.tips_count || 0}</span></div>
                 <div className="col-points"><strong>{entry.round_points || 0}</strong></div>
               </div>
             ))}
