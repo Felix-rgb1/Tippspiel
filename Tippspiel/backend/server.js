@@ -6,6 +6,7 @@ const pool = require('./db');
 const { warmUpApiFootballInsightsCache } = require('./services/footballData');
 const { ensureBonusFeaturesSchema } = require('./services/bonusFeatures');
 const {
+  importFlashscoreWMMatches,
   syncWMResults,
   syncBundesligaResults
 } = require('./services/flashscoreBundesligaImport');
@@ -116,6 +117,43 @@ function startAutoResultSync(pool) {
   console.log(`[AUTO-RESULT-SYNC] aktiv, Intervall=${intervalMinutes} Minuten.`);
 }
 
+function startAutoWMImport(pool) {
+  const enabled = parseEnabledFlag(process.env.AUTO_WM_IMPORT_ENABLED, true);
+  if (!enabled) {
+    console.log('[AUTO-WM-IMPORT] deaktiviert (AUTO_WM_IMPORT_ENABLED=false).');
+    return;
+  }
+
+  const intervalMinutesRaw = Number.parseInt(process.env.AUTO_WM_IMPORT_INTERVAL_MINUTES || '60', 10);
+  const intervalMinutes = Number.isFinite(intervalMinutesRaw) ? Math.max(15, intervalMinutesRaw) : 60;
+  const intervalMs = intervalMinutes * 60 * 1000;
+
+  let isRunning = false;
+
+  const runImport = async () => {
+    if (isRunning) {
+      console.log('[AUTO-WM-IMPORT] Lauf uebersprungen, vorheriger Durchlauf laeuft noch.');
+      return;
+    }
+
+    isRunning = true;
+    try {
+      const result = await importFlashscoreWMMatches(pool);
+      console.log(
+        `[AUTO-WM-IMPORT] created=${result.createdCount || 0}, updated=${result.updatedCount || 0}, totalProcessed=${result.totalProcessed || 0}`
+      );
+    } catch (error) {
+      console.warn('[AUTO-WM-IMPORT] Fehler:', error.message || error);
+    } finally {
+      isRunning = false;
+    }
+  };
+
+  runImport();
+  setInterval(runImport, intervalMs);
+  console.log(`[AUTO-WM-IMPORT] aktiv, Intervall=${intervalMinutes} Minuten.`);
+}
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -129,6 +167,7 @@ app.listen(PORT, () => {
     });
 
   startAutoResultSync(pool);
+  startAutoWMImport(pool);
 
   const warmupEnabled = (process.env.APIFOOTBALL_WARMUP_ENABLED || 'false').toLowerCase() === 'true';
   if (!warmupEnabled) {
