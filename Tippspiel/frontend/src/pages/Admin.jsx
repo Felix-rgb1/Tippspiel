@@ -50,7 +50,7 @@ function Admin() {
     '1. Spieltag',
     '2. Spieltag',
     '3. Spieltag',
-    'Achtelfinale',
+    '16tel Finale',
     'Viertelfinale',
     'Halbfinale',
     'Spiel um Platz 3',

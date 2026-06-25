@@ -285,6 +285,31 @@ function isGenericRoundLabel(value) {
   return !normalized || normalized === 'wm' || normalized === 'bundesliga';
 }
 
+function resolveRoundLabelFromDetails(details) {
+  const candidates = [
+    details?.round_name,
+    details?.stage_name,
+    details?.tournament_stage_name,
+    details?.tournament_round_name,
+    details?.tournament?.name,
+    details?.tournament?.round_name,
+    details?.tournament?.stage_name,
+    details?.stage?.name,
+    details?.round?.name,
+    details?.event?.round_name,
+    details?.event?.stage_name
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const label = mapWMRoundName(candidate);
+    if (label) {
+      return label;
+    }
+  }
+
+  return null;
+}
+
 function toNormalizedMatch(match, fallbackRound = null) {
   const sourceMatchId = String(
     match?.match_id
@@ -625,7 +650,16 @@ function mapWMRoundName(tournamentName) {
     if (n >= 1 && n <= 3) return `${n}. Spieltag`;
   }
 
-  if (s.includes('round of 16') || s.includes('last 16')) return 'Achtelfinale';
+  if (
+    s.includes('round of 16')
+    || s.includes('last 16')
+    || s.includes('1/16')
+    || s.includes('16th final')
+    || s.includes('sixteenth final')
+    || s.includes('eighth final')
+  ) {
+    return '16tel Finale';
+  }
   if (s.includes('quarter-final') || s.includes('quarterfinal')) return 'Viertelfinale';
   if (s.includes('semi-final') || s.includes('semifinal')) return 'Halbfinale';
   if (s.includes('3rd place') || s.includes('third place')) return 'Spiel um Platz 3';
@@ -700,14 +734,14 @@ async function enrichWMRoundsViaDetails(matches) {
   const maxRequests = Math.max(1, parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '80', 10) || 80);
   const delayMs = Math.max(0, parseInt(process.env.FLASHSCORE_WM_DETAILS_DELAY_MS || '1200', 10) || 1200);
 
-  const needsRound = matches.filter((m) => !m.round).slice(0, maxRequests);
+  const needsRound = matches.filter((m) => !m.round || isGenericRoundLabel(m.round)).slice(0, maxRequests);
   let resolved = 0;
 
   for (let i = 0; i < needsRound.length; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, delayMs));
     try {
       const details = await fetchFlashscoreMatchDetails(needsRound[i].matchId);
-      const label = mapWMRoundName(details?.tournament?.name);
+      const label = resolveRoundLabelFromDetails(details);
       if (label) {
         needsRound[i].round = label;
         resolved++;

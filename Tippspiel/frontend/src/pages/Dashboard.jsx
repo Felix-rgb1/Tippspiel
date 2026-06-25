@@ -489,6 +489,24 @@ function getRedCardCounts(liveUpdate) {
   };
 }
 
+function normalizeRoundLabel(round) {
+  const normalized = String(round || '').trim().toLowerCase();
+
+  if (
+    normalized === 'achtelfinale'
+    || normalized === 'round of 16'
+    || normalized === 'last 16'
+    || normalized === '1/16 finale'
+    || normalized === '1/16 final'
+    || normalized === '16th final'
+    || normalized === 'sixteenth final'
+  ) {
+    return '16tel Finale';
+  }
+
+  return round;
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const [matches, setMatches] = useState([]);
@@ -1051,12 +1069,12 @@ function Dashboard() {
 
 
   const rounds = ['Alle', ...Array.from(
-    new Set(matches.map(m => m.round).filter(Boolean))
+    new Set(matches.map((match) => normalizeRoundLabel(match.round)).filter(Boolean))
   )];
 
   const roundFilteredMatches = activeRound === 'Alle'
     ? matches
-    : matches.filter((match) => match.round === activeRound);
+    : matches.filter((match) => normalizeRoundLabel(match.round) === activeRound);
 
   const statusFilteredMatches = matchStatusFilter === 'Alle'
     ? roundFilteredMatches
@@ -1209,7 +1227,7 @@ function Dashboard() {
                   </div>
                   <div className="next-match-meta">
                     <span>{formatDate(match.match_date)}</span>
-                    {match.round && <span>{match.round}</span>}
+                    {match.round && <span>{normalizeRoundLabel(match.round)}</span>}
                     {getCountdown(match.match_date) && (
                       <span className="countdown-badge">⏱ {getCountdown(match.match_date)}</span>
                     )}
