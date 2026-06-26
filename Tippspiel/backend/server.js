@@ -51,9 +51,13 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 
-// Health check
+// Health check endpoints (for monitoring/uptime robots)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString(), service: 'tippspiel-api' });
+});
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString(), service: 'tippspiel-api' });
 });
 
 function parseEnabledFlag(value, defaultValue = false) {
