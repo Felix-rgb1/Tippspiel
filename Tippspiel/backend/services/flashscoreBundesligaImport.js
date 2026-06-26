@@ -264,6 +264,66 @@ function hasFinishedStatus(match) {
   return home !== null && away !== null;
 }
 
+// Extract penalty shootout information from match details
+function extractPenaltyInfo(match) {
+  // Check for explicit penalty finished status
+  const stateValues = [
+    match?.status,
+    match?.status_type,
+    match?.event_stage_type,
+    match?.eventStageType,
+    match?.state
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+
+  const hasExplicitPenalty = stateValues.some((value) => value.includes('penalties') || value.includes('penalty shootout'));
+
+  // Try to extract penalty winner from various fields
+  const penaltyWinnerCandidates = [
+    match?.penalty_winner,
+    match?.penalties?.winner,
+    match?.extra_time_result?.penalty_winner,
+    match?.result_after_penalties?.winner,
+    match?.result_after_extra_time?.penalty_winner,
+    match?.match_status?.penalty_winner
+  ].filter(Boolean);
+
+  let penaltyWinner = null;
+  if (penaltyWinnerCandidates.length > 0) {
+    const winner = String(penaltyWinnerCandidates[0]).toLowerCase().trim();
+    if (winner.includes('home') || winner === 'h' || winner === '1') {
+      penaltyWinner = 'home';
+    } else if (winner.includes('away') || winner === 'a' || winner === '2') {
+      penaltyWinner = 'away';
+    }
+  }
+
+  // Try to extract 90-minute goals (before penalties)
+  let homeGoals90 = null;
+  let awayGoals90 = null;
+  const goalsAfterExtraTime = match?.result_after_extra_time || match?.extra_time_result;
+  if (goalsAfterExtraTime) {
+    homeGoals90 = parseGoals(
+      goalsAfterExtraTime?.home
+      ?? goalsAfterExtraTime?.home_score
+      ?? goalsAfterExtraTime?.homeScore
+    );
+    awayGoals90 = parseGoals(
+      goalsAfterExtraTime?.away
+      ?? goalsAfterExtraTime?.away_score
+      ?? goalsAfterExtraTime?.awayScore
+    );
+  }
+
+  return {
+    penaltyDecided: hasExplicitPenalty && penaltyWinner !== null,
+    penaltyWinner,
+    homeGoals90,
+    awayGoals90
+  };
+}
+
 function toRoundLabel(match, fallbackRound = null) {
   const candidates = [
     match?.round_name,
@@ -352,6 +412,9 @@ function toNormalizedMatch(match, fallbackRound = null) {
     ?? match?.result?.away
   );
 
+  // Extract penalty information
+  const penaltyInfo = extractPenaltyInfo(match);
+
   return {
     homeTeam,
     awayTeam,
@@ -361,7 +424,11 @@ function toNormalizedMatch(match, fallbackRound = null) {
     homeGoals: finished ? homeGoals : null,
     awayGoals: finished ? awayGoals : null,
     externalId,
-    sourceMatchId
+    sourceMatchId,
+    penaltyDecided: penaltyInfo.penaltyDecided,
+    penaltyWinner: penaltyInfo.penaltyWinner,
+    homeGoals90: penaltyInfo.homeGoals90,
+    awayGoals90: penaltyInfo.awayGoals90
   };
 }
 
@@ -370,6 +437,23 @@ async function upsertMatch(pool, normalizedMatch) {
     'SELECT id FROM matches WHERE external_source = $1 AND external_id = $2',
     [EXTERNAL_SOURCE, normalizedMatch.externalId]
   );
+
+  // Calculate final goals: if penalty decided, winner gets +1
+  let finalHomeGoals = normalizedMatch.homeGoals;
+  let finalAwayGoals = normalizedMatch.awayGoals;
+  
+  if (normalizedMatch.penaltyDecided && normalizedMatch.penaltyWinner) {
+    const baseHome = normalizedMatch.homeGoals90 ?? normalizedMatch.homeGoals;
+    const baseAway = normalizedMatch.awayGoals90 ?? normalizedMatch.awayGoals;
+    
+    if (normalizedMatch.penaltyWinner === 'home' && baseHome !== null) {
+      finalHomeGoals = baseHome + 1;
+      finalAwayGoals = baseAway;
+    } else if (normalizedMatch.penaltyWinner === 'away' && baseAway !== null) {
+      finalHomeGoals = baseHome;
+      finalAwayGoals = baseAway + 1;
+    }
+  }
 
   if (existing.rows.length > 0) {
     await pool.query(
@@ -381,16 +465,24 @@ async function upsertMatch(pool, normalizedMatch) {
            home_goals = $5,
            away_goals = $6,
            finished = $7,
+           penalty_decided = $8,
+           penalty_winner = $9,
+           home_goals_90 = $10,
+           away_goals_90 = $11,
            updated_at = NOW()
-       WHERE external_source = $8 AND external_id = $9`,
+       WHERE external_source = $12 AND external_id = $13`,
       [
         normalizedMatch.homeTeam,
         normalizedMatch.awayTeam,
         normalizedMatch.matchDate,
         normalizedMatch.round,
-        normalizedMatch.homeGoals,
-        normalizedMatch.awayGoals,
+        finalHomeGoals,
+        finalAwayGoals,
         normalizedMatch.finished,
+        normalizedMatch.penaltyDecided ?? false,
+        normalizedMatch.penaltyWinner ?? null,
+        normalizedMatch.homeGoals90 ?? normalizedMatch.homeGoals,
+        normalizedMatch.awayGoals90 ?? normalizedMatch.awayGoals,
         EXTERNAL_SOURCE,
         normalizedMatch.externalId
       ]
@@ -408,17 +500,25 @@ async function upsertMatch(pool, normalizedMatch) {
       home_goals,
       away_goals,
       finished,
+      penalty_decided,
+      penalty_winner,
+      home_goals_90,
+      away_goals_90,
       external_source,
       external_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       normalizedMatch.homeTeam,
       normalizedMatch.awayTeam,
       normalizedMatch.matchDate,
       normalizedMatch.round,
-      normalizedMatch.homeGoals,
-      normalizedMatch.awayGoals,
+      finalHomeGoals,
+      finalAwayGoals,
       normalizedMatch.finished,
+      normalizedMatch.penaltyDecided ?? false,
+      normalizedMatch.penaltyWinner ?? null,
+      normalizedMatch.homeGoals90 ?? normalizedMatch.homeGoals,
+      normalizedMatch.awayGoals90 ?? normalizedMatch.awayGoals,
       EXTERNAL_SOURCE,
       normalizedMatch.externalId
     ]
@@ -765,15 +865,37 @@ async function upsertWMMatch(pool, match) {
 
   const round = match.round || existing.rows[0]?.round || null;
 
+  // Calculate final goals: if penalty decided, winner gets +1
+  let finalHomeGoals = match.homeGoals;
+  let finalAwayGoals = match.awayGoals;
+  
+  if (match.penaltyDecided && match.penaltyWinner) {
+    const baseHome = match.homeGoals90 ?? match.homeGoals;
+    const baseAway = match.awayGoals90 ?? match.awayGoals;
+    
+    if (match.penaltyWinner === 'home' && baseHome !== null) {
+      finalHomeGoals = baseHome + 1;
+      finalAwayGoals = baseAway;
+    } else if (match.penaltyWinner === 'away' && baseAway !== null) {
+      finalHomeGoals = baseHome;
+      finalAwayGoals = baseAway + 1;
+    }
+  }
+
   if (existing.rows.length > 0) {
     await pool.query(
       `UPDATE matches
          SET home_team = $1, away_team = $2, match_date = $3, round = $4,
-             home_goals = $5, away_goals = $6, finished = $7, updated_at = NOW()
-       WHERE external_source = $8 AND external_id = $9`,
+             home_goals = $5, away_goals = $6, finished = $7,
+             penalty_decided = $8, penalty_winner = $9,
+             home_goals_90 = $10, away_goals_90 = $11,
+             updated_at = NOW()
+       WHERE external_source = $12 AND external_id = $13`,
       [
         match.homeTeam, match.awayTeam, match.matchDate, round,
-        match.homeGoals, match.awayGoals, match.finished,
+        finalHomeGoals, finalAwayGoals, match.finished,
+        match.penaltyDecided ?? false, match.penaltyWinner ?? null,
+        match.homeGoals90 ?? match.homeGoals, match.awayGoals90 ?? match.awayGoals,
         WM_EXTERNAL_SOURCE, match.externalId
       ]
     );
@@ -782,11 +904,15 @@ async function upsertWMMatch(pool, match) {
 
   await pool.query(
     `INSERT INTO matches
-       (home_team, away_team, match_date, round, home_goals, away_goals, finished, external_source, external_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       (home_team, away_team, match_date, round, home_goals, away_goals, finished,
+        penalty_decided, penalty_winner, home_goals_90, away_goals_90,
+        external_source, external_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       match.homeTeam, match.awayTeam, match.matchDate, round,
-      match.homeGoals, match.awayGoals, match.finished,
+      finalHomeGoals, finalAwayGoals, match.finished,
+      match.penaltyDecided ?? false, match.penaltyWinner ?? null,
+      match.homeGoals90 ?? match.homeGoals, match.awayGoals90 ?? match.awayGoals,
       WM_EXTERNAL_SOURCE, match.externalId
     ]
   );
