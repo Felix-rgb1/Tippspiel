@@ -6,6 +6,7 @@ const pool = require('./db');
 const { warmUpApiFootballInsightsCache } = require('./services/footballData');
 const { ensureBonusFeaturesSchema } = require('./services/bonusFeatures');
 const {
+  ensurePenaltyColumnsSchema,
   importFlashscoreWMMatches,
   syncWMResults,
   syncBundesligaResults
@@ -162,34 +163,42 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 
-  ensureBonusFeaturesSchema(pool)
-    .then(() => {
-      console.log('[BONUS] Bonus-Features sind bereit.');
-    })
-    .catch((error) => {
-      console.warn('[BONUS] Bonus-Features konnten nicht initialisiert werden:', error.message);
-    });
-
-  startAutoResultSync(pool);
-  startAutoWMImport(pool);
-
-  const warmupEnabled = (process.env.APIFOOTBALL_WARMUP_ENABLED || 'false').toLowerCase() === 'true';
-  if (!warmupEnabled) {
-    return;
-  }
-
-  const warmupIntervalMinutes = Number.parseInt(process.env.APIFOOTBALL_WARMUP_INTERVAL_MINUTES || '120', 10);
-  const warmupIntervalMs = Math.max(5, warmupIntervalMinutes) * 60 * 1000;
-
-  const runWarmup = async () => {
+  (async () => {
     try {
-      const result = await warmUpApiFootballInsightsCache(pool);
-      console.log(`[APIFOOTBALL-WARMUP] warmed=${result.warmedMatches}, attempted=${result.attempted}`);
+      await ensureBonusFeaturesSchema(pool);
+      console.log('[BONUS] Bonus-Features sind bereit.');
     } catch (error) {
-      console.warn('[APIFOOTBALL-WARMUP] failed:', error.message);
+      console.warn('[BONUS] Bonus-Features konnten nicht initialisiert werden:', error.message);
     }
-  };
 
-  runWarmup();
-  setInterval(runWarmup, warmupIntervalMs);
+    try {
+      await ensurePenaltyColumnsSchema(pool);
+      console.log('[MATCH-SCHEMA] Penalty-Spalten sind bereit.');
+    } catch (error) {
+      console.warn('[MATCH-SCHEMA] Penalty-Spalten konnten nicht initialisiert werden:', error.message);
+    }
+
+    startAutoResultSync(pool);
+    startAutoWMImport(pool);
+
+    const warmupEnabled = (process.env.APIFOOTBALL_WARMUP_ENABLED || 'false').toLowerCase() === 'true';
+    if (!warmupEnabled) {
+      return;
+    }
+
+    const warmupIntervalMinutes = Number.parseInt(process.env.APIFOOTBALL_WARMUP_INTERVAL_MINUTES || '120', 10);
+    const warmupIntervalMs = Math.max(5, warmupIntervalMinutes) * 60 * 1000;
+
+    const runWarmup = async () => {
+      try {
+        const result = await warmUpApiFootballInsightsCache(pool);
+        console.log(`[APIFOOTBALL-WARMUP] warmed=${result.warmedMatches}, attempted=${result.attempted}`);
+      } catch (error) {
+        console.warn('[APIFOOTBALL-WARMUP] failed:', error.message);
+      }
+    };
+
+    runWarmup();
+    setInterval(runWarmup, warmupIntervalMs);
+  })();
 });

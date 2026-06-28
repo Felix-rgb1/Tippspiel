@@ -9,6 +9,30 @@ const DEFAULT_TOURNAMENT_URL = '/football/germany/bundesliga/';
 const EXTERNAL_SOURCE = 'flashscore-bundesliga';
 const IMPORT_TIMEZONE = process.env.FLASHSCORE_TIMEZONE || process.env.APP_TIMEZONE || 'Europe/Berlin';
 
+let penaltySchemaReadyPromise = null;
+
+async function ensurePenaltyColumnsSchema(pool) {
+  if (!penaltySchemaReadyPromise) {
+    penaltySchemaReadyPromise = (async () => {
+      await pool.query(`
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS penalty_decided BOOLEAN DEFAULT false;
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS penalty_winner VARCHAR(10) DEFAULT NULL CHECK (penalty_winner IS NULL OR penalty_winner IN ('home', 'away'));
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_goals_90 INTEGER DEFAULT NULL;
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_goals_90 INTEGER DEFAULT NULL;
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_elfmeter_scored INTEGER DEFAULT NULL;
+        ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_elfmeter_scored INTEGER DEFAULT NULL;
+      `);
+
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_matches_penalty_decided ON matches(penalty_decided)');
+    })().catch((error) => {
+      penaltySchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await penaltySchemaReadyPromise;
+}
+
 function toBerlinSqlTimestamp(date) {
   const formatter = new Intl.DateTimeFormat('en-GB', {
     timeZone: IMPORT_TIMEZONE,
@@ -589,6 +613,8 @@ async function upsertMatch(pool, normalizedMatch) {
 }
 
 async function importFlashscoreBundesligaMatches(pool, options = {}) {
+  await ensurePenaltyColumnsSchema(pool);
+
   if (!isRapidApiConfigured()) {
     const error = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
     error.statusCode = 400;
@@ -644,6 +670,8 @@ async function importFlashscoreBundesligaMatches(pool, options = {}) {
 }
 
 async function syncBundesligaResults(pool, options = {}) {
+  await ensurePenaltyColumnsSchema(pool);
+
   if (!isRapidApiConfigured()) {
     const error = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
     error.statusCode = 400;
@@ -984,6 +1012,8 @@ async function upsertWMMatch(pool, match) {
 }
 
 async function importFlashscoreWMMatches(pool) {
+  await ensurePenaltyColumnsSchema(pool);
+
   if (!isRapidApiConfigured()) {
     const err = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
     err.statusCode = 400;
@@ -1059,6 +1089,8 @@ async function importFlashscoreWMMatches(pool) {
 }
 
 async function syncWMResults(pool) {
+  await ensurePenaltyColumnsSchema(pool);
+
   if (!isRapidApiConfigured()) {
     const err = new Error('RapidAPI ist nicht konfiguriert. Bitte RAPIDAPI_KEY und RAPIDAPI_HOST setzen.');
     err.statusCode = 400;
@@ -1145,6 +1177,7 @@ async function syncWMResults(pool) {
 }
 
 module.exports = {
+  ensurePenaltyColumnsSchema,
   importFlashscoreBundesligaMatches,
   importFlashscoreWMMatches,
   syncWMResults,
