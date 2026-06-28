@@ -4,6 +4,7 @@ const pool = require('../db');
 const RAPIDAPI_CACHE_TTL_MS = Number.parseInt(process.env.RAPIDAPI_CACHE_TTL_MS || '120000', 10);
 const RAPIDAPI_RETRY_MAX_ATTEMPTS = Number.parseInt(process.env.RAPIDAPI_RETRY_MAX_ATTEMPTS || '3', 10);
 const RAPIDAPI_RETRY_BASE_DELAY_MS = Number.parseInt(process.env.RAPIDAPI_RETRY_BASE_DELAY_MS || '1200', 10);
+const RAPIDAPI_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.RAPIDAPI_REQUEST_TIMEOUT_MS || '25000', 10);
 const APIFOOTBALL_DAILY_MAX_REQUESTS = Number.parseInt(process.env.APIFOOTBALL_DAILY_MAX_REQUESTS || '80', 10);
 const APIFOOTBALL_ENFORCE_DAILY_LIMIT = (process.env.APIFOOTBALL_ENFORCE_DAILY_LIMIT || 'true').toLowerCase() !== 'false';
 const ODDS_API_BASE_URL = process.env.ODDS_API_BASE_URL || 'https://api.odds-api.io/v3';
@@ -785,21 +786,36 @@ async function rapidApiRequest(path, queryParams = {}) {
   const maxAttempts = Number.isFinite(RAPIDAPI_RETRY_MAX_ATTEMPTS) && RAPIDAPI_RETRY_MAX_ATTEMPTS > 0
     ? RAPIDAPI_RETRY_MAX_ATTEMPTS
     : 3;
+  const timeoutMs = Number.isFinite(RAPIDAPI_REQUEST_TIMEOUT_MS) && RAPIDAPI_REQUEST_TIMEOUT_MS > 0
+    ? RAPIDAPI_REQUEST_TIMEOUT_MS
+    : 25000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: isApiSportsDirectMode()
-        ? {
-          'x-apisports-key': process.env.APIFOOTBALL_KEY
-        }
-        : isOddsApiMode()
-          ? {}
-          : {
-            'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
-            'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
+    let response;
+    try {
+      response = await fetchWithTimeout(url.toString(), {
+        method: 'GET',
+        headers: isApiSportsDirectMode()
+          ? {
+            'x-apisports-key': process.env.APIFOOTBALL_KEY
           }
-    });
+          : isOddsApiMode()
+            ? {}
+            : {
+              'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+              'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
+            }
+      }, timeoutMs);
+    } catch (error) {
+      if (attempt < maxAttempts) {
+        await wait(RAPIDAPI_RETRY_BASE_DELAY_MS * attempt);
+        continue;
+      }
+
+      const err = new Error(`RapidAPI Request fehlgeschlagen: ${error.message || error}`);
+      err.statusCode = 502;
+      throw err;
+    }
 
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
@@ -848,6 +864,37 @@ async function rapidApiRequest(path, queryParams = {}) {
   const err = new Error('RapidAPI Fehler: 429');
   err.statusCode = 502;
   throw err;
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  if (typeof AbortController === 'function') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (error) {
+      if (error && (error.name === 'AbortError' || String(error.message || '').toLowerCase().includes('aborted'))) {
+        const timeoutError = new Error(`Request timeout nach ${timeoutMs}ms`);
+        timeoutError.name = 'TimeoutError';
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        const timeoutError = new Error(`Request timeout nach ${timeoutMs}ms`);
+        timeoutError.name = 'TimeoutError';
+        reject(timeoutError);
+      }, timeoutMs);
+    })
+  ]);
 }
 
 async function findApiFootballTeamId(teamName) {

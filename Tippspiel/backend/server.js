@@ -67,6 +67,17 @@ function parseEnabledFlag(value, defaultValue = false) {
   return ['1', 'true', 'yes', 'on'].includes(normalized);
 }
 
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`${label} Timeout nach ${timeoutMs}ms`));
+      }, timeoutMs);
+    })
+  ]);
+}
+
 function startAutoResultSync(pool) {
   const enabled = parseEnabledFlag(process.env.AUTO_RESULT_SYNC_ENABLED, true);
   if (!enabled) {
@@ -77,6 +88,8 @@ function startAutoResultSync(pool) {
   const intervalMinutesRaw = Number.parseInt(process.env.AUTO_RESULT_SYNC_INTERVAL_MINUTES || '10', 10);
   const intervalMinutes = Number.isFinite(intervalMinutesRaw) ? Math.max(3, intervalMinutesRaw) : 10;
   const intervalMs = intervalMinutes * 60 * 1000;
+  const syncTimeoutMsRaw = Number.parseInt(process.env.AUTO_RESULT_SYNC_TIMEOUT_MS || '180000', 10);
+  const syncTimeoutMs = Number.isFinite(syncTimeoutMsRaw) ? Math.max(30000, syncTimeoutMsRaw) : 180000;
 
   let isRunning = false;
 
@@ -89,8 +102,8 @@ function startAutoResultSync(pool) {
     isRunning = true;
     try {
       const [wmResult, bundesligaResult] = await Promise.allSettled([
-        syncWMResults(pool),
-        syncBundesligaResults(pool)
+        withTimeout(syncWMResults(pool), syncTimeoutMs, 'WM-Sync'),
+        withTimeout(syncBundesligaResults(pool), syncTimeoutMs, 'Bundesliga-Sync')
       ]);
 
       if (wmResult.status === 'fulfilled') {
@@ -132,6 +145,8 @@ function startAutoWMImport(pool) {
   const intervalMinutesRaw = Number.parseInt(process.env.AUTO_WM_IMPORT_INTERVAL_MINUTES || '60', 10);
   const intervalMinutes = Number.isFinite(intervalMinutesRaw) ? Math.max(15, intervalMinutesRaw) : 60;
   const intervalMs = intervalMinutes * 60 * 1000;
+  const importTimeoutMsRaw = Number.parseInt(process.env.AUTO_WM_IMPORT_TIMEOUT_MS || '300000', 10);
+  const importTimeoutMs = Number.isFinite(importTimeoutMsRaw) ? Math.max(60000, importTimeoutMsRaw) : 300000;
 
   let isRunning = false;
 
@@ -143,7 +158,7 @@ function startAutoWMImport(pool) {
 
     isRunning = true;
     try {
-      const result = await importFlashscoreWMMatches(pool);
+      const result = await withTimeout(importFlashscoreWMMatches(pool), importTimeoutMs, 'WM-Import');
       console.log(
         `[AUTO-WM-IMPORT] created=${result.createdCount || 0}, updated=${result.updatedCount || 0}, totalProcessed=${result.totalProcessed || 0}`
       );
