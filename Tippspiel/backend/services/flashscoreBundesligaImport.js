@@ -297,12 +297,19 @@ function extractPenaltyInfo(match) {
     match?.status_type,
     match?.event_stage_type,
     match?.eventStageType,
-    match?.state
+    match?.state,
+    match?.match_status?.stage,
+    match?.match_status?.live_time
   ]
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
 
-  const hasExplicitPenalty = stateValues.some((value) => value.includes('penalties') || value.includes('penalty shootout'));
+  const hasPenaltyFlag = Boolean(
+    match?.match_status?.is_finished_after_penalties
+    || match?.match_status?.final_winner
+  );
+  const hasPenaltyScoreInScores = parseGoals(match?.scores?.home_penalties) !== null || parseGoals(match?.scores?.away_penalties) !== null;
+  const hasExplicitPenalty = hasPenaltyFlag || hasPenaltyScoreInScores || stateValues.some((value) => value.includes('penalties') || value.includes('penalty shootout'));
 
   // Try to extract penalty winner from various fields (for reference/logging)
   const penaltyWinnerCandidates = [
@@ -341,6 +348,15 @@ function extractPenaltyInfo(match) {
     );
   }
 
+  if (homeGoals90 === null || awayGoals90 === null) {
+    const regularHome = parseGoals(match?.scores?.home);
+    const regularAway = parseGoals(match?.scores?.away);
+    if (regularHome !== null && regularAway !== null) {
+      homeGoals90 = regularHome;
+      awayGoals90 = regularAway;
+    }
+  }
+
   // Extract penalty shootout goals scored by each team
   let homeElfmeterScored = null;
   let awayElfmeterScored = null;
@@ -356,6 +372,7 @@ function extractPenaltyInfo(match) {
       match?.penalty_goals?.home,
       match?.result_after_penalties?.home,
       match?.result_after_penalties?.home_score,
+      match?.scores?.home_penalties,
       match?.extra_time_result?.penalties?.home,
       match?.extra_time_result?.penalty_goals?.home
     ],
@@ -368,6 +385,7 @@ function extractPenaltyInfo(match) {
       match?.penalty_goals?.away,
       match?.result_after_penalties?.away,
       match?.result_after_penalties?.away_score,
+      match?.scores?.away_penalties,
       match?.extra_time_result?.penalties?.away,
       match?.extra_time_result?.penalty_goals?.away
     ]
@@ -544,20 +562,39 @@ async function enrichPenaltyDataFromEndpoint(match) {
   }
 
   const hasPenaltyGoals = match.homeElfmeterScored !== null || match.awayElfmeterScored !== null;
-  if (!match.penaltyStatusDetected || hasPenaltyGoals) {
+  const isFinishedDraw = Boolean(
+    match.finished
+    && match.homeGoals !== null
+    && match.awayGoals !== null
+    && match.homeGoals === match.awayGoals
+  );
+  const shouldFetchPenaltyDetails = !hasPenaltyGoals && (match.penaltyStatusDetected || isFinishedDraw);
+
+  if (!shouldFetchPenaltyDetails) {
     return match;
   }
 
   try {
-    const penaltiesPayload = await fetchFlashscoreMatchPenalties(match.sourceMatchId);
-    if (!penaltiesPayload || typeof penaltiesPayload !== 'object') {
-      return match;
-    }
-
-    const penaltyInfo = extractPenaltyInfo(penaltiesPayload);
+    const detailsPayload = await fetchFlashscoreMatchDetails(match.sourceMatchId);
+    const penaltyInfo = extractPenaltyInfo(detailsPayload || {});
     const hasEndpointPenaltyGoals = penaltyInfo.homeElfmeterScored !== null || penaltyInfo.awayElfmeterScored !== null;
     if (!hasEndpointPenaltyGoals) {
-      return match;
+      const penaltiesPayload = await fetchFlashscoreMatchPenalties(match.sourceMatchId);
+      const endpointPenaltyInfo = extractPenaltyInfo(penaltiesPayload || {});
+
+      if (endpointPenaltyInfo.homeElfmeterScored === null && endpointPenaltyInfo.awayElfmeterScored === null) {
+        return match;
+      }
+
+      return {
+        ...match,
+        penaltyDecided: true,
+        penaltyWinner: match.penaltyWinner ?? endpointPenaltyInfo.penaltyWinner ?? null,
+        homeGoals90: match.homeGoals90 ?? endpointPenaltyInfo.homeGoals90 ?? match.homeGoals,
+        awayGoals90: match.awayGoals90 ?? endpointPenaltyInfo.awayGoals90 ?? match.awayGoals,
+        homeElfmeterScored: endpointPenaltyInfo.homeElfmeterScored,
+        awayElfmeterScored: endpointPenaltyInfo.awayElfmeterScored
+      };
     }
 
     return {
