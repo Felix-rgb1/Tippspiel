@@ -1012,7 +1012,7 @@ function mapWMRoundName(tournamentName) {
   if (
     s.includes('round of 8')
     || s.includes('last 8')
-    s.includes('1/4')
+    || s.includes('1/4')
     || s.includes('quarter-finals')
     || s.includes('quarter finals')
     || s.includes('quarter-final')
