@@ -557,7 +557,8 @@ function calculateFinalGoals(match) {
 }
 
 async function enrichPenaltyDataFromEndpoint(match) {
-  if (!match?.sourceMatchId) {
+  const providerMatchId = String(match?.sourceMatchId || match?.matchId || '').trim();
+  if (!providerMatchId) {
     return match;
   }
 
@@ -575,11 +576,11 @@ async function enrichPenaltyDataFromEndpoint(match) {
   }
 
   try {
-    const detailsPayload = await fetchFlashscoreMatchDetails(match.sourceMatchId);
+    const detailsPayload = await fetchFlashscoreMatchDetails(providerMatchId);
     const penaltyInfo = extractPenaltyInfo(detailsPayload || {});
     const hasEndpointPenaltyGoals = penaltyInfo.homeElfmeterScored !== null || penaltyInfo.awayElfmeterScored !== null;
     if (!hasEndpointPenaltyGoals) {
-      const penaltiesPayload = await fetchFlashscoreMatchPenalties(match.sourceMatchId);
+      const penaltiesPayload = await fetchFlashscoreMatchPenalties(providerMatchId);
       const endpointPenaltyInfo = extractPenaltyInfo(penaltiesPayload || {});
 
       if (endpointPenaltyInfo.homeElfmeterScored === null && endpointPenaltyInfo.awayElfmeterScored === null) {
@@ -607,7 +608,7 @@ async function enrichPenaltyDataFromEndpoint(match) {
       awayElfmeterScored: penaltyInfo.awayElfmeterScored
     };
   } catch (error) {
-    console.warn(`[PENALTIES] Konnte Elfmeterdaten fuer Match ${match.sourceMatchId} nicht laden:`, error?.message || error);
+    console.warn(`[PENALTIES] Konnte Elfmeterdaten fuer Match ${providerMatchId} nicht laden:`, error?.message || error);
     return match;
   }
 }
@@ -926,6 +927,35 @@ function extractWMMatch(raw) {
 
   const penaltyInfo = extractPenaltyInfo(raw);
 
+  const wmRoundCandidates = [
+    raw?.round_name,
+    raw?.round,
+    raw?.stage_name,
+    raw?.tournament_stage_name,
+    raw?.tournament_round_name,
+    raw?.tournament?.name,
+    raw?.tournament?.round_name,
+    raw?.tournament?.stage_name,
+    raw?.event_stage,
+    raw?.event_stage_type
+  ].filter(Boolean);
+
+  let resolvedRound = null;
+  for (const candidate of wmRoundCandidates) {
+    const mapped = mapWMRoundName(candidate);
+    if (mapped) {
+      resolvedRound = mapped;
+      break;
+    }
+
+    if (!resolvedRound) {
+      const label = String(candidate).trim();
+      if (label) {
+        resolvedRound = label;
+      }
+    }
+  }
+
   return {
     matchId,
     externalId,
@@ -935,7 +965,7 @@ function extractWMMatch(raw) {
     homeGoals,
     awayGoals,
     finished,
-    round: null,
+    round: resolvedRound,
     penaltyDecided: penaltyInfo.penaltyDecided,
     penaltyStatusDetected: penaltyInfo.penaltyStatusDetected,
     penaltyWinner: penaltyInfo.penaltyWinner,
@@ -967,6 +997,38 @@ function mapWMRoundName(tournamentName) {
   ) {
     return '16tel Finale';
   }
+
+  if (
+    s.includes('round of 8')
+    || s.includes('last 8')
+    || s.includes('1/8')
+    || s.includes('eighth-finals')
+    || s.includes('1/8-finals')
+    || s.includes('eighth final')
+  ) {
+    return 'Achtelfinale';
+  }
+
+  if (
+    s.includes('1/4')
+    || s.includes('quarter-finals')
+    || s.includes('quarter finals')
+    || s.includes('quarter-final')
+    || s.includes('quarterfinal')
+  ) {
+    return 'Viertelfinale';
+  }
+
+  if (
+    s.includes('1/2')
+    || s.includes('semi-finals')
+    || s.includes('semi finals')
+    || s.includes('semi-final')
+    || s.includes('semifinal')
+  ) {
+    return 'Halbfinale';
+  }
+
   if (s.includes('quarter-final') || s.includes('quarterfinal')) return 'Viertelfinale';
   if (s.includes('semi-final') || s.includes('semifinal')) return 'Halbfinale';
   if (s.includes('3rd place') || s.includes('third place')) return 'Spiel um Platz 3';
@@ -1038,10 +1100,20 @@ async function fetchAllWMRawMatches(tournamentUrl) {
 // Calls the match details endpoint for each match without a round label.
 // Rate-limited via FLASHSCORE_WM_DETAILS_DELAY_MS (default 1200ms).
 async function enrichWMRoundsViaDetails(matches) {
-  const maxRequests = Math.max(1, parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '80', 10) || 80);
+  const maxRequests = Math.max(1, parseInt(process.env.FLASHSCORE_WM_DETAILS_MAX_REQUESTS || '240', 10) || 240);
   const delayMs = Math.max(0, parseInt(process.env.FLASHSCORE_WM_DETAILS_DELAY_MS || '1200', 10) || 1200);
 
-  const needsRound = matches.filter((m) => !m.round || isGenericRoundLabel(m.round)).slice(0, maxRequests);
+  const now = Date.now();
+  const needsRound = matches
+    .filter((m) => !m.round || isGenericRoundLabel(m.round))
+    .sort((a, b) => {
+      const aTs = new Date(a.matchDate || 0).getTime();
+      const bTs = new Date(b.matchDate || 0).getTime();
+      const aDiff = Number.isFinite(aTs) ? Math.abs(aTs - now) : Number.MAX_SAFE_INTEGER;
+      const bDiff = Number.isFinite(bTs) ? Math.abs(bTs - now) : Number.MAX_SAFE_INTEGER;
+      return aDiff - bDiff;
+    })
+    .slice(0, maxRequests);
   let resolved = 0;
 
   for (let i = 0; i < needsRound.length; i++) {

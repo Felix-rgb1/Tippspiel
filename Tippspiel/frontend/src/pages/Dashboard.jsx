@@ -504,6 +504,52 @@ function normalizeRoundLabel(round) {
     return '16tel Finale';
   }
 
+  if (
+    normalized === 'achtelfinale'
+    || normalized === 'round of 8'
+    || normalized === 'last 8'
+    || normalized === '1/8 finale'
+    || normalized === '1/8 final'
+    || normalized === '1/8-finals'
+    || normalized === 'eighth-finals'
+  ) {
+    return 'Achtelfinale';
+  }
+
+  if (
+    normalized === 'viertelfinale'
+    || normalized === 'quarter-finals'
+    || normalized === 'quarter finals'
+    || normalized === 'quarter-final'
+    || normalized === 'quarterfinal'
+    || normalized === '1/4 finale'
+    || normalized === '1/4 final'
+    || normalized === '1/4-finals'
+  ) {
+    return 'Viertelfinale';
+  }
+
+  if (
+    normalized === 'halbfinale'
+    || normalized === 'semi-finals'
+    || normalized === 'semi finals'
+    || normalized === 'semi-final'
+    || normalized === 'semifinal'
+    || normalized === '1/2 finale'
+    || normalized === '1/2 final'
+    || normalized === '1/2-finals'
+  ) {
+    return 'Halbfinale';
+  }
+
+  if (normalized === 'spiel um platz 3' || normalized === '3rd place' || normalized === 'third place') {
+    return 'Spiel um Platz 3';
+  }
+
+  if (normalized === 'finale' || normalized === 'final') {
+    return 'Finale';
+  }
+
   return round;
 }
 
