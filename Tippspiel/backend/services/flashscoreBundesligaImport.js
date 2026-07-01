@@ -510,27 +510,35 @@ function toNormalizedMatch(match, fallbackRound = null) {
   };
 }
 
+function calculateFinalGoals(match) {
+  let finalHomeGoals = match.homeGoals;
+  let finalAwayGoals = match.awayGoals;
+
+  if (match.penaltyDecided && (match.homeElfmeterScored !== null || match.awayElfmeterScored !== null)) {
+    const baseHome = match.homeGoals90 ?? match.homeGoals;
+    const baseAway = match.awayGoals90 ?? match.awayGoals;
+
+    if (baseHome !== null && match.homeElfmeterScored !== null) {
+      finalHomeGoals = baseHome + match.homeElfmeterScored;
+    }
+    if (baseAway !== null && match.awayElfmeterScored !== null) {
+      finalAwayGoals = baseAway + match.awayElfmeterScored;
+    }
+  }
+
+  return {
+    finalHomeGoals,
+    finalAwayGoals
+  };
+}
+
 async function upsertMatch(pool, normalizedMatch) {
   const existing = await pool.query(
     'SELECT id FROM matches WHERE external_source = $1 AND external_id = $2',
     [EXTERNAL_SOURCE, normalizedMatch.externalId]
   );
 
-  // Calculate final goals: if penalty decided, add penalty goals to 90-min result
-  let finalHomeGoals = normalizedMatch.homeGoals;
-  let finalAwayGoals = normalizedMatch.awayGoals;
-  
-  if (normalizedMatch.penaltyDecided && (normalizedMatch.homeElfmeterScored !== null || normalizedMatch.awayElfmeterScored !== null)) {
-    const baseHome = normalizedMatch.homeGoals90 ?? normalizedMatch.homeGoals;
-    const baseAway = normalizedMatch.awayGoals90 ?? normalizedMatch.awayGoals;
-    
-    if (baseHome !== null && normalizedMatch.homeElfmeterScored !== null) {
-      finalHomeGoals = baseHome + normalizedMatch.homeElfmeterScored;
-    }
-    if (baseAway !== null && normalizedMatch.awayElfmeterScored !== null) {
-      finalAwayGoals = baseAway + normalizedMatch.awayElfmeterScored;
-    }
-  }
+  const { finalHomeGoals, finalAwayGoals } = calculateFinalGoals(normalizedMatch);
 
   if (existing.rows.length > 0) {
     await pool.query(
@@ -702,12 +710,13 @@ async function syncBundesligaResults(pool, options = {}) {
     return { updatedCount: 0, skippedCount: 0, totalFetched: rawMatches.length, finishedFromApi: 0, tournamentUrl };
   }
 
-  // Load all unfinished DB matches to update
+  // Load all Bundesliga DB matches so already finished rows can also be corrected
   const dbResult = await pool.query(
     `SELECT id, home_team, away_team, match_date, external_source, external_id
      FROM matches
-     WHERE finished = false OR finished IS NULL
-     ORDER BY match_date ASC`
+     WHERE external_source = $1
+     ORDER BY match_date ASC`,
+    [EXTERNAL_SOURCE]
   );
   const dbMatches = dbResult.rows;
 
@@ -741,14 +750,32 @@ async function syncBundesligaResults(pool, options = {}) {
       continue;
     }
 
+    const { finalHomeGoals, finalAwayGoals } = calculateFinalGoals(apiMatch);
+
     await pool.query(
       `UPDATE matches
        SET home_goals = $1,
            away_goals = $2,
            finished = true,
+           penalty_decided = $3,
+           penalty_winner = $4,
+           home_goals_90 = $5,
+           away_goals_90 = $6,
+           home_elfmeter_scored = $7,
+           away_elfmeter_scored = $8,
            updated_at = NOW()
-       WHERE id = $3`,
-      [apiMatch.homeGoals, apiMatch.awayGoals, dbMatch.id]
+       WHERE id = $9`,
+      [
+        finalHomeGoals,
+        finalAwayGoals,
+        apiMatch.penaltyDecided ?? false,
+        apiMatch.penaltyWinner ?? null,
+        apiMatch.homeGoals90 ?? apiMatch.homeGoals,
+        apiMatch.awayGoals90 ?? apiMatch.awayGoals,
+        apiMatch.homeElfmeterScored ?? null,
+        apiMatch.awayElfmeterScored ?? null,
+        dbMatch.id
+      ]
     );
     updatedCount += 1;
   }
@@ -815,6 +842,8 @@ function extractWMMatch(raw) {
     ? parseGoals(raw?.scores?.away ?? raw?.away_score ?? raw?.awayScore ?? raw?.result?.away)
     : null;
 
+  const penaltyInfo = extractPenaltyInfo(raw);
+
   return {
     matchId,
     externalId,
@@ -824,7 +853,13 @@ function extractWMMatch(raw) {
     homeGoals,
     awayGoals,
     finished,
-    round: null
+    round: null,
+    penaltyDecided: penaltyInfo.penaltyDecided,
+    penaltyWinner: penaltyInfo.penaltyWinner,
+    homeGoals90: penaltyInfo.homeGoals90,
+    awayGoals90: penaltyInfo.awayGoals90,
+    homeElfmeterScored: penaltyInfo.homeElfmeterScored,
+    awayElfmeterScored: penaltyInfo.awayElfmeterScored
   };
 }
 
@@ -954,21 +989,7 @@ async function upsertWMMatch(pool, match) {
 
   const round = match.round || existing.rows[0]?.round || null;
 
-  // Calculate final goals: if penalty decided, add penalty goals to 90-min result
-  let finalHomeGoals = match.homeGoals;
-  let finalAwayGoals = match.awayGoals;
-  
-  if (match.penaltyDecided && (match.homeElfmeterScored !== null || match.awayElfmeterScored !== null)) {
-    const baseHome = match.homeGoals90 ?? match.homeGoals;
-    const baseAway = match.awayGoals90 ?? match.awayGoals;
-    
-    if (baseHome !== null && match.homeElfmeterScored !== null) {
-      finalHomeGoals = baseHome + match.homeElfmeterScored;
-    }
-    if (baseAway !== null && match.awayElfmeterScored !== null) {
-      finalAwayGoals = baseAway + match.awayElfmeterScored;
-    }
-  }
+  const { finalHomeGoals, finalAwayGoals } = calculateFinalGoals(match);
 
   if (existing.rows.length > 0) {
     await pool.query(
