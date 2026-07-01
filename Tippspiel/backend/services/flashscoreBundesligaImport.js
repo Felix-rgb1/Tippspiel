@@ -2,6 +2,7 @@ const {
   fetchFlashscoreTournamentFixtures,
   fetchFlashscoreTournamentResults,
   fetchFlashscoreMatchDetails,
+  fetchFlashscoreMatchPenalties,
   isRapidApiConfigured
 } = require('./rapidApi');
 
@@ -390,8 +391,12 @@ function extractPenaltyInfo(match) {
     }
   }
 
+  const hasPenaltyScores = homeElfmeterScored !== null || awayElfmeterScored !== null;
+  const penaltyDecided = Boolean(hasExplicitPenalty || hasPenaltyScores);
+
   return {
-    penaltyDecided: hasExplicitPenalty && (homeElfmeterScored !== null || awayElfmeterScored !== null),
+    penaltyDecided,
+    penaltyStatusDetected: hasExplicitPenalty,
     penaltyWinner,
     homeGoals90,
     awayGoals90,
@@ -502,6 +507,7 @@ function toNormalizedMatch(match, fallbackRound = null) {
     externalId,
     sourceMatchId,
     penaltyDecided: penaltyInfo.penaltyDecided,
+    penaltyStatusDetected: penaltyInfo.penaltyStatusDetected,
     penaltyWinner: penaltyInfo.penaltyWinner,
     homeGoals90: penaltyInfo.homeGoals90,
     awayGoals90: penaltyInfo.awayGoals90,
@@ -530,6 +536,43 @@ function calculateFinalGoals(match) {
     finalHomeGoals,
     finalAwayGoals
   };
+}
+
+async function enrichPenaltyDataFromEndpoint(match) {
+  if (!match?.sourceMatchId) {
+    return match;
+  }
+
+  const hasPenaltyGoals = match.homeElfmeterScored !== null || match.awayElfmeterScored !== null;
+  if (!match.penaltyStatusDetected || hasPenaltyGoals) {
+    return match;
+  }
+
+  try {
+    const penaltiesPayload = await fetchFlashscoreMatchPenalties(match.sourceMatchId);
+    if (!penaltiesPayload || typeof penaltiesPayload !== 'object') {
+      return match;
+    }
+
+    const penaltyInfo = extractPenaltyInfo(penaltiesPayload);
+    const hasEndpointPenaltyGoals = penaltyInfo.homeElfmeterScored !== null || penaltyInfo.awayElfmeterScored !== null;
+    if (!hasEndpointPenaltyGoals) {
+      return match;
+    }
+
+    return {
+      ...match,
+      penaltyDecided: true,
+      penaltyWinner: match.penaltyWinner ?? penaltyInfo.penaltyWinner ?? null,
+      homeGoals90: match.homeGoals90 ?? penaltyInfo.homeGoals90 ?? match.homeGoals,
+      awayGoals90: match.awayGoals90 ?? penaltyInfo.awayGoals90 ?? match.awayGoals,
+      homeElfmeterScored: penaltyInfo.homeElfmeterScored,
+      awayElfmeterScored: penaltyInfo.awayElfmeterScored
+    };
+  } catch (error) {
+    console.warn(`[PENALTIES] Konnte Elfmeterdaten fuer Match ${match.sourceMatchId} nicht laden:`, error?.message || error);
+    return match;
+  }
 }
 
 async function upsertMatch(pool, normalizedMatch) {
@@ -659,7 +702,8 @@ async function importFlashscoreBundesligaMatches(pool, options = {}) {
   let updatedCount = 0;
 
   for (const match of normalizedMatches) {
-    const action = await upsertMatch(pool, match);
+    const enrichedMatch = await enrichPenaltyDataFromEndpoint(match);
+    const action = await upsertMatch(pool, enrichedMatch);
     if (action === 'created') {
       createdCount += 1;
     } else {
@@ -724,23 +768,24 @@ async function syncBundesligaResults(pool, options = {}) {
   let skippedCount = 0;
 
   for (const apiMatch of finishedApiMatches) {
+    const enrichedApiMatch = await enrichPenaltyDataFromEndpoint(apiMatch);
     let dbMatch = null;
 
     // First: exact match by external_id
-    if (apiMatch.externalId) {
+    if (enrichedApiMatch.externalId) {
       dbMatch = dbMatches.find(
-        (m) => m.external_source === EXTERNAL_SOURCE && m.external_id === apiMatch.externalId
+        (m) => m.external_source === EXTERNAL_SOURCE && m.external_id === enrichedApiMatch.externalId
       );
     }
 
     // Fallback: fuzzy match by team names + date (±24 h)
     if (!dbMatch) {
-      const apiTs = new Date(apiMatch.matchDate).getTime();
+      const apiTs = new Date(enrichedApiMatch.matchDate).getTime();
 
       dbMatch = dbMatches.find((m) => {
         const dbTs = new Date(m.match_date).getTime();
-        const nameMatch = teamNamesMatch(m.home_team, apiMatch.homeTeam)
-          && teamNamesMatch(m.away_team, apiMatch.awayTeam);
+        const nameMatch = teamNamesMatch(m.home_team, enrichedApiMatch.homeTeam)
+          && teamNamesMatch(m.away_team, enrichedApiMatch.awayTeam);
         return nameMatch && Math.abs(apiTs - dbTs) <= 24 * 60 * 60 * 1000;
       });
     }
@@ -750,7 +795,7 @@ async function syncBundesligaResults(pool, options = {}) {
       continue;
     }
 
-    const { finalHomeGoals, finalAwayGoals } = calculateFinalGoals(apiMatch);
+    const { finalHomeGoals, finalAwayGoals } = calculateFinalGoals(enrichedApiMatch);
 
     await pool.query(
       `UPDATE matches
@@ -768,12 +813,12 @@ async function syncBundesligaResults(pool, options = {}) {
       [
         finalHomeGoals,
         finalAwayGoals,
-        apiMatch.penaltyDecided ?? false,
-        apiMatch.penaltyWinner ?? null,
-        apiMatch.homeGoals90 ?? apiMatch.homeGoals,
-        apiMatch.awayGoals90 ?? apiMatch.awayGoals,
-        apiMatch.homeElfmeterScored ?? null,
-        apiMatch.awayElfmeterScored ?? null,
+        enrichedApiMatch.penaltyDecided ?? false,
+        enrichedApiMatch.penaltyWinner ?? null,
+        enrichedApiMatch.homeGoals90 ?? enrichedApiMatch.homeGoals,
+        enrichedApiMatch.awayGoals90 ?? enrichedApiMatch.awayGoals,
+        enrichedApiMatch.homeElfmeterScored ?? null,
+        enrichedApiMatch.awayElfmeterScored ?? null,
         dbMatch.id
       ]
     );
@@ -855,6 +900,7 @@ function extractWMMatch(raw) {
     finished,
     round: null,
     penaltyDecided: penaltyInfo.penaltyDecided,
+    penaltyStatusDetected: penaltyInfo.penaltyStatusDetected,
     penaltyWinner: penaltyInfo.penaltyWinner,
     homeGoals90: penaltyInfo.homeGoals90,
     awayGoals90: penaltyInfo.awayGoals90,
@@ -1093,7 +1139,8 @@ async function importFlashscoreWMMatches(pool) {
   let createdCount = 0;
   let updatedCount = 0;
   for (const match of matches) {
-    const action = await upsertWMMatch(pool, match);
+    const enrichedMatch = await enrichPenaltyDataFromEndpoint(match);
+    const action = await upsertWMMatch(pool, enrichedMatch);
     if (action === 'created') createdCount++;
     else updatedCount++;
   }
@@ -1182,7 +1229,8 @@ async function syncWMResults(pool) {
   let updatedCount = 0;
 
   for (const match of finishedMatches) {
-    const action = await upsertWMMatch(pool, match);
+    const enrichedMatch = await enrichPenaltyDataFromEndpoint(match);
+    const action = await upsertWMMatch(pool, enrichedMatch);
     if (action === 'created') createdCount++;
     else updatedCount++;
   }

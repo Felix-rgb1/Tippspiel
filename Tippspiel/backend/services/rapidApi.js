@@ -1604,6 +1604,18 @@ async function fetchFlashscoreMatchStats(matchId) {
   return payload && typeof payload === 'object' ? payload : null;
 }
 
+async function fetchFlashscoreMatchPenalties(matchId) {
+  if (!matchId) {
+    return null;
+  }
+
+  const payload = await rapidApiRequest('/api/flashscore/v2/matches/penalties', {
+    match_id: String(matchId)
+  });
+
+  return payload && typeof payload === 'object' ? payload : null;
+}
+
 // Cache for standings (5 min TTL)
 let standingsCache = null;
 let standingsCacheAt = 0;
@@ -1667,6 +1679,7 @@ module.exports = {
   fetchFlashscoreTournamentResults,
   fetchFlashscoreMatchDetails,
   fetchFlashscoreMatchStats,
+  fetchFlashscoreMatchPenalties,
   fetchFlashscoreGroupStandings,
   testRapidApi
 };

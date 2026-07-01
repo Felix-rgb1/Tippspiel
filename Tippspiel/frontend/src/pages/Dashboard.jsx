@@ -816,8 +816,26 @@ function Dashboard() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const [syncResult, matchesResult, bonusResult, publicBonusResult, lastWinnerResult] = await Promise.allSettled([
-        matchAPI.syncResultsOnOpen(),
+      const syncOnOpenPromise = matchAPI.syncResultsOnOpen()
+        .then(async (syncResponse) => {
+          const syncData = syncResponse?.data || {};
+          const changedCount =
+            (Number(syncData?.backfill?.finishedUpdates) || 0)
+            + (Number(syncData?.wm?.updatedCount) || 0)
+            + (Number(syncData?.wm?.createdCount) || 0)
+            + (Number(syncData?.bundesliga?.updatedCount) || 0)
+            + (Number(syncData?.bundesliga?.createdCount) || 0);
+
+          if (syncData.executed && changedCount > 0) {
+            const refreshedMatches = await matchAPI.getAll();
+            setMatches(refreshedMatches.data);
+          }
+        })
+        .catch((error) => {
+          console.warn('[DASHBOARD] Ergebnis-Sync beim Oeffnen fehlgeschlagen:', error?.message || error);
+        });
+
+      const [matchesResult, bonusResult, publicBonusResult, lastWinnerResult] = await Promise.allSettled([
         matchAPI.getAll(),
         tipAPI.getBonusTip(),
         tipAPI.getVisibleBonusTips(),
@@ -828,26 +846,7 @@ function Dashboard() {
         throw matchesResult.reason;
       }
 
-      let nextMatches = matchesResult.value.data;
-
-      if (syncResult.status === 'fulfilled') {
-        const syncData = syncResult.value?.data || {};
-        const changedCount =
-          (Number(syncData?.backfill?.finishedUpdates) || 0)
-          + (Number(syncData?.wm?.updatedCount) || 0)
-          + (Number(syncData?.wm?.createdCount) || 0)
-          + (Number(syncData?.bundesliga?.updatedCount) || 0)
-          + (Number(syncData?.bundesliga?.createdCount) || 0);
-
-        if (syncData.executed && changedCount > 0) {
-          const refreshedMatches = await matchAPI.getAll();
-          nextMatches = refreshedMatches.data;
-        }
-      } else {
-        console.warn('[DASHBOARD] Ergebnis-Sync beim Oeffnen fehlgeschlagen:', syncResult.reason?.message || syncResult.reason);
-      }
-
-      setMatches(nextMatches);
+      setMatches(matchesResult.value.data);
 
       // Fetch user's tips
       const [tipsResponse, visibleTipsResponse] = await Promise.all([
@@ -896,6 +895,9 @@ function Dashboard() {
       if (lastWinnerResult.status === 'fulfilled' && lastWinnerResult.value?.data?.winner) {
         setLastWinner(lastWinnerResult.value.data);
       }
+
+      // Keep the on-open sync detached from first paint; no await to avoid blocking the initial page load.
+      void syncOnOpenPromise;
     } catch (err) {
       setError('Fehler beim Laden der Spiele');
       console.error(err);
