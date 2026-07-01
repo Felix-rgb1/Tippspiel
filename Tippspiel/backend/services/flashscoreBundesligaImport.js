@@ -988,19 +988,19 @@ function mapWMRoundName(tournamentName) {
   }
 
   if (
-    s.includes('round of 16')
-    || s.includes('last 16')
-    || s.includes('1/16')
-    || s.includes('16th final')
+    s.includes('1/16')
+    || s.includes('round of 32')
+    || s.includes('last 32')
+    || s.includes('32nd final')
+    || s.includes('thirty-second final')
     || s.includes('sixteenth final')
-    || s.includes('eighth final')
   ) {
     return '16tel Finale';
   }
 
   if (
-    s.includes('round of 8')
-    || s.includes('last 8')
+    s.includes('round of 16')
+    || s.includes('last 16')
     || s.includes('1/8')
     || s.includes('eighth-finals')
     || s.includes('1/8-finals')
@@ -1010,6 +1010,8 @@ function mapWMRoundName(tournamentName) {
   }
 
   if (
+    s.includes('round of 8')
+    || s.includes('last 8')
     s.includes('1/4')
     || s.includes('quarter-finals')
     || s.includes('quarter finals')

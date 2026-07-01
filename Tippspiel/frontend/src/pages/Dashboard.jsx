@@ -493,12 +493,13 @@ function normalizeRoundLabel(round) {
   const normalized = String(round || '').trim().toLowerCase();
 
   if (
-    normalized === 'achtelfinale'
-    || normalized === 'round of 16'
-    || normalized === 'last 16'
+    normalized === '16tel finale'
     || normalized === '1/16 finale'
     || normalized === '1/16 final'
-    || normalized === '16th final'
+    || normalized === 'round of 32'
+    || normalized === 'last 32'
+    || normalized === '32nd final'
+    || normalized === 'thirty-second final'
     || normalized === 'sixteenth final'
   ) {
     return '16tel Finale';
@@ -506,18 +507,21 @@ function normalizeRoundLabel(round) {
 
   if (
     normalized === 'achtelfinale'
-    || normalized === 'round of 8'
-    || normalized === 'last 8'
+    || normalized === 'round of 16'
+    || normalized === 'last 16'
     || normalized === '1/8 finale'
     || normalized === '1/8 final'
     || normalized === '1/8-finals'
     || normalized === 'eighth-finals'
+    || normalized === 'eighth final'
   ) {
     return 'Achtelfinale';
   }
 
   if (
     normalized === 'viertelfinale'
+    || normalized === 'round of 8'
+    || normalized === 'last 8'
     || normalized === 'quarter-finals'
     || normalized === 'quarter finals'
     || normalized === 'quarter-final'
