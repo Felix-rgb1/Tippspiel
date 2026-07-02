@@ -621,6 +621,17 @@ async function enrichPenaltyDataFromEndpoint(match) {
 
   try {
     const detailsPayload = await fetchFlashscoreMatchDetails(providerMatchId);
+    const detailsResolvedGoals = resolveFinishedGoals(detailsPayload || {});
+    const hasDetailsGoals = detailsResolvedGoals.homeGoals !== null && detailsResolvedGoals.awayGoals !== null;
+
+    const baseEnrichedMatch = hasDetailsGoals
+      ? {
+        ...match,
+        homeGoals: detailsResolvedGoals.homeGoals,
+        awayGoals: detailsResolvedGoals.awayGoals
+      }
+      : match;
+
     const penaltyInfo = extractPenaltyInfo(detailsPayload || {});
     const hasEndpointPenaltyGoals = penaltyInfo.homeElfmeterScored !== null || penaltyInfo.awayElfmeterScored !== null;
     if (!hasEndpointPenaltyGoals) {
@@ -628,26 +639,26 @@ async function enrichPenaltyDataFromEndpoint(match) {
       const endpointPenaltyInfo = extractPenaltyInfo(penaltiesPayload || {});
 
       if (endpointPenaltyInfo.homeElfmeterScored === null && endpointPenaltyInfo.awayElfmeterScored === null) {
-        return match;
+        return baseEnrichedMatch;
       }
 
       return {
-        ...match,
+        ...baseEnrichedMatch,
         penaltyDecided: true,
-        penaltyWinner: match.penaltyWinner ?? endpointPenaltyInfo.penaltyWinner ?? null,
-        homeGoals90: match.homeGoals90 ?? endpointPenaltyInfo.homeGoals90 ?? match.homeGoals,
-        awayGoals90: match.awayGoals90 ?? endpointPenaltyInfo.awayGoals90 ?? match.awayGoals,
+        penaltyWinner: baseEnrichedMatch.penaltyWinner ?? endpointPenaltyInfo.penaltyWinner ?? null,
+        homeGoals90: baseEnrichedMatch.homeGoals90 ?? endpointPenaltyInfo.homeGoals90 ?? baseEnrichedMatch.homeGoals,
+        awayGoals90: baseEnrichedMatch.awayGoals90 ?? endpointPenaltyInfo.awayGoals90 ?? baseEnrichedMatch.awayGoals,
         homeElfmeterScored: endpointPenaltyInfo.homeElfmeterScored,
         awayElfmeterScored: endpointPenaltyInfo.awayElfmeterScored
       };
     }
 
     return {
-      ...match,
+      ...baseEnrichedMatch,
       penaltyDecided: true,
-      penaltyWinner: match.penaltyWinner ?? penaltyInfo.penaltyWinner ?? null,
-      homeGoals90: match.homeGoals90 ?? penaltyInfo.homeGoals90 ?? match.homeGoals,
-      awayGoals90: match.awayGoals90 ?? penaltyInfo.awayGoals90 ?? match.awayGoals,
+      penaltyWinner: baseEnrichedMatch.penaltyWinner ?? penaltyInfo.penaltyWinner ?? null,
+      homeGoals90: baseEnrichedMatch.homeGoals90 ?? penaltyInfo.homeGoals90 ?? baseEnrichedMatch.homeGoals,
+      awayGoals90: baseEnrichedMatch.awayGoals90 ?? penaltyInfo.awayGoals90 ?? baseEnrichedMatch.awayGoals,
       homeElfmeterScored: penaltyInfo.homeElfmeterScored,
       awayElfmeterScored: penaltyInfo.awayElfmeterScored
     };
