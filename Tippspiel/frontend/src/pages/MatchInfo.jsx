@@ -494,6 +494,38 @@ function MatchInfo() {
     ? `${Number(liveUpdate.homeGoals)}:${Number(liveUpdate.awayGoals)}`
     : fallbackFinishedScore;
 
+  const scoreHistory = useMemo(() => {
+    const match = insights?.match;
+    if (!match) return null;
+
+    const finalHome = Number(match.home_goals);
+    const finalAway = Number(match.away_goals);
+    if (!Number.isFinite(finalHome) || !Number.isFinite(finalAway)) {
+      return null;
+    }
+
+    const baseHome = Number(match.home_goals_90);
+    const baseAway = Number(match.away_goals_90);
+    const penHome = Number(match.home_elfmeter_scored);
+    const penAway = Number(match.away_elfmeter_scored);
+    const penaltyDecided = Boolean(match.penalty_decided);
+
+    const hasBase = Number.isFinite(baseHome) && Number.isFinite(baseAway);
+    const hasPenalties = Number.isFinite(penHome) && Number.isFinite(penAway) && (penHome > 0 || penAway > 0);
+
+    if (!penaltyDecided && !hasPenalties && !hasBase) {
+      return null;
+    }
+
+    return {
+      hasBase,
+      hasPenalties,
+      beforePenalties: hasBase ? `${baseHome}:${baseAway}` : null,
+      penalties: hasPenalties ? `${penHome}:${penAway}` : null,
+      final: `${finalHome}:${finalAway}`
+    };
+  }, [insights]);
+
   if (loading) {
     return (
       <div className="container match-info-page">
@@ -550,6 +582,31 @@ function MatchInfo() {
         <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>Zurueck</button>
         <Link to="/" className="btn-primary">Dashboard</Link>
       </div>
+
+      {scoreHistory && (
+        <section className="card score-history-card">
+          <div className="section-heading compact">
+            <div>
+              <span className="section-eyebrow">Ergebnis</span>
+              <h2>Ergebnis-Historie</h2>
+            </div>
+          </div>
+          <div className="score-history-grid">
+            <div className="score-history-item">
+              <span className="score-history-label">Vor Elfmetern (90/120')</span>
+              <strong>{scoreHistory.beforePenalties || '-:-'}</strong>
+            </div>
+            <div className="score-history-item">
+              <span className="score-history-label">Elfmeterschiessen</span>
+              <strong>{scoreHistory.penalties || '-:-'}</strong>
+            </div>
+            <div className="score-history-item is-final">
+              <span className="score-history-label">Endstand</span>
+              <strong>{scoreHistory.final}</strong>
+            </div>
+          </div>
+        </section>
+      )}
 
       {showLiveTicker && (
         <section className="card live-ticker-card">

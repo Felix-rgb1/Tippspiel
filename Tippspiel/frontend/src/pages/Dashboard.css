@@ -5,6 +5,24 @@
   margin-bottom: 1.5rem;
 }
 
+.round-filter-extra {
+  margin-top: -0.6rem;
+}
+
+.filter-checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.2rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.filter-checkbox-inline input {
+  width: 1rem;
+  height: 1rem;
+}
+
 @keyframes surface-in {
   from {
     opacity: 0;
@@ -1213,10 +1231,11 @@
   }
 
   .round-filter {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .filter-checkbox-inline {
+    font-size: 0.92rem;
   }
 
   .round-btn {
@@ -1493,6 +1512,10 @@
   background: #111827;
   color: #cbd5e1;
   border-color: #334155;
+}
+
+:root[data-theme='dark'] .filter-checkbox-inline {
+  color: #e2e8f0;
 }
 
 :root[data-theme='dark'] .round-btn:hover,

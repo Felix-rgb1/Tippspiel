@@ -623,7 +623,13 @@ async function saveCachedRapidInsights(pool, homeTeam, awayTeam, insights) {
 
 async function getMatchInsights(pool, matchId) {
   const matchResult = await pool.query(
-    'SELECT id, home_team, away_team, match_date, round, external_source, finished, home_goals, away_goals FROM matches WHERE id = $1',
+    `SELECT id, home_team, away_team, match_date, round, external_source, finished,
+            home_goals, away_goals,
+            penalty_decided, penalty_winner,
+            home_goals_90, away_goals_90,
+            home_elfmeter_scored, away_elfmeter_scored
+     FROM matches
+     WHERE id = $1`,
     [matchId]
   );
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { matchAPI, tipAPI, leaderboardAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -570,6 +570,7 @@ function Dashboard() {
   const [success, setSuccess] = useState('');
   const [activeRound, setActiveRound] = useState('Alle');
   const [matchStatusFilter, setMatchStatusFilter] = useState('Alle');
+  const [onlyMyOpenTips, setOnlyMyOpenTips] = useState(false);
   const [bonusTip, setBonusTip] = useState({ champion_team: '', runner_up_team: '' });
   const [bonusLocked, setBonusLocked] = useState(false);
   const [bonusDeadline, setBonusDeadline] = useState(null);
@@ -629,27 +630,10 @@ function Dashboard() {
       .filter((match) => !match.finished && isFlashscoreSource(match) && isInTrackingWindow(match))
       .map((match) => match.id);
 
-    console.log('[POLL-DEBUG] Dashboard poll check:', {
-      totalMatches: matches.length,
-      notFinished: matches.filter(m => !m.finished).length,
-      isFlashscore: matches.filter(m => isFlashscoreSource(m)).length,
-      inWindow: matches.filter(m => isInTrackingWindow(m)).length,
-      candidateIds,
-      details: matches.slice(0, 3).map(m => ({
-        id: m.id,
-        finished: m.finished,
-        external_source: m.external_source,
-        home: m.home_team
-      }))
-    });
-
     if (!candidateIds.length) {
-      console.log('[POLL-DEBUG] No candidates for polling - skipping');
       setLiveConnectionMode('idle');
       return undefined;
     }
-
-    console.log('[POLL-DEBUG] Starting live stream for', candidateIds.length, 'matches:', candidateIds);
 
     let stopped = false;
     let timer = null;
@@ -1120,36 +1104,61 @@ function Dashboard() {
 
 
 
-  const rounds = ['Alle', ...Array.from(
+  const rounds = useMemo(() => ['Alle', ...Array.from(
     new Set(matches.map((match) => normalizeRoundLabel(match.round)).filter(Boolean))
-  )];
+  )], [matches]);
 
-  const roundFilteredMatches = activeRound === 'Alle'
-    ? matches
-    : matches.filter((match) => normalizeRoundLabel(match.round) === activeRound);
+  const visibleMatches = useMemo(() => {
+    const filtered = matches.filter((match) => {
+      const normalizedRound = normalizeRoundLabel(match.round);
+      const isFinished = Boolean(match.finished);
 
-  const statusFilteredMatches = matchStatusFilter === 'Alle'
-    ? roundFilteredMatches
-    : roundFilteredMatches.filter((match) =>
-      matchStatusFilter === 'Offen' ? !match.finished : Boolean(match.finished)
-    );
+      if (activeRound !== 'Alle' && normalizedRound !== activeRound) {
+        return false;
+      }
 
-  const visibleMatches = statusFilteredMatches.slice().sort((firstMatch, secondMatch) => {
-    if (matchStatusFilter === 'Alle' && firstMatch.finished !== secondMatch.finished) {
-      return firstMatch.finished ? 1 : -1;
-    }
+      if (matchStatusFilter === 'Offen' && isFinished) {
+        return false;
+      }
 
-    return toTimestamp(firstMatch.match_date) - toTimestamp(secondMatch.match_date);
-  });
+      if (matchStatusFilter === 'Abgeschlossen' && !isFinished) {
+        return false;
+      }
 
-  const finishedCount = matches.filter((m) => m.finished).length;
+      if (onlyMyOpenTips) {
+        const hasSubmittedTip = Boolean(savedTips[match.id]);
+        if (isFinished || isDeadlinePassed(match.match_date) || hasSubmittedTip) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return filtered.slice().sort((firstMatch, secondMatch) => {
+      if (matchStatusFilter === 'Alle' && firstMatch.finished !== secondMatch.finished) {
+        return firstMatch.finished ? 1 : -1;
+      }
+
+      return toTimestamp(firstMatch.match_date) - toTimestamp(secondMatch.match_date);
+    });
+  }, [
+    matches,
+    activeRound,
+    matchStatusFilter,
+    onlyMyOpenTips,
+    savedTips,
+    now
+  ]);
+
+  const finishedCount = useMemo(() => matches.filter((m) => m.finished).length, [matches]);
   const openCount = matches.length - finishedCount;
-  const submittedTipsCount = Object.keys(savedTips).length;
-  const upcomingMatches = matches
+  const submittedTipsCount = useMemo(() => Object.keys(savedTips).length, [savedTips]);
+  const upcomingMatches = useMemo(() => matches
     .filter((match) => !match.finished)
     .slice()
     .sort((firstMatch, secondMatch) => toTimestamp(firstMatch.match_date) - toTimestamp(secondMatch.match_date))
-    .slice(0, 3);
+    .slice(0, 3), [matches]);
 
   const missingTipsCount = matches.filter(
     m => !m.finished && !isDeadlinePassed(m.match_date) && !tips[m.id]
@@ -1451,7 +1460,7 @@ function Dashboard() {
 
       {rounds.length > 1 && (
         <div className="round-filter">
-          {rounds.map(r => (
+          {rounds.map((r) => (
             <button
               key={r}
               className={`round-btn${activeRound === r ? ' active' : ''}`}
@@ -1462,6 +1471,17 @@ function Dashboard() {
           ))}
         </div>
       )}
+
+      <div className="round-filter round-filter-extra">
+        <label className="filter-checkbox-inline">
+          <input
+            type="checkbox"
+            checked={onlyMyOpenTips}
+            onChange={(event) => setOnlyMyOpenTips(event.target.checked)}
+          />
+          Nur meine offenen Tipps
+        </label>
+      </div>
 
       <div className="matches-grid">
         {visibleMatches.map(match => {
