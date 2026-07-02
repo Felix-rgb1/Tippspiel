@@ -98,7 +98,7 @@ async function buildLivePayload(rawIds) {
     return {
       updates: {},
       fetchedAt: new Date().toISOString(),
-      nextPollInMs: 60000,
+      nextPollInMs: 30000,
       usedProvider: false
     };
   }
@@ -224,7 +224,7 @@ router.get('/live/stream', async (req, res) => {
 
   const scheduleNext = (delayMs) => {
     if (stopped) return;
-    const delay = Math.max(5000, Math.min(300000, Number(delayMs) || 60000));
+    const delay = Math.max(5000, Math.min(300000, Number(delayMs) || 30000));
     timer = setTimeout(runTick, delay);
   };
 
@@ -232,9 +232,9 @@ router.get('/live/stream', async (req, res) => {
     try {
       const payload = await buildLivePayload(rawIds);
       send(payload);
-      scheduleNext(payload?.nextPollInMs || 60000);
+      scheduleNext(payload?.nextPollInMs || 30000);
     } catch {
-      scheduleNext(60000);
+      scheduleNext(30000);
     }
   };
 

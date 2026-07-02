@@ -17,7 +17,9 @@ const TEAM_NAME_SEARCH_ALIAS = {
   Deutschland: 'Germany',
   Argentinien: 'Argentina',
   Australien: 'Australia',
+  Osterreich: 'Austria',
   Oesterreich: 'Austria',
+  Österreich: 'Austria',
   Belgien: 'Belgium',
   Bolivien: 'Bolivia',
   Brasilien: 'Brazil',
@@ -80,6 +82,11 @@ const TEAM_NAME_SEARCH_ALIAS = {
 };
 
 const TEAM_NAME_CANONICAL_MAP = {
+  austria: 'austria',
+  oesterreich: 'austria',
+  osterreich: 'austria',
+  osterreichnationalteam: 'austria',
+  oesterreichnationalteam: 'austria',
   bosniaandherzegovina: 'bosniaherzegovina',
   bosniahercegovina: 'bosniaherzegovina',
   bosniaherzegovina: 'bosniaherzegovina',
@@ -88,6 +95,11 @@ const TEAM_NAME_CANONICAL_MAP = {
   czechia: 'czechrepublic',
   czechrepublic: 'czechrepublic',
   curacao: 'curacao',
+  espana: 'spain',
+  espanya: 'spain',
+  espagne: 'spain',
+  spanien: 'spain',
+  spainnationalteam: 'spain',
   iriran: 'iran',
   unitedstates: 'unitedstates',
   usa: 'unitedstates'
@@ -273,9 +285,16 @@ function normalizeTeamCandidates(teamName) {
 }
 
 function toLooseComparableTeamName(value) {
-  return normalizeComparableName(value)
-    .replace(/(women|ladies|u23|u21|u20|u19|u18)$/g, '')
-    .replace(/(fc|sc|cf|afc)$/g, '');
+  const normalized = String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b(the|women|womens|lady|ladies|female|men|mens|u23|u21|u20|u19|u18|nationalteam|national)\b/g, ' ')
+    .replace(/\b(fc|sc|cf|afc|fk|sk|ifk|bk|ac)\b/g, ' ')
+    .replace(/[^a-z0-9]/g, '');
+
+  return TEAM_NAME_CANONICAL_MAP[normalized] || normalized;
 }
 
 function buildTeamMatchingData(teamName) {

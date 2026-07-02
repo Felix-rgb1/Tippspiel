@@ -661,7 +661,7 @@ function Dashboard() {
 
     const runPoll = async () => {
       if (!isPageVisible()) {
-        scheduleNextPoll(60000);
+        scheduleNextPoll(30000);
         return;
       }
 
@@ -671,14 +671,14 @@ function Dashboard() {
         setLiveConnectionMode('polling');
         applyPayload(payload);
 
-        const nextPollInMs = Number(payload.nextPollInMs) || 60000;
+        const nextPollInMs = Number(payload.nextPollInMs) || 30000;
         const updates = payload?.updates || {};
         const hasLiveMatch = Object.values(updates).some((entry) => Boolean(entry?.isLive));
-        const minDelay = hasLiveMatch ? 5000 : 15000;
+        const minDelay = hasLiveMatch ? 5000 : 10000;
         const delay = Math.max(minDelay, Math.min(300000, nextPollInMs));
         scheduleNextPoll(delay);
       } catch (err) {
-        scheduleNextPoll(60000);
+        scheduleNextPoll(30000);
       }
     };
 
@@ -720,7 +720,7 @@ function Dashboard() {
           eventSource.close();
           eventSource = null;
         }
-        startPollingFallback(5000);
+        startPollingFallback(3000);
       };
     } else {
       setLiveConnectionMode('polling');

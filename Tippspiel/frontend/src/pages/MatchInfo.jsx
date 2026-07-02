@@ -322,11 +322,15 @@ function MatchInfo() {
         setLiveConnectionMode('polling');
         applyPayload(payload);
 
-        const nextPollInMs = Number(payload?.nextPollInMs) || 180000;
-        const delay = Math.max(30000, Math.min(300000, nextPollInMs));
+        const nextPollInMs = Number(payload?.nextPollInMs) || 30000;
+        const updates = payload?.updates || {};
+        const ownUpdate = updates?.[id] || updates?.[Number(id)] || null;
+        const hasLiveMatch = Boolean(ownUpdate?.isLive);
+        const minDelay = hasLiveMatch ? 5000 : 10000;
+        const delay = Math.max(minDelay, Math.min(180000, nextPollInMs));
         scheduleNextPoll(delay);
       } catch {
-        scheduleNextPoll(180000);
+        scheduleNextPoll(30000);
       }
     };
 
@@ -368,7 +372,7 @@ function MatchInfo() {
           eventSource.close();
           eventSource = null;
         }
-        startPollingFallback(5000);
+        startPollingFallback(3000);
       };
     } else {
       setLiveConnectionMode('polling');
@@ -427,7 +431,7 @@ function MatchInfo() {
     const scheduleNextFetch = () => {
       if (stopped) return;
       // Keep polling while live; for finished matches one fetch is enough.
-      const interval = isLive ? 60000 : null;
+      const interval = isLive ? 20000 : null;
       if (!interval) {
         return;
       }
