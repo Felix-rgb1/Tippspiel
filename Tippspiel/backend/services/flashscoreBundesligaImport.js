@@ -190,6 +190,62 @@ function parseGoals(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function resolveGoalsAfterExtraTime(match) {
+  const regularHome = parseGoals(
+    match?.scores?.home
+    ?? match?.home_score
+    ?? match?.homeScore
+    ?? match?.result?.home
+  );
+  const regularAway = parseGoals(
+    match?.scores?.away
+    ?? match?.away_score
+    ?? match?.awayScore
+    ?? match?.result?.away
+  );
+
+  const extraHome = parseGoals(
+    match?.scores?.home_extra_time
+    ?? match?.extra_time_result?.home_extra_time
+    ?? match?.extra_time_result?.homeExtraTime
+  );
+  const extraAway = parseGoals(
+    match?.scores?.away_extra_time
+    ?? match?.extra_time_result?.away_extra_time
+    ?? match?.extra_time_result?.awayExtraTime
+  );
+
+  const homeAfterExtra = regularHome !== null
+    ? regularHome + (extraHome ?? 0)
+    : null;
+  const awayAfterExtra = regularAway !== null
+    ? regularAway + (extraAway ?? 0)
+    : null;
+
+  return {
+    regularHome,
+    regularAway,
+    homeAfterExtra,
+    awayAfterExtra
+  };
+}
+
+function resolveFinishedGoals(match) {
+  const extraResolved = resolveGoalsAfterExtraTime(match);
+  const totalHome = parseGoals(match?.scores?.home_total ?? match?.result?.home_total);
+  const totalAway = parseGoals(match?.scores?.away_total ?? match?.result?.away_total);
+
+  const homeGoals = extraResolved.homeAfterExtra ?? totalHome ?? extraResolved.regularHome;
+  const awayGoals = extraResolved.awayAfterExtra ?? totalAway ?? extraResolved.regularAway;
+
+  return {
+    homeGoals,
+    awayGoals,
+    homeAfterExtra: extraResolved.homeAfterExtra,
+    awayAfterExtra: extraResolved.awayAfterExtra
+  };
+}
+
 function toDeterministicBigintString(value) {
   const input = String(value || '').trim();
   if (!input) {
@@ -349,11 +405,10 @@ function extractPenaltyInfo(match) {
   }
 
   if (homeGoals90 === null || awayGoals90 === null) {
-    const regularHome = parseGoals(match?.scores?.home);
-    const regularAway = parseGoals(match?.scores?.away);
-    if (regularHome !== null && regularAway !== null) {
-      homeGoals90 = regularHome;
-      awayGoals90 = regularAway;
+    const resolved = resolveGoalsAfterExtraTime(match);
+    if (resolved.homeAfterExtra !== null && resolved.awayAfterExtra !== null) {
+      homeGoals90 = resolved.homeAfterExtra;
+      awayGoals90 = resolved.awayAfterExtra;
     }
   }
 
@@ -498,18 +553,7 @@ function toNormalizedMatch(match, fallbackRound = null) {
   }
 
   const finished = hasFinishedStatus(match);
-  const homeGoals = parseGoals(
-    match?.scores?.home
-    ?? match?.home_score
-    ?? match?.homeScore
-    ?? match?.result?.home
-  );
-  const awayGoals = parseGoals(
-    match?.scores?.away
-    ?? match?.away_score
-    ?? match?.awayScore
-    ?? match?.result?.away
-  );
+  const resolvedGoals = resolveFinishedGoals(match);
 
   // Extract penalty information
   const penaltyInfo = extractPenaltyInfo(match);
@@ -520,8 +564,8 @@ function toNormalizedMatch(match, fallbackRound = null) {
     matchDate,
     round: toRoundLabel(match, fallbackRound),
     finished,
-    homeGoals: finished ? homeGoals : null,
-    awayGoals: finished ? awayGoals : null,
+    homeGoals: finished ? resolvedGoals.homeGoals : null,
+    awayGoals: finished ? resolvedGoals.awayGoals : null,
     externalId,
     sourceMatchId,
     penaltyDecided: penaltyInfo.penaltyDecided,
@@ -918,12 +962,7 @@ function extractWMMatch(raw) {
   if (!externalId) return null;
 
   const finished = hasFinishedStatus(raw);
-  const homeGoals = finished
-    ? parseGoals(raw?.scores?.home ?? raw?.home_score ?? raw?.homeScore ?? raw?.result?.home)
-    : null;
-  const awayGoals = finished
-    ? parseGoals(raw?.scores?.away ?? raw?.away_score ?? raw?.awayScore ?? raw?.result?.away)
-    : null;
+  const resolvedGoals = resolveFinishedGoals(raw);
 
   const penaltyInfo = extractPenaltyInfo(raw);
 
@@ -962,8 +1001,8 @@ function extractWMMatch(raw) {
     homeTeam,
     awayTeam,
     matchDate,
-    homeGoals,
-    awayGoals,
+    homeGoals: finished ? resolvedGoals.homeGoals : null,
+    awayGoals: finished ? resolvedGoals.awayGoals : null,
     finished,
     round: resolvedRound,
     penaltyDecided: penaltyInfo.penaltyDecided,
