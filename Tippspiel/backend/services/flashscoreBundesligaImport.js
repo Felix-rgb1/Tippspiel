@@ -1389,8 +1389,35 @@ async function syncWMResults(pool) {
   let createdCount = 0;
   let updatedCount = 0;
 
+  // Load already-processed draw matches from DB to skip redundant API enrichment calls.
+  // A match is "complete" when it is finished and either has no draw (no penalty needed)
+  // or already has penalty data stored (penalty_decided IS NOT NULL).
+  let alreadyCompleteIds = new Set();
+  try {
+    const existingResult = await pool.query(
+      `SELECT external_id
+       FROM matches
+       WHERE external_source = $1
+         AND finished = true
+         AND (
+           home_goals != away_goals
+           OR penalty_decided IS NOT NULL
+         )`,
+      [WM_EXTERNAL_SOURCE]
+    );
+    for (const row of existingResult.rows) {
+      if (row.external_id) alreadyCompleteIds.add(String(row.external_id));
+    }
+  } catch (err) {
+    // Non-fatal: fall back to full enrichment if DB query fails.
+    console.warn('[syncWMResults] Konnte vorhandene Matches nicht laden:', err.message);
+  }
+
   for (const match of finishedMatches) {
-    const enrichedMatch = await enrichPenaltyDataFromEndpoint(match);
+    const matchExternalId = String(match?.sourceMatchId || match?.matchId || '');
+    // Skip expensive API detail calls for matches already complete in DB.
+    const skipEnrichment = matchExternalId && alreadyCompleteIds.has(matchExternalId);
+    const enrichedMatch = skipEnrichment ? match : await enrichPenaltyDataFromEndpoint(match);
     const action = await upsertWMMatch(pool, enrichedMatch);
     if (action === 'created') createdCount++;
     else updatedCount++;

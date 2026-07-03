@@ -326,6 +326,12 @@ function MatchInfo() {
         const updates = payload?.updates || {};
         const ownUpdate = updates?.[id] || updates?.[Number(id)] || null;
         const hasLiveMatch = Boolean(ownUpdate?.isLive);
+        // Stop polling loop entirely when match has finished
+        if (ownUpdate?.isFinished && !hasLiveMatch) {
+          stopped = true;
+          setLiveConnectionMode('idle');
+          return;
+        }
         const minDelay = hasLiveMatch ? 5000 : 10000;
         const delay = Math.max(minDelay, Math.min(180000, nextPollInMs));
         scheduleNextPoll(delay);
@@ -431,7 +437,7 @@ function MatchInfo() {
     const scheduleNextFetch = () => {
       if (stopped) return;
       // Keep polling while live; for finished matches one fetch is enough.
-      const interval = isLive ? 20000 : null;
+      const interval = isLive ? 60000 : null;
       if (!interval) {
         return;
       }

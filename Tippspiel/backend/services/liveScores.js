@@ -605,9 +605,11 @@ function shouldCheckLiveForMatch(match, options = {}) {
     return false;
   }
 
-  // WM stays always eligible to avoid missing live windows.
+  // WM matches: only track within ±4 hours of kick-off to avoid endless polling.
   if (source === 'flashscore-wm') {
-    return true;
+    const matchTs = new Date(match.match_date).getTime();
+    if (!Number.isFinite(matchTs)) return true; // unknown date → keep checking
+    return Math.abs(Date.now() - matchTs) <= 4 * 60 * 60 * 1000;
   }
 
   if (options.forceCheckAll) {
@@ -632,7 +634,8 @@ async function getLiveScoresForMatches(matches, pool = null, options = {}) {
     return {
       updates: {},
       fetchedAt: new Date().toISOString(),
-      nextPollInMs: LIVE_CACHE_COLD_MS,
+      // No live-trackable matches → tell clients to back off for 5 minutes
+      nextPollInMs: 5 * 60 * 1000,
       usedProvider: false
     };
   }
