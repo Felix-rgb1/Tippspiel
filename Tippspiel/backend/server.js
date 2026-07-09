@@ -136,7 +136,7 @@ function startAutoResultSync(pool) {
 }
 
 function startAutoWMImport(pool) {
-  const enabled = parseEnabledFlag(process.env.AUTO_WM_IMPORT_ENABLED, true);
+  const enabled = parseEnabledFlag(process.env.AUTO_WM_IMPORT_ENABLED, false);
   if (!enabled) {
     console.log('[AUTO-WM-IMPORT] deaktiviert (AUTO_WM_IMPORT_ENABLED=false).');
     return;

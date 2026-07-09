@@ -23,6 +23,9 @@ let ongoingOnOpenResultSync = null;
 async function runResultSyncJob() {
   // Set the timestamp immediately so rapid-retry is throttled even when this job throws.
   lastOnOpenResultSyncAt = Date.now();
+  const includeWmSyncOnOpen = ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.ON_OPEN_RESULT_SYNC_INCLUDE_WM || 'false').trim().toLowerCase()
+  );
 
   const backfillWindowHoursRaw = Number.parseInt(process.env.ON_OPEN_RESULT_SYNC_BACKFILL_HOURS || '72', 10);
   const backfillWindowHours = Number.isFinite(backfillWindowHoursRaw)
@@ -55,13 +58,21 @@ async function runResultSyncJob() {
     (entry) => Boolean(entry?.isFinished) && Number.isFinite(Number(entry?.homeGoals)) && Number.isFinite(Number(entry?.awayGoals))
   ).length;
 
-  const [wmResult] = await Promise.allSettled([
-    syncWMResults(pool)
-  ]);
+  let wm = {
+    ok: false,
+    skipped: true,
+    reason: 'WM Sync on-open deaktiviert.'
+  };
 
-  const wm = wmResult.status === 'fulfilled'
-    ? { ok: true, ...wmResult.value }
-    : { ok: false, error: wmResult.reason?.message || 'WM Sync fehlgeschlagen' };
+  if (includeWmSyncOnOpen) {
+    const [wmResult] = await Promise.allSettled([
+      syncWMResults(pool)
+    ]);
+
+    wm = wmResult.status === 'fulfilled'
+      ? { ok: true, ...wmResult.value }
+      : { ok: false, error: wmResult.reason?.message || 'WM Sync fehlgeschlagen' };
+  }
 
   const bundesliga = {
     ok: false,
@@ -366,10 +377,15 @@ router.get('/:id/live-stats', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Match is not a Flashscore source' });
     }
 
-    // Get current live info to extract sourceMatchId from Flashscore
-    const liveInfo = await getLiveScoresForMatches([match], pool);
-  const resolved = await resolveFlashscoreMatchIdForMatch(match, { liveInfo, debug });
-    const sourceMatchId = resolved?.sourceMatchId;
+    let sourceMatchId = match.flashscore_match_id ? String(match.flashscore_match_id) : null;
+    let resolved = null;
+
+    // Resolve provider match id only when DB has no persisted mapping yet.
+    if (!sourceMatchId) {
+      const liveInfo = await getLiveScoresForMatches([match], pool);
+      resolved = await resolveFlashscoreMatchIdForMatch(match, { liveInfo, debug });
+      sourceMatchId = resolved?.sourceMatchId ? String(resolved.sourceMatchId) : null;
+    }
 
     if (!sourceMatchId) {
       return res.status(400).json({
@@ -393,7 +409,9 @@ router.get('/:id/live-stats', authMiddleware, async (req, res) => {
       });
     }
 
-    await persistFlashscoreMatchId(pool, match.id, sourceMatchId);
+    if (!match.flashscore_match_id) {
+      await persistFlashscoreMatchId(pool, match.id, sourceMatchId);
+    }
 
     // Fetch stats using the real Flashscore match ID
     const stats = await getMatchStatsWithCache(sourceMatchId);

@@ -1295,7 +1295,12 @@ async function importFlashscoreWMMatches(pool) {
     throw err;
   }
 
-  const roundStats = await enrichWMRoundsViaDetails(matches);
+  const enrichRoundsEnabled = ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.FLASHSCORE_ENRICH_WM_ROUNDS || 'false').trim().toLowerCase()
+  );
+  const roundStats = enrichRoundsEnabled
+    ? await enrichWMRoundsViaDetails(matches)
+    : { requested: 0, resolved: 0, skipped: true };
 
   let createdCount = 0;
   let updatedCount = 0;
