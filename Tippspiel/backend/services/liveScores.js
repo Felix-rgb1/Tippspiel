@@ -575,13 +575,46 @@ async function getMatchStatsWithCache(matchId) {
   return cached ? cached.data : null;
 }
 
-function hasImminentMatch(matches) {
+function getClosestMatchDistanceMs(matches) {
   const now = Date.now();
-  const window = 30 * 60 * 1000; // 30 minutes
-  return matches.some((m) => {
-    const ts = new Date(m.match_date).getTime();
-    return Number.isFinite(ts) && Math.abs(ts - now) <= window;
+  let best = Number.POSITIVE_INFINITY;
+
+  (Array.isArray(matches) ? matches : []).forEach((match) => {
+    const ts = new Date(match?.match_date).getTime();
+    if (!Number.isFinite(ts)) return;
+    const diff = Math.abs(ts - now);
+    if (diff < best) {
+      best = diff;
+    }
   });
+
+  return best;
+}
+
+function getAdaptiveNextPollInMs(matches, hasLiveMatch) {
+  if (hasLiveMatch) {
+    return LIVE_CACHE_HOT_MS;
+  }
+
+  const closestDistance = getClosestMatchDistanceMs(matches);
+  if (!Number.isFinite(closestDistance)) {
+    return 5 * 60 * 1000;
+  }
+
+  // Fast ramp-up shortly before kick-off so start/end transitions are detected quickly.
+  if (closestDistance <= 10 * 60 * 1000) {
+    return 10000;
+  }
+
+  if (closestDistance <= 30 * 60 * 1000) {
+    return 30000;
+  }
+
+  if (closestDistance <= 90 * 60 * 1000) {
+    return 60000;
+  }
+
+  return 3 * 60 * 1000;
 }
 
 function patchCacheLiveness(rapidOptions, hadLiveMatch, groupMatches) {
@@ -590,8 +623,8 @@ function patchCacheLiveness(rapidOptions, hadLiveMatch, groupMatches) {
 
   const now = Date.now();
   cached.hadLiveMatch = hadLiveMatch;
-  const useHot = hadLiveMatch || (Array.isArray(groupMatches) && hasImminentMatch(groupMatches));
-  cached.expiresAt = now + (useHot ? LIVE_CACHE_HOT_MS : LIVE_CACHE_COLD_MS);
+  const adaptiveTtl = getAdaptiveNextPollInMs(groupMatches, hadLiveMatch);
+  cached.expiresAt = now + Math.max(LIVE_CACHE_HOT_MS, adaptiveTtl);
 }
 
 function shouldCheckLiveForMatch(match, options = {}) {
@@ -819,7 +852,7 @@ async function getLiveScoresForMatches(matches, pool = null, options = {}) {
   return {
     updates,
     fetchedAt: latestFetchedAt || new Date().toISOString(),
-    nextPollInMs: hasLiveMatch ? LIVE_CACHE_HOT_MS : LIVE_CACHE_COLD_MS,
+    nextPollInMs: getAdaptiveNextPollInMs(candidates, hasLiveMatch),
     usedProvider
   };
 }
